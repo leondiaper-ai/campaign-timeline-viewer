@@ -30,6 +30,7 @@ export function buildChartData(
     eventsByDate.set(e.date, existing);
   });
 
+  // Build chart points from metric data only — no zero-value placeholders
   const chartPoints: ChartDataPoint[] = filteredMetrics
     .sort((a, b) => a.week_ending.localeCompare(b.week_ending))
     .map((m) => ({
@@ -39,17 +40,31 @@ export function buildChartData(
       events: eventsByDate.get(m.week_ending) || [],
     }));
 
+  // For events that fall on dates without metrics, snap them to the
+  // nearest metric week instead of creating zero-value chart points.
+  // This prevents the chart lines from dipping to zero between data weeks.
   const metricDates = new Set(chartPoints.map((p) => p.date));
   filteredEvents.forEach((e) => {
     if (!metricDates.has(e.date)) {
-      const existing = chartPoints.find((p) => p.date === e.date);
-      if (!existing) {
-        chartPoints.push({
-          date: e.date,
-          total_streams: 0,
-          physical_units: 0,
-          events: eventsByDate.get(e.date) || [],
-        });
+      let nearestPoint: ChartDataPoint | null = null;
+      let nearestDist = Infinity;
+      const eventTime = new Date(e.date + "T00:00:00").getTime();
+
+      for (const point of chartPoints) {
+        const dist = Math.abs(
+          new Date(point.date + "T00:00:00").getTime() - eventTime
+        );
+        if (dist < nearestDist) {
+          nearestDist = dist;
+          nearestPoint = point;
+        }
+      }
+
+      if (nearestPoint) {
+        // Avoid duplicates — only add if not already attached
+        if (!nearestPoint.events.some((ev) => ev.date === e.date && ev.event_title === e.event_title)) {
+          nearestPoint.events.push(e);
+        }
       }
     }
   });
@@ -87,8 +102,8 @@ export interface CampaignLearning {
 
 /**
  * Returns the top learnings for a campaign, prioritising:
- *  1. Manual team insights (high-confidence major events first)
- *  2. Auto-generated observations as fallback (for major events without manual notes)
+ * 1. Manual team insights (high-confidence major events first)
+ * 2. Auto-generated observations as fallback (for major events without manual notes)
  */
 export function getTopLearnings(
   events: CampaignEvent[],

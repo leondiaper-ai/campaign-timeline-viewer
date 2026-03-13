@@ -13,17 +13,12 @@ import {
 } from "recharts";
 import { ChartDataPoint, CampaignEvent } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
+import { formatNumber } from "@/lib/format";
 
 interface PerformanceChartProps {
   data: ChartDataPoint[];
   visibleEventDates: Set<string>;
   highlightedDate: string | null;
-}
-
-function formatNumber(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
-  return value.toString();
 }
 
 function formatDate(dateStr: string): string {
@@ -106,8 +101,10 @@ function EventLabel({
   events: CampaignEvent[];
 }) {
   if (!viewBox?.x) return null;
+
   const mainEvent = events[0];
   if (!mainEvent) return null;
+
   const cat = getCategoryConfig(mainEvent.event_type);
 
   // Truncate long titles

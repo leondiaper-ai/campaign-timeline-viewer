@@ -14,6 +14,7 @@ import PerformanceChart from "./PerformanceChart";
 import EventList from "./EventList";
 import CategoryLegend from "./CategoryLegend";
 import CampaignLearnings from "./CampaignLearnings";
+import CampaignStats from "./CampaignStats";
 
 interface DashboardProps {
   initialData: CampaignData;
@@ -140,6 +141,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
           <CategoryLegend />
         </div>
 
+        {/* ─── Campaign Stats Bar ──────────────────────── */}
+        <CampaignStats
+          metrics={initialData.metrics}
+          campaignId={campaignId}
+        />
+
         {/* ─── Chart Card ───────────────────────────────── */}
         <div
           className="rounded-xl border overflow-hidden"
@@ -210,7 +217,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
               rows toggle chart markers
             </p>
           </div>
-
           <EventList
             events={events}
             observations={observations}
