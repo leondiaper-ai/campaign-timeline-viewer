@@ -32,14 +32,25 @@ export interface CampaignEvent {
   confidence?: Confidence; // how confident we are in the attribution
 
   // Future-proof optional fields (not used in V1 UI)
-  event_subtype?: string;
-  source_platform?: string;
-  is_core_moment?: boolean;
-  show_on_chart?: boolean;
+  event_subtype?: string; // finer-grained category, e.g. "playlist_add", "vinyl_drop", "interview"
+  source_platform?: string; // e.g. "spotify", "tiktok", "instagram", "bbc_radio"
+  is_core_moment?: boolean; // true = a defining campaign beat (for future filtering)
+  show_on_chart?: boolean; // explicit override for chart visibility (future use)
 }
 
+// ─── Enums & Literals ───────────────────────────────────────────
+
 export type Territory = "global" | "UK";
-export type EventCategory = "music" | "marketing" | "editorial" | "product" | "live";
+
+export type EventCategory =
+  | "music"
+  | "marketing"
+  | "editorial"
+  | "product"
+  | "live";
+
+// ─── Registry Types ─────────────────────────────────────────────
+
 export type CampaignStatus = "active" | "archived" | "draft";
 
 export interface RegistryEntry {
@@ -52,33 +63,41 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
+// ─── API Response ───────────────────────────────────────────────
+
+/** Data for a single campaign sheet (3 tabs) */
 export interface SingleCampaignData {
   campaign: Campaign;
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
 }
 
+/** Combined data for the Dashboard (all active campaigns merged) */
 export interface CampaignData {
   campaigns: Campaign[];
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
 }
 
+// ─── Auto-Observation (system-generated) ────────────────────────
+
 export interface AutoObservation {
   streams_before: number | null;
   streams_after: number | null;
-  streams_change_pct: number | null;
+  streams_change_pct: number | null; // e.g. +38 or -12
   units_before: number | null;
   units_after: number | null;
   units_change_pct: number | null;
-  was_momentum_rising: boolean;
-  near_campaign_peak: boolean;
-  summary: string;
+  was_momentum_rising: boolean; // 2-week trend before moment was positive
+  near_campaign_peak: boolean; // within ±1 week of peak streaming week
+  summary: string; // cautious human-readable observation
 }
+
+// ─── Chart Data (transformed for Recharts) ──────────────────────
 
 export interface ChartDataPoint {
   date: string;
   total_streams: number;
-  physical_units: number;
+  physical_units: number; // retail_units + d2c_units
   events: CampaignEvent[];
 }

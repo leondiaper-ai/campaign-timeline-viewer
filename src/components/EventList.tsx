@@ -189,7 +189,7 @@ export default function EventList({
               )}
             </div>
 
-            {/+ ─── Expanded insight detail ─── */}
+            {/* ─── Expanded insight detail ─── */}
             {isExpanded && hasAnyInsight && (
               <div
                 className="px-5 pb-4 pt-1"
