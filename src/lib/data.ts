@@ -1,7 +1,8 @@
 import { CampaignData, SingleCampaignData, RegistryEntry } from "@/types";
 import { mockCampaigns, mockMetrics, mockEvents } from "./mock-data";
 
-// ─── Data Fetcher (mock or Google Sheets) ───────────────────────
+// ─── Data Fetcher (mock or Google Sheets) ─────────────────────
+
 // This file is server-only. Client components should import from
 // @/lib/transforms instead for buildChartData / getFilteredEvents.
 
@@ -60,9 +61,9 @@ export async function getSingleCampaignData(
  * format expected by the Dashboard component.
  *
  * Registry flow:
- * 1. Read campaign_registry → get active entries with sheet_ids
- * 2. For each active entry, read its campaign spreadsheet (3 tabs)
- * 3. Merge all campaigns, metrics, and events into one bundle
+ *   1. Read campaign_registry → get active entries with sheet_ids
+ *   2. For each active entry, read its campaign spreadsheet (3+ tabs)
+ *   3. Merge all campaigns, metrics, events, and track performance into one bundle
  *
  * Falls back to mock data if Google Sheets API fails (e.g. during
  * build when credentials may not be available). ISR revalidation
@@ -76,6 +77,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       campaigns: mockCampaigns,
       metrics: mockMetrics,
       events: mockEvents,
+      trackPerformance: [],
     };
   }
 
@@ -99,6 +101,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       campaigns: results.map((r) => r.campaign),
       metrics: results.flatMap((r) => r.metrics),
       events: results.flatMap((r) => r.events),
+      trackPerformance: results.flatMap((r) => r.trackPerformance),
     };
   } catch (error) {
     console.error(
@@ -109,6 +112,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       campaigns: mockCampaigns,
       metrics: mockMetrics,
       events: mockEvents,
+      trackPerformance: [],
     };
   }
 }

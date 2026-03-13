@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { CampaignEvent, AutoObservation, Confidence } from "@/types";
+import { CampaignEvent, AutoObservation, Confidence, TrackPerformance, Territory } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
+import SinglePerformanceSnapshot from "./SinglePerformanceSnapshot";
 
 interface EventListProps {
   events: CampaignEvent[];
@@ -10,6 +11,8 @@ interface EventListProps {
   visibleDates: Set<string>;
   onToggleVisibility: (date: string) => void;
   onHoverDate: (date: string | null) => void;
+  trackPerformance: TrackPerformance[];
+  territory: Territory;
 }
 
 function formatDate(dateStr: string): string {
@@ -18,14 +21,17 @@ function formatDate(dateStr: string): string {
 }
 
 function formatMetric(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}Mck
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return n.toLocaleString();
 }
 
 function ConfidencePips({ level }: { level?: Confidence }) {
-  const filled = level === "high" ? 3 : level === "medium" ? 2 : level === "low" ? 1 : 0;
-  if (filled === 0) return null;
+  const filled =
+  
+  R)"´ number;\n  if (filled === 0) return null;
+
+
   return (
     <div className="flex items-center gap-1">
       {[1, 2, 3].map((i) => (
@@ -50,6 +56,8 @@ export default function EventList({
   visibleDates,
   onToggleVisibility,
   onHoverDate,
+  trackPerformance,
+  territory,
 }: EventListProps) {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
@@ -68,9 +76,13 @@ export default function EventList({
         const isVisible = event.is_major || visibleDates.has(event.date);
         const isExpanded = expandedIndex === i;
         const obs = observations.get(event.date);
-        const hasManualLearning = !!(event.observed_impact || event.what_we_learned);
+
+        const hasManualLearning = !!(
+          event.observed_impact || event.what_we_learned
+        );
         const hasAutoObs = !!(obs && !obs.summary.startsWith("Not enough"));
-        const hasAnyInsight = hasManualLearning || hasAutoObs;
+        const isMusicEvent = event.event_type === "music";
+        const hasAnyInsight = hasManualLearning || hasAutoObs || isMusicEvent;
 
         return (
           <div
@@ -104,7 +116,9 @@ export default function EventList({
                     className="w-3.5 h-3.5 rounded border-2 flex items-center justify-center transition-colors"
                     style={{
                       borderColor: isVisible ? cat.color : "#353849",
-                      backgroundColor: isVisible ? cat.color + "20" : "transparent",
+                      backgroundColor: isVisible
+                        ? cat.color + "20"
+                        : "transparent",
                     }}
                   >
                     {isVisible && (
@@ -152,7 +166,9 @@ export default function EventList({
                     height="12"
                     viewBox="0 0 12 12"
                     fill="none"
-                    className={`flex-shrink-0 transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                    className={`flex-shrink-0 transition-transform ${
+                      isExpanded ? "rotate-180" : ""
+                    }`}
                   >
                     <path
                       d="M3 4.5L6 7.5L9 4.5"
@@ -237,43 +253,46 @@ export default function EventList({
                       <p className="text-[12px] text-label-secondary leading-relaxed">
                         {obs.summary}
                       </p>
+
                       {/* Metric context */}
-                      {obs.streams_before !== null && obs.streams_after !== null && (
-                        <div className="flex gap-6 mt-2.5">
-                          <div className="text-[10px] text-label-muted">
-                            <span className="font-mono tabular-nums">
-                              {formatMetric(obs.streams_before)}
-                            </span>{" "}
-                            streams (week before)
-                          </div>
-                          <div className="text-[10px] text-label-muted">
-                            <span className="font-mono tabular-nums">
-                              {formatMetric(obs.streams_after)}
-                            </span>{" "}
-                            streams (week after)
-                          </div>
-                          {obs.streams_change_pct !== null && (
-                            <div
-                              className="text-[10px] font-semibold font-mono tabular-nums"
-                              style={{
-                                color:
-                                  obs.streams_change_pct > 10
-                                    ? "#4ADE80"
-                                    : obs.streams_change_pct < -10
-                                    ? "#FB7185"
-                                    : "#5F6578",
-                              }}
-                            >
-                              {obs.streams_change_pct > 0 ? "+" : ""}
-                              {obs.streams_change_pct}%
+                      {obs.streams_before !== null &&
+                        obs.streams_after !== null && (
+                          <div className="flex gap-6 mt-2.5">
+                            <div className="text-[10px] text-label-muted">
+                              <span className="font-mono tabular-nums">
+                                {formatMetric(obs.streams_before)}
+                              </span>{" "}
+                              streams (week before)
                             </div>
-                          )}
-                        </div>
-                      )}
+                            <div className="text-[10px] text-label-muted">
+                              <span className="font-mono tabular-nums">
+                                {formatMetric(obs.streams_after)}
+                              </span>{" "}
+                              streams (week after)
+                            </div>
+                            {obs.streams_change_pct !== null && (
+                              <div
+                                className="text-[10px] font-semibold font-mono tabular-nums"
+                                style={{
+                                  color:
+                                    obs.streams_change_pct > 10
+                                      ? "#4ADE80"
+                                      : obs.streams_change_pct < -10
+                                        ? "#FB7185"
+                                        : "#5F6578",
+                                }}
+                              >
+                                {obs.streams_change_pct > 0 ? "+" : ""}
+                                {obs.streams_change_pct}%
+                              </div>
+                            )}
+                          </div>
+                        )}
                     </div>
                   )}
 
-                  {/* Team Insight */}
+
+                  { /* Team Insight */}
                   {hasManualLearning && (
                     <div
                       className="rounded-lg p-4"
@@ -305,15 +324,15 @@ export default function EventList({
                         <span className="text-[10px] font-semibold text-label-muted uppercase tracking-[0.12em]">
                           Team Insight
                         </span>
-                        {event.confidence && (
+                        { event.confidence && (
                           <ConfidencePips level={event.confidence} />
-                        )}
+                        ) }
                       </div>
 
                       <div
                         className="grid gap-4"
                         style={{
-                          gridTemplateColumns:
+                          gridTemplateColumns: 
                             event.observed_impact && event.what_we_learned
                               ? "1fr 1fr"
                               : "1fr",
@@ -329,7 +348,7 @@ export default function EventList({
                             </p>
                           </div>
                         )}
-                        {event.what_we_learned && (
+                        { event.what_we_learned && (
                           <div>
                             <p className="text-[10px] font-semibold text-label-muted uppercase tracking-[0.12em] mb-1">
                               What we learned
@@ -342,12 +361,16 @@ export default function EventList({
                       </div>
                     </div>
                   )}
+
+
+                  {/* Single Performance Snapshot (for music events) */}
+                  <SinglePerformanceSnapshot
+                    event={event}
+                    trackPerformance={trackPerformance}
+                    territory={territory}
+                  />
                 </div>
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
+              })}
+      </div>
   );
 }

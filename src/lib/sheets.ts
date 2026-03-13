@@ -4,6 +4,7 @@ import {
   WeeklyMetric,
   CampaignEvent,
   SingleCampaignData,
+  TrackPerformance,
   Territory,
   EventCategory,
   Confidence,
@@ -25,7 +26,7 @@ function getSheetsClient() {
   return google.sheets({ version: "v4", auth });
 }
 
-// ─── Helpers ──────────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────
 
 /** Parse a numeric cell that may contain commas (e.g. "1,250,000") */
 function parseNum(value: string | undefined): number {
@@ -33,7 +34,7 @@ function parseNum(value: string | undefined): number {
   return Number(value.replace(/,/g, "")) || 0;
 }
 
-// ─── Fetch Helpers ────────────────────────────────────────────
+// ─── Fetch Helpers ──────────────────────────────────────────────
 
 async function fetchRows(
   spreadsheetId: string,
@@ -47,9 +48,35 @@ async function fetchRows(
   return (response.data.values as string[][]) || [];
 }
 
-// ─── Registry ─────────────────────────────────────────────────
-// Reads the central registry spreadsheet to discover all campaigns.
+/**
+ * Safely fetch rows from a tab that may not exist yet.
+ * Returns empty array if the tab is missing (404).
+ */
+async function fetchRowsSafe(
+  spreadsheetId: string,
+  tabName: string
+): Promise<string[][]> {
+  try {
+    return await fetchRows(spreadsheetId, tabName);
+  } catch (error: unknown) {
+    // Google Sheets API returns 400 for invalid range (tab doesn't exist)
+    const errObj = error as { code?: number; message?: string };
+    if (
+      errObj.code === 400 ||
+      errObj.message?.includes("Unable to parse range")
+    ) {
+      console.log(
+        `[CTV] Tab "${tabName}" not found in sheet — skipping (this is normal).`
+      );
+      return [];
+    }
+    throw error; // Re-throw unexpected errors
+  }
+}
 
+// ─── Registry ───────────────────────────────────────────────────
+
+// Reads the central registry spreadsheet to discover all campaigns.
 const REGISTRY_SPREADSHEET_ID = process.env.REGISTRY_SPREADSHEET_ID!;
 
 export async function fetchRegistry(): Promise<RegistryEntry[]> {
@@ -71,8 +98,9 @@ export async function fetchActiveCampaigns(): Promise<RegistryEntry[]> {
 }
 
 // ─── Campaign Sheet Parsers ─────────────────────────────────────
-// Each campaign lives in its own spreadsheet with 3 tabs:
-// campaign_setup · campaign_moments · weekly_metrics
+
+// Each campaign lives in its own spreadsheet with 3+ tabs:
+//   campaign_setup · campaign_moments · weekly_metrics · track_performance (optional)
 
 export async function fetchCampaignSetup(
   sheetId: string
@@ -166,17 +194,51 @@ export async function fetchCampaignMetrics(
   }));
 }
 
-// ─── Full Campaign Loader ─────────────────────────────────────
-// Loads all 3 tabs from a single campaign spreadsheet in parallel.
+// ─── Track Performance (optional tab) ───────────────────────────
 
+/**
+ * Fetch track-level performance data from the optional `track_performance` tab.
+ *
+ * Columns: campaign_id, track_id, track_name, release_type, release_date,
+ *          territory, streams_7d, streams_14d, streams_28d, saves_28d,
+ *          playlist_adds_28d, editorial_adds_28d
+ *
+ * Returns empty array if the tab doesn't exist yet.
+ */
+export async function fetchTrackPerformance(
+  sheetId: string,
+  campaignId: string
+): Promise<TrackPerformance[]> {
+  const rows = await fetchRowsSafe(sheetId, "track_performance");
+  return rows.map((row) => ({
+    campaign_id: campaignId,
+    track_id: row[1] || "",
+    track_name: row[2] || "",
+    release_type: (row[3] as TrackPerformance["release_type"]) || "single",
+    release_date: row[4] || "",
+    territory: (row[5] as Territory) || "global",
+    streams_7d: parseNum(row[6]),
+    streams_14d: parseNum(row[7]),
+    streams_28d: parseNum(row[8]),
+    saves_28d: parseNum(row[9]),
+    playlist_adds_28d: parseNum(row[10]),
+    editorial_adds_28d: parseNum(row[11]),
+  }));
+}
+
+// ─── Full Campaign Loader ───────────────────────────────────────
+
+// Loads all tabs from a single campaign spreadsheet in parallel.
 export async function fetchCampaignSheetData(
   sheetId: string,
   campaignId: string
 ): Promise<SingleCampaignData> {
-  const [campaign, events, metrics] = await Promise.all([
+  const [campaign, events, metrics, trackPerformance] = await Promise.all([
     fetchCampaignSetup(sheetId),
     fetchCampaignMoments(sheetId, campaignId),
     fetchCampaignMetrics(sheetId, campaignId),
+    fetchTrackPerformance(sheetId, campaignId),
   ]);
-  return { campaign, events, metrics };
+
+  return { campaign, events, metrics, trackPerformance };
 }

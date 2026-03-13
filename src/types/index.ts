@@ -63,13 +63,49 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
+// ─── Track Performance (single-level drill-down) ────────────────
+
+export interface TrackPerformance {
+  campaign_id: string;
+  track_id: string;
+  track_name: string;
+  release_type: "single" | "album_track" | "deluxe_track";
+  release_date: string;
+  territory: Territory;
+  streams_7d: number;
+  streams_14d: number;
+  streams_28d: number;
+  saves_28d: number;
+  playlist_adds_28d: number;
+  editorial_adds_28d: number;
+}
+
+// ─── Campaign Insights (verdict / momentum / top moment) ────────
+
+export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
+export type MomentumDirection = "RISING" | "PEAKING" | "DECLINING" | "STABLE";
+
+export interface CampaignInsight {
+  verdict: VerdictLevel;
+  verdict_explanation: string;
+  top_moment: {
+    event_title: string;
+    date: string;
+    streams_delta_pct: number | null;
+    sales_delta_pct: number | null;
+  } | null;
+  momentum: MomentumDirection;
+  momentum_context: string;
+}
+
 // ─── API Response ───────────────────────────────────────────────
 
-/** Data for a single campaign sheet (3 tabs) */
+/** Data for a single campaign sheet (3 tabs + optional track perf) */
 export interface SingleCampaignData {
   campaign: Campaign;
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
+  trackPerformance: TrackPerformance[];
 }
 
 /** Combined data for the Dashboard (all active campaigns merged) */
@@ -77,6 +113,7 @@ export interface CampaignData {
   campaigns: Campaign[];
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
+  trackPerformance: TrackPerformance[];
 }
 
 // ─── Auto-Observation (system-generated) ────────────────────────
