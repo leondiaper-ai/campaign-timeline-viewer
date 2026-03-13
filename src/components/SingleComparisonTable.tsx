@@ -170,4 +170,5 @@ export default function SingleComparisonTable({
         </table>
       </div>
     </div>
-  
+  );
+}
