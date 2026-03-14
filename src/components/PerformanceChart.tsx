@@ -366,41 +366,8 @@ export default function PerformanceChart({
             );
           })}
 
-          {isTrackMode ? (
-            <>
-              {/* Faint total campaign reference line */}
-              <Line
-                yAxisId="streams"
-                type="monotone"
-                dataKey="total_streams_ref"
-                name="total_streams_ref"
-                stroke="#6C9EFF"
-                strokeWidth={1.5}
-                strokeOpacity={0.15}
-                dot={false}
-                activeDot={false}
-              />
-              {/* Individual track lines */}
-              {trackMeta.map((tm) => (
-                <Line
-                  key={tm.track_id}
-                  yAxisId="streams"
-                  type="monotone"
-                  dataKey={`track_${tm.index}`}
-                  name={`track_${tm.index}`}
-                  stroke={tm.color}
-                  strokeWidth={2.5}
-                  dot={false}
-                  activeDot={{
-                    r: 5,
-                    fill: tm.color,
-                    stroke: "#0F1117",
-                    strokeWidth: 2,
-                  }}
-                />
-              ))}
-            </>
-          ) : (
+          {/* Campaign-level total stream line (only in Campaign mode) */}
+          {!isTrackMode && (
             <Line
               yAxisId="streams"
               type="monotone"
@@ -417,6 +384,43 @@ export default function PerformanceChart({
               }}
             />
           )}
+
+          {/* Faint total campaign reference line (only in Tracks mode) */}
+          {isTrackMode && (
+            <Line
+              yAxisId="streams"
+              type="monotone"
+              dataKey="total_streams_ref"
+              name="total_streams_ref"
+              stroke="#6C9EFF"
+              strokeWidth={1.5}
+              strokeOpacity={0.15}
+              dot={false}
+              activeDot={false}
+            />
+          )}
+
+          {/* Individual track lines (only in Tracks mode) */}
+          {isTrackMode &&
+            trackMeta.map((tm) => (
+              <Line
+                key={tm.track_id}
+                yAxisId="streams"
+                type="monotone"
+                dataKey={`track_${tm.index}`}
+                name={`track_${tm.index}`}
+                stroke={tm.color}
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{
+                  r: 5,
+                  fill: tm.color,
+                  stroke: "#0F1117",
+                  strokeWidth: 2,
+                }}
+                connectNulls={false}
+              />
+            ))}
 
           <Line
             yAxisId="units"
