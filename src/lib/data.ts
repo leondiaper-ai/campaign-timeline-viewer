@@ -119,3 +119,116 @@ function injectMockTrackData(data: CampaignData): CampaignData {
     trackWeeklyMetrics: [...data.trackWeeklyMetrics, ...mockTrackData],
   };
 }
+
+// ─── Data Fetcher (mock or Google Sheets) ─────────────────────
+
+/**
+ * Fetch all active campaigns from the registry.
+ */
+export async function getActiveCampaigns(): Promise<RegistryEntry[]> {
+  const useMock = process.env.USE_MOCK_DATA === "true";
+
+  if (useMock) {
+    return mockCampaigns.map((c) => ({
+      campaign_id: c.campaign_id,
+      artist_name: c.artist,
+      campaign_name: c.campaign_name,
+      sheet_url: "",
+      sheet_id: "",
+      status: "active" as const,
+      campaign_owner: "Mock",
+    }));
+  }
+
+  try {
+    const { fetchActiveCampaigns } = await import("./sheets");
+    return await fetchActiveCampaigns();
+  } catch (error) {
+    console.error(
+      "[CTV] Failed to fetch active campaigns from Sheets, falling back to mock data:",
+      error
+    );
+    return mockCampaigns.map((c) => ({
+      campaign_id: c.campaign_id,
+      artist_name: c.artist,
+      campaign_name: c.campaign_name,
+      sheet_url: "",
+      sheet_id: "",
+      status: "active" as const,
+      campaign_owner: "Mock",
+    }));
+  }
+}
+
+/**
+ * Load data for a single campaign by its sheet_id.
+ */
+export async function getSingleCampaignData(
+  sheetId: string,
+  campaignId: string
+): Promise<SingleCampaignData> {
+  const { fetchCampaignSheetData } = await import("./sheets");
+  return fetchCampaignSheetData(sheetId, campaignId);
+}
+
+/**
+ * Load and merge all active campaigns into the combined CampaignData
+ * format expected by the Dashboard component.
+ *
+ * Falls back to mock data if Google Sheets API fails.
+ * ISR revalidation will retry with live data every 300 seconds.
+ *
+ * Also injects mock track data for K Trap when no real track data exists.
+ */
+export async function getCampaignData(): Promise<CampaignData> {
+  const useMock = process.env.USE_MOCK_DATA === "true";
+
+  if (useMock) {
+    return injectMockTrackData({
+      campaigns: mockCampaigns,
+      metrics: mockMetrics,
+      events: mockEvents,
+      trackPerformance: [],
+      trackWeeklyMetrics: [],
+    });
+  }
+
+  try {
+    const { fetchActiveCampaigns, fetchCampaignSheetData } = await import(
+      "./sheets"
+    );
+
+    const entries = await fetchActiveCampaigns();
+
+    const results = await Promise.all(
+      entries.map((entry) =>
+        fetchCampaignSheetData(entry.sheet_id, entry.campaign_id)
+      )
+    );
+
+    let data: CampaignData = {
+      campaigns: results.map((r) => r.campaign),
+      metrics: results.flatMap((r) => r.metrics),
+      events: results.flatMap((r) => r.events),
+      trackPerformance: results.flatMap((r) => r.trackPerformance),
+      trackWeeklyMetrics: results.flatMap((r) => r.trackWeeklyMetrics),
+    };
+
+    // Inject mock track data for campaigns that need it
+    data = injectMockTrackData(data);
+
+    return data;
+  } catch (error) {
+    console.error(
+      "[CTV] Failed to fetch campaign data from Google Sheets \u2014 falling back to mock data.",
+      error
+    );
+    return injectMockTrackData({
+      campaigns: mockCampaigns,
+      metrics: mockMetrics,
+      events: mockEvents,
+      trackPerformance: [],
+      trackWeeklyMetrics: [],
+    });
+  }
+}
