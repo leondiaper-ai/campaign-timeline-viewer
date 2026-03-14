@@ -5,6 +5,7 @@ import {
   CampaignEvent,
   SingleCampaignData,
   TrackPerformance,
+  TrackWeeklyMetric,
   Territory,
   EventCategory,
   Confidence,
@@ -226,6 +227,30 @@ export async function fetchTrackPerformance(
   }));
 }
 
+// ─── Track Weekly Metrics (optional tab) ────────────────────────
+
+/**
+ * Fetch track-level weekly stream data from the optional `track_weekly_streams` tab.
+ *
+ * Columns: campaign_id, track_id, track_name, week_ending, territory, total_streams
+ *
+ * Returns empty array if the tab doesn't exist yet.
+ */
+export async function fetchTrackWeeklyMetrics(
+  sheetId: string,
+  campaignId: string
+): Promise<TrackWeeklyMetric[]> {
+  const rows = await fetchRowsSafe(sheetId, "track_weekly_streams");
+  return rows.map((row) => ({
+    campaign_id: campaignId,
+    track_id: row[1] || "",
+    track_name: row[2] || "",
+    week_ending: row[3] || "",
+    territory: (row[4] as Territory) || "global",
+    total_streams: parseNum(row[5]),
+  }));
+}
+
 // ─── Full Campaign Loader ───────────────────────────────────────
 
 // Loads all tabs from a single campaign spreadsheet in parallel.
@@ -233,12 +258,14 @@ export async function fetchCampaignSheetData(
   sheetId: string,
   campaignId: string
 ): Promise<SingleCampaignData> {
-  const [campaign, events, metrics, trackPerformance] = await Promise.all([
-    fetchCampaignSetup(sheetId),
-    fetchCampaignMoments(sheetId, campaignId),
-    fetchCampaignMetrics(sheetId, campaignId),
-    fetchTrackPerformance(sheetId, campaignId),
-  ]);
+  const [campaign, events, metrics, trackPerformance, trackWeeklyMetrics] =
+    await Promise.all([
+      fetchCampaignSetup(sheetId),
+      fetchCampaignMoments(sheetId, campaignId),
+      fetchCampaignMetrics(sheetId, campaignId),
+      fetchTrackPerformance(sheetId, campaignId),
+      fetchTrackWeeklyMetrics(sheetId, campaignId),
+    ]);
 
-  return { campaign, events, metrics, trackPerformance };
+  return { campaign, events, metrics, trackPerformance, trackWeeklyMetrics };
 }

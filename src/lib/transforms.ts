@@ -6,6 +6,83 @@ import {
   Territory,
 } from "@/types";
 
+// ─── Track-level chart helpers ──────────────────────────────────
+
+/**
+ * Get unique tracks that have weekly data for the given campaign/territory.
+ */
+export function getTrackList(
+  data: CampaignData,
+  campaignId: string,
+  territory: Territory
+): Array<{ track_id: string; track_name: string }> {
+  const seen = new Map<string, string>();
+  for (const m of data.trackWeeklyMetrics) {
+    if (
+      m.campaign_id === campaignId &&
+      m.territory === territory &&
+      !seen.has(m.track_id)
+    ) {
+      seen.set(m.track_id, m.track_name);
+    }
+  }
+  return Array.from(seen.entries()).map(([track_id, track_name]) => ({
+    track_id,
+    track_name,
+  }));
+}
+
+/**
+ * Build chart data for a single track's weekly streams.
+ * Returns ChartDataPoint[] with total_streams = the track's streams per week.
+ * Events are included in the same way as buildChartData.
+ */
+export function buildTrackChartData(
+  data: CampaignData,
+  campaignId: string,
+  territory: Territory,
+  trackId: string
+): ChartDataPoint[] {
+  const trackMetrics = data.trackWeeklyMetrics
+    .filter(
+      (m) =>
+        m.campaign_id === campaignId &&
+        m.territory === territory &&
+        m.track_id === trackId
+    )
+    .sort((a, b) => a.week_ending.localeCompare(b.week_ending));
+
+  const filteredEvents = data.events.filter(
+    (e) =>
+      e.campaign_id === campaignId &&
+      (e.territory === "global" || e.territory === territory)
+  );
+
+  const eventsByDate = new Map<string, CampaignEvent[]>();
+  filteredEvents.forEach((e) => {
+    const existing = eventsByDate.get(e.date) || [];
+    existing.push(e);
+    eventsByDate.set(e.date, existing);
+  });
+
+  // Also get campaign-level physical units for the same dates
+  const campaignMetrics = data.metrics
+    .filter(
+      (m) => m.campaign_id === campaignId && m.territory === territory
+    )
+    .reduce((map, m) => {
+      map.set(m.week_ending, m.retail_units + m.d2c_units);
+      return map;
+    }, new Map<string, number>());
+
+  return trackMetrics.map((m) => ({
+    date: m.week_ending,
+    total_streams: m.total_streams,
+    physical_units: campaignMetrics.get(m.week_ending) || 0,
+    events: eventsByDate.get(m.week_ending) || [],
+  }));
+}
+
 // ─── Transform data for chart ───────────────────────────────────
 
 export function buildChartData(

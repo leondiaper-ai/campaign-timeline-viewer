@@ -78,6 +78,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       metrics: mockMetrics,
       events: mockEvents,
       trackPerformance: [],
+      trackWeeklyMetrics: [],
     };
   }
 
@@ -102,6 +103,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       metrics: results.flatMap((r) => r.metrics),
       events: results.flatMap((r) => r.events),
       trackPerformance: results.flatMap((r) => r.trackPerformance),
+      trackWeeklyMetrics: results.flatMap((r) => r.trackWeeklyMetrics),
     };
   } catch (error) {
     console.error(
@@ -113,6 +115,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       metrics: mockMetrics,
       events: mockEvents,
       trackPerformance: [],
+      trackWeeklyMetrics: [],
     };
   }
 }

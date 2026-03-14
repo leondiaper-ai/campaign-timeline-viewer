@@ -98,6 +98,17 @@ export interface CampaignInsight {
   momentum_context: string;
 }
 
+// ─── Track Weekly Metrics (time-series for By Track chart) ──────
+
+export interface TrackWeeklyMetric {
+  campaign_id: string;
+  track_id: string;
+  track_name: string;
+  week_ending: string; // ISO date string YYYY-MM-DD
+  territory: Territory;
+  total_streams: number;
+}
+
 // ─── API Response ───────────────────────────────────────────────
 
 /** Data for a single campaign sheet (3 tabs + optional track perf) */
@@ -106,6 +117,7 @@ export interface SingleCampaignData {
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
   trackPerformance: TrackPerformance[];
+  trackWeeklyMetrics: TrackWeeklyMetric[];
 }
 
 /** Combined data for the Dashboard (all active campaigns merged) */
@@ -114,6 +126,7 @@ export interface CampaignData {
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
   trackPerformance: TrackPerformance[];
+  trackWeeklyMetrics: TrackWeeklyMetric[];
 }
 
 // ─── Auto-Observation (system-generated) ────────────────────────

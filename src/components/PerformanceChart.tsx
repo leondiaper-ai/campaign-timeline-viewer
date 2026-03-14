@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -19,6 +20,10 @@ interface PerformanceChartProps {
   data: ChartDataPoint[];
   visibleEventDates: Set<string>;
   highlightedDate: string | null;
+  // New for By Track mode
+  streamView?: "total" | "by_track";
+  trackData?: ChartDataPoint[] | null;
+  trackName?: string;
 }
 
 function formatDate(dateStr: string): string {
@@ -26,20 +31,65 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
+// ─── Merged data point for By Track mode ────────────────────────
+
+interface MergedChartPoint {
+  date: string;
+  track_streams: number;
+  total_streams_ref: number;
+  physical_units: number;
+  events: CampaignEvent[];
+}
+
+function mergeTrackData(
+  campaignData: ChartDataPoint[],
+  trackData: ChartDataPoint[]
+): MergedChartPoint[] {
+  const trackMap = new Map<string, ChartDataPoint>();
+  trackData.forEach((d) => trackMap.set(d.date, d));
+
+  const campaignMap = new Map<string, ChartDataPoint>();
+  campaignData.forEach((d) => campaignMap.set(d.date, d));
+
+  // Use all dates from both datasets
+  const allDates = new Set([
+    ...campaignData.map((d) => d.date),
+    ...trackData.map((d) => d.date),
+  ]);
+
+  return Array.from(allDates)
+    .sort()
+    .map((date) => {
+      const campaign = campaignMap.get(date);
+      const track = trackMap.get(date);
+      return {
+        date,
+        track_streams: track?.total_streams || 0,
+        total_streams_ref: campaign?.total_streams || 0,
+        physical_units: campaign?.physical_units || track?.physical_units || 0,
+        events: campaign?.events || track?.events || [],
+      };
+    });
+}
+
 // ─── Custom Tooltip ─────────────────────────────────────────────
 
 interface CustomTooltipProps {
   active?: boolean;
-  payload?: Array<{
-    name: string;
-    value: number;
-    color: string;
-    payload: ChartDataPoint;
-  }>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  payload?: Array<any>;
   label?: string;
+  isTrackMode?: boolean;
+  trackName?: string;
 }
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+function CustomTooltip({
+  active,
+  payload,
+  label,
+  isTrackMode,
+  trackName,
+}: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   const dataPoint = payload[0]?.payload;
@@ -51,20 +101,62 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
         {label ? formatDate(label) : ""}
       </p>
 
-      {payload.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2.5 mb-1.5">
-          <span
-            className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span className="text-xs text-label-secondary">
-            {entry.name === "total_streams" ? "Total DSP Streams" : "Physical Units"}
-          </span>
-          <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
-            {formatNumber(entry.value)}
-          </span>
-        </div>
-      ))}
+      {isTrackMode ? (
+        <>
+          {/* Track streams */}
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: "#6C9EFF" }}
+            />
+            <span className="text-xs text-label-secondary">
+              {trackName || "Track"}
+            </span>
+            <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
+              {formatNumber(dataPoint?.track_streams || 0)}
+            </span>
+          </div>
+          {/* Total campaign reference */}
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: "#6C9EFF", opacity: 0.3 }}
+            />
+            <span className="text-xs text-label-muted">Total Campaign</span>
+            <span className="text-sm font-bold text-label-muted ml-auto tabular-nums">
+              {formatNumber(dataPoint?.total_streams_ref || 0)}
+            </span>
+          </div>
+          {/* Physical units */}
+          <div className="flex items-center gap-2.5 mb-1.5">
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: "#4ADE80" }}
+            />
+            <span className="text-xs text-label-secondary">Physical Units</span>
+            <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
+              {formatNumber(dataPoint?.physical_units || 0)}
+            </span>
+          </div>
+        </>
+      ) : (
+        payload.map((entry: { name: string; value: number; color: string }, i: number) => (
+          <div key={i} className="flex items-center gap-2.5 mb-1.5">
+            <span
+              className="w-2 h-2 rounded-full"
+              style={{ backgroundColor: entry.color }}
+            />
+            <span className="text-xs text-label-secondary">
+              {entry.name === "total_streams"
+                ? "Total DSP Streams"
+                : "Physical Units"}
+            </span>
+            <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
+              {formatNumber(entry.value)}
+            </span>
+          </div>
+        ))
+      )}
 
       {events.length > 0 && (
         <div className="mt-3 pt-3 border-t border-border">
@@ -81,7 +173,9 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
                     {event.event_title}
                   </span>
                 </div>
-                <p className="text-[11px] text-label-muted ml-3">{event.notes}</p>
+                <p className="text-[11px] text-label-muted ml-3">
+                  {event.notes}
+                </p>
               </div>
             );
           })}
@@ -149,9 +243,23 @@ export default function PerformanceChart({
   data,
   visibleEventDates,
   highlightedDate,
+  streamView = "total",
+  trackData,
+  trackName,
 }: PerformanceChartProps) {
+  const isTrackMode = streamView === "by_track" && trackData && trackData.length > 0;
+
+  // Merged data for by_track mode
+  const mergedData = useMemo(() => {
+    if (!isTrackMode || !trackData) return null;
+    return mergeTrackData(data, trackData);
+  }, [isTrackMode, data, trackData]);
+
+  // Choose the right data source for reference lines
+  const chartSource = isTrackMode && mergedData ? mergedData : data;
+
   // Events to show as reference lines (visible via toggle or major)
-  const visibleEvents = data.filter(
+  const visibleEvents = (chartSource as Array<{ date: string; events: CampaignEvent[] }>).filter(
     (d) =>
       d.events.length > 0 &&
       d.events.some(
@@ -163,7 +271,7 @@ export default function PerformanceChart({
     <div className="w-full h-[440px] relative">
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart
-          data={data}
+          data={isTrackMode && mergedData ? mergedData : data}
           margin={{ top: 28, right: 28, left: 4, bottom: 20 }}
         >
           <defs>
@@ -196,7 +304,7 @@ export default function PerformanceChart({
             tickLine={false}
             width={56}
             label={{
-              value: "DSP STREAMS",
+              value: isTrackMode ? "TRACK STREAMS" : "DSP STREAMS",
               angle: -90,
               position: "insideLeft",
               offset: 10,
@@ -232,7 +340,12 @@ export default function PerformanceChart({
           />
 
           <Tooltip
-            content={<CustomTooltip />}
+            content={
+              <CustomTooltip
+                isTrackMode={!!isTrackMode}
+                trackName={trackName}
+              />
+            }
             cursor={{ stroke: "#353849", strokeDasharray: "4 4" }}
           />
 
@@ -263,21 +376,54 @@ export default function PerformanceChart({
             );
           })}
 
-          <Line
-            yAxisId="streams"
-            type="monotone"
-            dataKey="total_streams"
-            name="total_streams"
-            stroke="#6C9EFF"
-            strokeWidth={2.5}
-            dot={false}
-            activeDot={{
-              r: 5,
-              fill: "#6C9EFF",
-              stroke: "#0F1117",
-              strokeWidth: 2,
-            }}
-          />
+          {isTrackMode ? (
+            <>
+              {/* Faint total campaign reference line */}
+              <Line
+                yAxisId="streams"
+                type="monotone"
+                dataKey="total_streams_ref"
+                name="total_streams_ref"
+                stroke="#6C9EFF"
+                strokeWidth={1.5}
+                strokeOpacity={0.2}
+                dot={false}
+                activeDot={false}
+              />
+              {/* Highlighted track line */}
+              <Line
+                yAxisId="streams"
+                type="monotone"
+                dataKey="track_streams"
+                name="track_streams"
+                stroke="#6C9EFF"
+                strokeWidth={2.5}
+                dot={false}
+                activeDot={{
+                  r: 5,
+                  fill: "#6C9EFF",
+                  stroke: "#0F1117",
+                  strokeWidth: 2,
+                }}
+              />
+            </>
+          ) : (
+            <Line
+              yAxisId="streams"
+              type="monotone"
+              dataKey="total_streams"
+              name="total_streams"
+              stroke="#6C9EFF"
+              strokeWidth={2.5}
+              dot={false}
+              activeDot={{
+                r: 5,
+                fill: "#6C9EFF",
+                stroke: "#0F1117",
+                strokeWidth: 2,
+              }}
+            />
+          )}
 
           <Line
             yAxisId="units"
