@@ -15,18 +15,24 @@ const MOCK_K_TRAP_TRACKS = [
     name: "No Discussion",
     sharePeak: 0.38,
     shareBase: 0.28,
+    /** Lead single — available from week 0 */
+    startWeekIndex: 0,
   },
   {
     id: "background_headie_one",
     name: "Background ft Headie One",
     sharePeak: 0.22,
     shareBase: 0.18,
+    /** Second single — released at week 3 */
+    startWeekIndex: 3,
   },
   {
     id: "no_feelings",
     name: "No Feelings",
     sharePeak: 0.12,
     shareBase: 0.08,
+    /** Album track — released at week 5 */
+    startWeekIndex: 5,
   },
 ];
 
@@ -62,6 +68,10 @@ function generateMockTrackWeeklyMetrics(
 
       for (let t = 0; t < MOCK_K_TRAP_TRACKS.length; t++) {
         const track = MOCK_K_TRAP_TRACKS[t];
+
+        // Skip weeks before the track's release — mimics real sheet data
+        // where rows only exist after a track is released.
+        if (weekIdx < track.startWeekIndex) continue;
 
         // Interpolate share based on campaign progress
         // Lead single peaks earlier, album tracks peak later

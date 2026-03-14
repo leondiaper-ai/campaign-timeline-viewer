@@ -44,14 +44,17 @@ export function buildTrackChartData(
   territory: Territory,
   trackId: string
 ): ChartDataPoint[] {
-  const trackMetrics = data.trackWeeklyMetrics
-    .filter(
-      (m) =>
-        m.campaign_id === campaignId &&
-        m.territory === territory &&
-        m.track_id === trackId
-    )
-    .sort((a, b) => a.week_ending.localeCompare(b.week_ending));
+  // Build a lookup of track streams by date
+  const trackStreamsByDate = new Map<string, number>();
+  for (const m of data.trackWeeklyMetrics) {
+    if (
+      m.campaign_id === campaignId &&
+      m.territory === territory &&
+      m.track_id === trackId
+    ) {
+      trackStreamsByDate.set(m.week_ending, m.total_streams);
+    }
+  }
 
   const filteredEvents = data.events.filter(
     (e) =>
@@ -66,20 +69,18 @@ export function buildTrackChartData(
     eventsByDate.set(e.date, existing);
   });
 
-  // Also get campaign-level physical units for the same dates
+  // Use the FULL campaign timeline so every track covers all weeks.
+  // Weeks before a track has data get value 0 (continuous line from zero).
   const campaignMetrics = data.metrics
     .filter(
       (m) => m.campaign_id === campaignId && m.territory === territory
     )
-    .reduce((map, m) => {
-      map.set(m.week_ending, m.retail_units + m.d2c_units);
-      return map;
-    }, new Map<string, number>());
+    .sort((a, b) => a.week_ending.localeCompare(b.week_ending));
 
-  return trackMetrics.map((m) => ({
+  return campaignMetrics.map((m) => ({
     date: m.week_ending,
-    total_streams: m.total_streams,
-    physical_units: campaignMetrics.get(m.week_ending) || 0,
+    total_streams: trackStreamsByDate.get(m.week_ending) ?? 0,
+    physical_units: m.retail_units + m.d2c_units,
     events: eventsByDate.get(m.week_ending) || [],
   }));
 }
@@ -112,18 +113,24 @@ export function buildMultiTrackChartData(
     trackDataMap.set(trackId, dateMap);
   }
 
-  // Build merged points
+  // Build merged points — every track key is always present for every
+  // week so Recharts draws a continuous line starting at 0 before release.
   return campaignChart.map((cp) => {
     const point: MultiTrackChartPoint = {
       date: cp.date,
       total_streams_ref: cp.total_streams,
       physical_units: cp.physical_units,
       events: cp.events,
+      // Initialise all selected track slots to 0
+      ...(selectedTrackIds.length > 0 ? { track_0: 0 } : {}),
+      ...(selectedTrackIds.length > 1 ? { track_1: 0 } : {}),
+      ...(selectedTrackIds.length > 2 ? { track_2: 0 } : {}),
+      ...(selectedTrackIds.length > 3 ? { track_3: 0 } : {}),
     };
 
     selectedTrackIds.forEach((trackId, i) => {
       if (i >= 4) return;
-      const val = trackDataMap.get(trackId)?.get(cp.date) || 0;
+      const val = trackDataMap.get(trackId)?.get(cp.date) ?? 0;
       if (i === 0) point.track_0 = val;
       else if (i === 1) point.track_1 = val;
       else if (i === 2) point.track_2 = val;
