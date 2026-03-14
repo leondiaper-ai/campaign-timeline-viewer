@@ -248,7 +248,8 @@ export default function PerformanceChart({
     for (const pt of multiTrackData) {
       if (pt.total_streams_ref > max) max = pt.total_streams_ref;
       for (let i = 0; i < 4; i++) {
-        const val = (pt as Record<string, unknown>)[`track_${i}`];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const val = (pt as any)[`track_${i}`];
         if (typeof val === "number" && val > max) max = val;
       }
     }
