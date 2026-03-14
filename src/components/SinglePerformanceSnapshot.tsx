@@ -15,7 +15,7 @@ interface SinglePerformanceSnapshotProps {
  * Strategy:
  * 1. Check if event_title contains any track_name (case-insensitive)
  * 2. Check if event date is within 7 days of a track's release_date
- * 3. Return null if no match 
+ * 3. Return null if no match
  */
 function findMatchingTrack(
   event: CampaignEvent,
@@ -24,9 +24,8 @@ function findMatchingTrack(
 ): TrackPerformance | null {
   const territoryTracks = tracks.filter(
     (t) =>
-  
-  t.campaign_id === event.campaign_id &&
-    t.territory === territory
+      t.campaign_id === event.campaign_id &&
+      t.territory === territory
   );
 
   if (territoryTracks.length === 0) return null;
@@ -126,7 +125,7 @@ export default function SinglePerformanceSnapshot({
             className="text-lg font-bold tabular-nums"
             style={{ color: "#6C9EFF" }}
           >
-            {formatNumber(track.streams_7b)}
+            {formatNumber(track.streams_7d)}
           </p>
         </div>
         <div>

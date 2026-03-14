@@ -21,16 +21,15 @@ function formatDate(dateStr: string): string {
 }
 
 function formatMetric(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}Mck
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
   return n.toLocaleString();
 }
 
 function ConfidencePips({ level }: { level?: Confidence }) {
   const filled =
-  
-  R)"´ number;\n  if (filled === 0) return null;
-
+    level === "high" ? 3 : level === "medium" ? 2 : level === "low" ? 1 : 0;
+  if (filled === 0) return null;
 
   return (
     <div className="flex items-center gap-1">
@@ -222,7 +221,7 @@ export default function EventList({
                         <svg
                           width="14"
                           height="14"
-                          viewBox="0 0 14 14"
+                             viewBox="0 0 14 14"
                           fill="none"
                           className="flex-shrink-0"
                         >
@@ -291,8 +290,7 @@ export default function EventList({
                     </div>
                   )}
 
-
-                  { /* Team Insight */}
+                  {/* Team Insight */}
                   {hasManualLearning && (
                     <div
                       className="rounded-lg p-4"
@@ -324,15 +322,15 @@ export default function EventList({
                         <span className="text-[10px] font-semibold text-label-muted uppercase tracking-[0.12em]">
                           Team Insight
                         </span>
-                        { event.confidence && (
+                        {event.confidence && (
                           <ConfidencePips level={event.confidence} />
-                        ) }
+                        )}
                       </div>
 
                       <div
                         className="grid gap-4"
                         style={{
-                          gridTemplateColumns: 
+                          gridTemplateColumns:
                             event.observed_impact && event.what_we_learned
                               ? "1fr 1fr"
                               : "1fr",
@@ -348,7 +346,7 @@ export default function EventList({
                             </p>
                           </div>
                         )}
-                        { event.what_we_learned && (
+                        {event.what_we_learned && (
                           <div>
                             <p className="text-[10px] font-semibold text-label-muted uppercase tracking-[0.12em] mb-1">
                               What we learned
@@ -362,7 +360,6 @@ export default function EventList({
                     </div>
                   )}
 
-
                   {/* Single Performance Snapshot (for music events) */}
                   <SinglePerformanceSnapshot
                     event={event}
@@ -370,7 +367,11 @@ export default function EventList({
                     territory={territory}
                   />
                 </div>
-              })}
-      </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 }
