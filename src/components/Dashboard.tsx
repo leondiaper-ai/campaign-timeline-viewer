@@ -179,7 +179,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
       </header>
 
-      {/+ ─── Main ───────────────────────────────────────── */}
+      {/* ─── Main ───────────────────────────────────────── */}
       <main className="max-w-[1440px] mx-auto px-8 py-8">
         {/* Campaign hero */}
         <div className="mb-6 flex items-end justify-between">
