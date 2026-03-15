@@ -66,7 +66,7 @@ async function fetchRowsSafe(
       errObj.message?.includes("Unable to parse range")
     ) {
       console.log(
-        `[CTV] Tab "${tabName}" not found in sheet \u2014 skipping (this is normal).`
+        `[CTV] Tab "${tabName}" not found in sheet — skipping (this is normal).`
       );
       return [];
     }
