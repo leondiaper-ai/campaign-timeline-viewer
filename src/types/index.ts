@@ -140,6 +140,25 @@ export interface TrackInfo {
   peak_streams: number;
 }
 
+// ─── Campaign Insight (legacy, used by insights.ts) ─────────────
+
+export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
+
+export type MomentumDirection = "RISING" | "FALLING" | "STABLE";
+
+export interface CampaignInsight {
+  verdict: VerdictLevel;
+  verdict_explanation: string;
+  top_moment: {
+    event_title: string;
+    date: string;
+    streams_change_pct: number | null;
+    summary: string;
+  } | null;
+  momentum: MomentumDirection;
+  momentum_context: string;
+}
+
 // ─── Track Performance (per-single snapshot) ──────────────────
 
 export interface TrackPerformance {
