@@ -146,6 +146,7 @@ export interface TrackPerformance {
   campaign_id: string;
   track_name: string;
   territory: Territory;
+  release_type: string;
   release_date: string;
   streams_7d: number;
   streams_14d: number;
