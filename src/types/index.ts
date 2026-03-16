@@ -4,6 +4,9 @@ export interface Campaign {
   campaign_id: string;
   artist: string;
   campaign_name: string;
+  start_date?: string; // ISO YYYY-MM-DD — first week of campaign activity
+  release_date?: string; // ISO YYYY-MM-DD — album / single release date
+  default_territory?: Territory;
 }
 
 export interface WeeklyMetric {
@@ -13,6 +16,14 @@ export interface WeeklyMetric {
   total_streams: number; // all DSPs combined
   retail_units: number;
   d2c_units: number;
+}
+
+export interface TrackWeeklyMetric {
+  campaign_id: string;
+  week_ending: string;
+  track_name: string;
+  territory: Territory;
+  total_streams: number;
 }
 
 export type Confidence = "high" | "medium" | "low";
@@ -27,15 +38,15 @@ export interface CampaignEvent {
   is_major: boolean; // true = always visible on chart
 
   // Optional learning fields
-  observed_impact?: string; // e.g. "+38% streams week-on-week"
-  what_we_learned?: string; // e.g. "Playlist placement drove more than paid spend"
-  confidence?: Confidence; // how confident we are in the attribution
+  observed_impact?: string;
+  what_we_learned?: string;
+  confidence?: Confidence;
 
-  // Future-proof optional fields (not used in V1 UI)
-  event_subtype?: string; // finer-grained category, e.g. "playlist_add", "vinyl_drop", "interview"
-  source_platform?: string; // e.g. "spotify", "tiktok", "instagram", "bbc_radio"
-  is_core_moment?: boolean; // true = a defining campaign beat (for future filtering)
-  show_on_chart?: boolean; // explicit override for chart visibility (future use)
+  // Future-proof optional fields
+  event_subtype?: string;
+  source_platform?: string;
+  is_core_moment?: boolean;
+  show_on_chart?: boolean;
 }
 
 // ─── Enums & Literals ───────────────────────────────────────────
@@ -48,6 +59,10 @@ export type EventCategory =
   | "editorial"
   | "product"
   | "live";
+
+export type ChartViewMode = "campaign" | "tracks";
+
+export type TrackDisplayMode = "raw" | "indexed";
 
 // ─── Registry Types ─────────────────────────────────────────────
 
@@ -63,84 +78,14 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
-// ─── Track Performance (single-level drill-down) ────────────────
-
-export interface TrackPerformance {
-  campaign_id: string;
-  track_id: string;
-  track_name: string;
-  release_type: "single" | "album_track" | "deluxe_track";
-  release_date: string;
-  territory: Territory;
-  streams_7d: number;
-  streams_14d: number;
-  streams_28d: number;
-  saves_28d: number;
-  playlist_adds_28d: number;
-  editorial_adds_28d: number;
-}
-
-// ─── Campaign Insights (verdict / momentum / top moment) ────────
-
-export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
-export type MomentumDirection = "RISING" | "PEAKING" | "DECLINING" | "STABLE";
-
-export interface CampaignInsight {
-  verdict: VerdictLevel;
-  verdict_explanation: string;
-  top_moment: {
-    event_title: string;
-    date: string;
-    streams_delta_pct: number | null;
-    sales_delta_pct: number | null;
-  } | null;
-  momentum: MomentumDirection;
-  momentum_context: string;
-}
-
-// ─── Track Weekly Metrics (time-series for By Track chart) ──────
-
-export interface TrackWeeklyMetric {
-  campaign_id: string;
-  track_id: string;
-  track_name: string;
-  week_ending: string; // ISO date string YYYY-MM-DD
-  territory: Territory;
-  total_streams: number;
-}
-
-// ─── Multi-Track Chart Types ────────────────────────────────────
-
-export interface MultiTrackChartPoint {
-  date: string;
-  total_streams_ref: number;
-  physical_units: number;
-  events: CampaignEvent[];
-  track_0?: number;
-  track_1?: number;
-  track_2?: number;
-  track_3?: number;
-}
-
-export interface TrackMeta {
-  track_id: string;
-  track_name: string;
-  color: string;
-  index: number; // 0-3
-}
-
-export const TRACK_COLORS = ["#6C9EFF", "#FFB86C", "#FF6B9D", "#A78BFA"];
-export const MAX_VISIBLE_TRACKS = 4;
-
 // ─── API Response ───────────────────────────────────────────────
 
-/** Data for a single campaign sheet (3 tabs + optional track perf) */
+/** Data for a single campaign sheet */
 export interface SingleCampaignData {
   campaign: Campaign;
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
-  trackPerformance: TrackPerformance[];
-  trackWeeklyMetrics: TrackWeeklyMetric[];
+  trackMetrics: TrackWeeklyMetric[];
 }
 
 /** Combined data for the Dashboard (all active campaigns merged) */
@@ -148,8 +93,7 @@ export interface CampaignData {
   campaigns: Campaign[];
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
-  trackPerformance: TrackPerformance[];
-  trackWeeklyMetrics: TrackWeeklyMetric[];
+  trackMetrics: TrackWeeklyMetric[];
 }
 
 // ─── Auto-Observation (system-generated) ────────────────────────
@@ -157,13 +101,13 @@ export interface CampaignData {
 export interface AutoObservation {
   streams_before: number | null;
   streams_after: number | null;
-  streams_change_pct: number | null; // e.g. +38 or -12
+  streams_change_pct: number | null;
   units_before: number | null;
   units_after: number | null;
   units_change_pct: number | null;
-  was_momentum_rising: boolean; // 2-week trend before moment was positive
-  near_campaign_peak: boolean; // within +/-1 week of peak streaming week
-  summary: string; // cautious human-readable observation
+  was_momentum_rising: boolean;
+  near_campaign_peak: boolean;
+  summary: string;
 }
 
 // ─── Chart Data (transformed for Recharts) ──────────────────────
@@ -171,6 +115,27 @@ export interface AutoObservation {
 export interface ChartDataPoint {
   date: string;
   total_streams: number;
-  physical_units: number; // retail_units + d2c_units
+  physical_units: number;
   events: CampaignEvent[];
+}
+
+export interface TrackChartDataPoint {
+  date: string;
+  [trackName: string]: number | string; // dynamic keys for each track
+}
+
+// ─── Narrative Types ────────────────────────────────────────────
+
+export interface CampaignNarrative {
+  headline: string;
+  summary: string;
+  highlights: string[];
+}
+
+export interface TrackInfo {
+  track_name: string;
+  first_active_week: string;
+  total_streams: number;
+  peak_week: string;
+  peak_streams: number;
 }
