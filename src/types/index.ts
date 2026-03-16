@@ -154,7 +154,6 @@ export interface CampaignInsight {
     date: string;
     streams_delta_pct: number | null;
     sales_delta_pct: number | null;
-    summary: string;
   } | null;
   momentum: MomentumDirection;
   momentum_context: string;
