@@ -1,4 +1,4 @@
-// ─── Domain Types ───────────────────────────────────────────────
+// ─── Domain Types ─────────────────────────────────────────────
 
 export interface Campaign {
   campaign_id: string;
@@ -49,7 +49,7 @@ export interface CampaignEvent {
   show_on_chart?: boolean;
 }
 
-// ─── Enums & Literals ───────────────────────────────────────────
+// ─── Enums & Literals ─────────────────────────────────────────
 
 export type Territory = "global" | "UK";
 
@@ -60,11 +60,11 @@ export type EventCategory =
   | "product"
   | "live";
 
+// Kept for backward compatibility but no longer used in the Dashboard
 export type ChartViewMode = "campaign" | "tracks";
-
 export type TrackDisplayMode = "raw" | "indexed";
 
-// ─── Registry Types ─────────────────────────────────────────────
+// ─── Registry Types ───────────────────────────────────────────
 
 export type CampaignStatus = "active" | "archived" | "draft";
 
@@ -78,7 +78,7 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
-// ─── API Response ───────────────────────────────────────────────
+// ─── API Response ─────────────────────────────────────────────
 
 /** Data for a single campaign sheet */
 export interface SingleCampaignData {
@@ -96,7 +96,7 @@ export interface CampaignData {
   trackMetrics: TrackWeeklyMetric[];
 }
 
-// ─── Auto-Observation (system-generated) ────────────────────────
+// ─── Auto-Observation (system-generated) ──────────────────────
 
 export interface AutoObservation {
   streams_before: number | null;
@@ -110,7 +110,7 @@ export interface AutoObservation {
   summary: string;
 }
 
-// ─── Chart Data (transformed for Recharts) ──────────────────────
+// ─── Chart Data (transformed for Recharts) ────────────────────
 
 export interface ChartDataPoint {
   date: string;
@@ -124,7 +124,7 @@ export interface TrackChartDataPoint {
   [trackName: string]: number | string; // dynamic keys for each track
 }
 
-// ─── Narrative Types ────────────────────────────────────────────
+// ─── Narrative Types ──────────────────────────────────────────
 
 export interface CampaignNarrative {
   headline: string;
@@ -140,7 +140,7 @@ export interface TrackInfo {
   peak_streams: number;
 }
 
-// ─── Campaign Insight (legacy, used by insights.ts) ─────────────
+// ─── Campaign Insight (legacy, used by insights.ts) ───────────
 
 export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
 
