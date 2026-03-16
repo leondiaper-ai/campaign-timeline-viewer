@@ -139,3 +139,18 @@ export interface TrackInfo {
   peak_week: string;
   peak_streams: number;
 }
+
+// ─── Track Performance (per-single snapshot) ──────────────────
+
+export interface TrackPerformance {
+  campaign_id: string;
+  track_name: string;
+  territory: Territory;
+  release_date: string;
+  streams_7d: number;
+  streams_14d: number;
+  streams_28d: number;
+  saves_28d: number;
+  playlist_adds_28d: number;
+  editorial_adds_28d: number;
+}
