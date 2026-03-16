@@ -8,7 +8,7 @@ import {
   TrackInfo,
 } from "@/types";
 
-// ─── Unified Chart Data Point ─────────────────────────────
+// âââ Unified Chart Data Point âââââââââââââââââââââââââââââ
 
 export interface UnifiedChartDataPoint {
   date: string;
@@ -19,7 +19,7 @@ export interface UnifiedChartDataPoint {
   [key: string]: number | string | null | CampaignEvent[];
 }
 
-// ─── Build Unified Timeline ─────────────────────────────
+// âââ Build Unified Timeline âââââââââââââââââââââââââââââ
 // Single preprocessing step that creates a continuous weekly dataset
 // with campaign totals AND per-track streams layered in.
 
@@ -104,7 +104,7 @@ export function buildUnifiedChartData(
       events: eventsByDate.get(date) || [],
     };
 
-    // Add track data — NULL before release week, actual value after
+    // Add track data â NULL before release week, actual value after
     selectedTracks.forEach((track) => {
       const firstWeek = trackFirstWeek.get(track);
       if (!firstWeek || date < firstWeek) {
@@ -139,7 +139,7 @@ export function buildUnifiedChartData(
   return result.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// ─── Legacy buildChartData (kept for compatibility) ───────────
+// âââ Legacy buildChartData (kept for compatibility) âââââââââââ
 
 export function buildChartData(
   data: CampaignData,
@@ -155,7 +155,7 @@ export function buildChartData(
   }));
 }
 
-// ─── Filter events for event list ─────────────────────────
+// âââ Filter events for event list âââââââââââââââââââââââââ
 
 export function getFilteredEvents(
   data: CampaignData,
@@ -171,7 +171,7 @@ export function getFilteredEvents(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// ─── Track List ─────────────────────────────────────────
+// âââ Track List âââââââââââââââââââââââââââââââââââââââââ
 
 export function getTrackList(
   data: CampaignData,
@@ -218,14 +218,14 @@ export function getTrackList(
   return tracks;
 }
 
-// ─── Default track selection ────────────────────────────
+// âââ Default track selection ââââââââââââââââââââââââââââ
 // Auto-select the top 2 tracks (lead single + second single)
 
 export function getDefaultTracks(trackList: TrackInfo[]): string[] {
   return trackList.slice(0, 2).map((t) => t.track_name);
 }
 
-// ─── Extract top learnings from major events ──────────────
+// âââ Extract top learnings from major events ââââââââââââââ
 
 export interface CampaignLearning {
   event_title: string;
@@ -299,5 +299,3 @@ export function getTopLearnings(
   return results.slice(0, limit).map((r) => r.learning);
 }
 ((a, b) => b.score - a.score);
-  return results.slice(0, limit).map((r) => r.learning);
-}
