@@ -152,7 +152,8 @@ export interface CampaignInsight {
   top_moment: {
     event_title: string;
     date: string;
-    streams_change_pct: number | null;
+    streams_delta_pct: number | null;
+    sales_delta_pct: number | null;
     summary: string;
   } | null;
   momentum: MomentumDirection;
