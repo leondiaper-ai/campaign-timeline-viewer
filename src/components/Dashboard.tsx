@@ -393,6 +393,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
             visibleDates={toggledDates}
             onToggleVisibility={handleToggleVisibility}
             onHoverDate={setHighlightedDate}
+            trackPerformance={[]}
+            territory={territory}
           />
         </div>
 
