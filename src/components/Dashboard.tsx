@@ -1,25 +1,33 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { CampaignData, Territory, ChartViewMode, TrackDisplayMode } from "@/types";
+import { CampaignData, Territory } from "@/types";
 import {
-  buildChartData,
+  buildUnifiedChartData,
   getFilteredEvents,
   getTopLearnings,
   getTrackList,
-  buildTrackChartData,
+  getDefaultTracks,
 } from "@/lib/transforms";
 import { generateObservations } from "@/lib/observations";
-import { generateCampaignNarrative, generateTrackNarrative } from "@/lib/narratives";
+
 import CampaignSelector from "./CampaignSelector";
 import TerritoryToggle from "./TerritoryToggle";
 import CampaignInsights from "./CampaignInsights";
-import PerformanceChart from "./PerformanceChart";
-import TrackComparisonChart from "./TrackComparisonChart";
+import TimelineChart from "./TimelineChart";
 import EventList from "./EventList";
 import CategoryLegend from "./CategoryLegend";
 import CampaignLearnings from "./CampaignLearnings";
-import NarrativeSummary from "./NarrativeSummary";
+
+// ─── Track palette (must match TimelineChart) ─────────────────
+const TRACK_COLORS = [
+  "#FBBF24",
+  "#F472B6",
+  "#22D3EE",
+  "#A78BFA",
+  "#FB7185",
+  "#F97316",
+];
 
 interface DashboardProps {
   initialData: CampaignData;
@@ -32,17 +40,29 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [territory, setTerritory] = useState<Territory>("global");
   const [toggledDates, setToggledDates] = useState<Set<string>>(new Set());
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
-
-  // Chart view mode: campaign overview vs track comparison
-  const [chartView, setChartView] = useState<ChartViewMode>("campaign");
-  const [trackDisplayMode, setTrackDisplayMode] = useState<TrackDisplayMode>("raw");
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
+  const [tracksInitialized, setTracksInitialized] = useState(false);
 
-  // ─── Derived Data ──────────────────────────────────────────────
+  // ─── Derived Data ─────────────────────────────────────────
+
+  const trackList = useMemo(
+    () => getTrackList(initialData, campaignId, territory),
+    [initialData, campaignId, territory]
+  );
+
+  // Auto-select default tracks on first render / campaign change
+  if (!tracksInitialized && trackList.length > 0) {
+    const defaults = getDefaultTracks(trackList);
+    if (defaults.length > 0) {
+      setSelectedTracks(defaults);
+      setTracksInitialized(true);
+    }
+  }
 
   const chartData = useMemo(
-    () => buildChartData(initialData, campaignId, territory),
-    [initialData, campaignId, territory]
+    () =>
+      buildUnifiedChartData(initialData, campaignId, territory, selectedTracks),
+    [initialData, campaignId, territory, selectedTracks]
   );
 
   const events = useMemo(
@@ -66,50 +86,18 @@ export default function Dashboard({ initialData }: DashboardProps) {
     [events, observations]
   );
 
-  const trackList = useMemo(
-    () => getTrackList(initialData, campaignId, territory),
-    [initialData, campaignId, territory]
-  );
-
-  const hasTrackData = trackList.length > 0;
-
-  const trackChartData = useMemo(
-    () =>
-      hasTrackData && selectedTracks.length > 0
-        ? buildTrackChartData(
-            initialData,
-            campaignId,
-            territory,
-            selectedTracks,
-            trackDisplayMode
-          )
-        : [],
-    [initialData, campaignId, territory, selectedTracks, trackDisplayMode, hasTrackData]
-  );
-
-  // Narrative
-  const narrative = useMemo(
-    () => generateCampaignNarrative(initialData, campaignId, territory),
-    [initialData, campaignId, territory]
-  );
-
-  const trackNarrative = useMemo(
-    () => (hasTrackData ? generateTrackNarrative(trackList, territory) : undefined),
-    [hasTrackData, trackList, territory]
-  );
-
   const selectedCampaign = initialData.campaigns.find(
     (c) => c.campaign_id === campaignId
   );
 
-  // ─── Handlers ─────────────────────────────────────────────────
+  // ─── Handlers ─────────────────────────────────────────────
 
   const handleCampaignChange = useCallback(
     (id: string) => {
       setCampaignId(id);
       setToggledDates(new Set());
-      setChartView("campaign");
       setSelectedTracks([]);
+      setTracksInitialized(false);
     },
     []
   );
@@ -118,6 +106,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
     setTerritory(t);
     setToggledDates(new Set());
     setSelectedTracks([]);
+    setTracksInitialized(false);
   }, []);
 
   const handleToggleVisibility = useCallback((date: string) => {
@@ -131,17 +120,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
       return next;
     });
   }, []);
-
-  const handleChartViewChange = useCallback(
-    (view: ChartViewMode) => {
-      setChartView(view);
-      // Auto-select top 3 tracks when entering track view
-      if (view === "tracks" && selectedTracks.length === 0 && trackList.length > 0) {
-        setSelectedTracks(trackList.slice(0, 3).map((t) => t.track_name));
-      }
-    },
-    [selectedTracks, trackList]
-  );
 
   const handleTrackToggle = useCallback((trackName: string) => {
     setSelectedTracks((prev) => {
@@ -165,11 +143,11 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
   const majorCount = events.filter((e) => e.is_major).length;
 
-  // ─── Render ────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0F1117" }}>
-      {/* ─── Header ─────────────────────────────────────── */}
+      {/* ─── Header ──────────────────────────────── */}
       <header
         className="border-b"
         style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
@@ -196,7 +174,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
       </header>
 
-      {/* ─── Main ───────────────────────────────────────── */}
+      {/* ─── Main ────────────────────────────────── */}
       <main className="max-w-[1440px] mx-auto px-8 py-8">
         {/* Campaign hero */}
         <div className="mb-6 flex items-end justify-between">
@@ -215,133 +193,106 @@ export default function Dashboard({ initialData }: DashboardProps) {
           <CategoryLegend />
         </div>
 
-        {/* ─── Narrative Summary ──────────────────────────── */}
-        <NarrativeSummary
-          narrative={narrative}
-          trackNarrative={trackNarrative}
-        />
-
-        {/* ─── Stat Cards ─────────────────────────────────── */}
+        {/* ─── KPI Cards ─────────────────────────── */}
         <CampaignInsights
           metrics={initialData.metrics}
           campaignId={campaignId}
           territory={territory}
         />
 
-        {/* ─── Chart Card ───────────────────────────────── */}
+        {/* ─── Chart Card ────────────────────────── */}
         <div
           className="rounded-xl border overflow-hidden"
           style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
         >
           <div className="px-6 pt-5 pb-2 flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <h3 className="text-[11px] font-bold text-label-muted uppercase tracking-[0.15em]">
-                {chartView === "campaign"
-                  ? "Weekly Performance"
-                  : "Track Comparison"}
-              </h3>
+            <h3 className="text-[11px] font-bold text-label-muted uppercase tracking-[0.15em]">
+              Weekly Performance
+            </h3>
 
-              {/* View toggle — only show if track data exists */}
-              {hasTrackData && (
-                <div className="inline-flex rounded-lg border border-border bg-surface-primary p-0.5">
-                  <button
-                    onClick={() => handleChartViewChange("campaign")}
-                    className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all uppercase tracking-wider ${
-                      chartView === "campaign"
-                        ? "bg-surface-card text-label-primary shadow-sm"
-                        : "text-label-muted hover:text-label-secondary"
-                    }`}
-                  >
-                    Campaign
-                  </button>
-                  <button
-                    onClick={() => handleChartViewChange("tracks")}
-                    className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all uppercase tracking-wider ${
-                      chartView === "tracks"
-                        ? "bg-surface-card text-label-primary shadow-sm"
-                        : "text-label-muted hover:text-label-secondary"
-                    }`}
-                  >
-                    Tracks
-                  </button>
-                </div>
-              )}
-            </div>
+            {/* Chart legend */}
+            <div className="flex items-center gap-5">
+              {/* Campaign total */}
+              <div className="flex items-center gap-2">
+                <span className="w-5 h-[3px] rounded-full bg-streams inline-block" />
+                <span className="text-[11px] text-label-muted font-medium">
+                  Total Streams
+                </span>
+              </div>
 
-            {/* Chart legend / track controls */}
-            {chartView === "campaign" ? (
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <span className="w-4 h-[2px] rounded-full bg-streams inline-block" />
-                  <span className="text-[11px] text-label-muted font-medium">
-                    Total DSP Streams
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
+              {/* Track legend entries */}
+              {selectedTracks.map((track, i) => (
+                <div key={track} className="flex items-center gap-2">
                   <span
-                    className="w-4 h-3 rounded-sm inline-block"
-                    style={{ backgroundColor: "#4ADE80", opacity: 0.3 }}
-                  />
-                  <span className="text-[11px] text-label-muted font-medium">
-                    Physical Units
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-4 h-[2px] inline-block"
+                    className="w-4 h-[2px] rounded-full inline-block"
                     style={{
-                      background:
-                        "repeating-linear-gradient(90deg, #353849 0, #353849 2px, transparent 2px, transparent 5px)",
+                      backgroundColor: TRACK_COLORS[i % TRACK_COLORS.length],
+                      opacity: 0.7,
                     }}
                   />
-                  <span className="text-[11px] text-label-muted font-medium">
-                    Campaign Moment
+                  <span className="text-[10px] text-label-muted">
+                    {track.length > 18
+                      ? track.substring(0, 16) + "..."
+                      : track}
                   </span>
                 </div>
+              ))}
+
+              {/* Physical */}
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-4 h-3 rounded-sm inline-block"
+                  style={{ backgroundColor: "#4ADE80", opacity: 0.25 }}
+                />
+                <span className="text-[11px] text-label-muted font-medium">
+                  Physical
+                </span>
               </div>
-            ) : (
-              <div className="flex items-center gap-3">
-                {/* Raw / Indexed toggle */}
-                <div className="inline-flex rounded-lg border border-border bg-surface-primary p-0.5">
-                  <button
-                    onClick={() => setTrackDisplayMode("raw")}
-                    className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all uppercase tracking-wider ${
-                      trackDisplayMode === "raw"
-                        ? "bg-surface-card text-label-primary shadow-sm"
-                        : "text-label-muted hover:text-label-secondary"
-                    }`}
-                  >
-                    Raw
-                  </button>
-                  <button
-                    onClick={() => setTrackDisplayMode("indexed")}
-                    className={`px-3 py-1 text-[10px] font-semibold rounded-md transition-all uppercase tracking-wider ${
-                      trackDisplayMode === "indexed"
-                        ? "bg-surface-card text-label-primary shadow-sm"
-                        : "text-label-muted hover:text-label-secondary"
-                    }`}
-                  >
-                    Indexed
-                  </button>
-                </div>
+
+              {/* Moments */}
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-4 h-[2px] inline-block"
+                  style={{
+                    background:
+                      "repeating-linear-gradient(90deg, #353849 0, #353849 2px, transparent 2px, transparent 5px)",
+                  }}
+                />
+                <span className="text-[11px] text-label-muted font-medium">
+                  Moment
+                </span>
               </div>
-            )}
+            </div>
           </div>
 
-          {/* Track selector chips — only in track view */}
-          {chartView === "tracks" && hasTrackData && (
+          {/* Track selector chips */}
+          {trackList.length > 0 && (
             <div className="px-6 pb-2 flex flex-wrap gap-2">
               {trackList.map((track) => {
                 const isSelected = selectedTracks.includes(track.track_name);
+                const trackIndex = selectedTracks.indexOf(track.track_name);
+                const chipColor =
+                  trackIndex >= 0
+                    ? TRACK_COLORS[trackIndex % TRACK_COLORS.length]
+                    : undefined;
+
                 return (
                   <button
                     key={track.track_name}
                     onClick={() => handleTrackToggle(track.track_name)}
                     className={`px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-all ${
                       isSelected
-                        ? "bg-streams/10 border-streams/40 text-label-primary"
+                        ? "text-label-primary"
                         : "bg-transparent border-border text-label-muted hover:border-border-light"
                     }`}
+                    style={
+                      isSelected && chipColor
+                        ? {
+                            backgroundColor: chipColor + "15",
+                            borderColor: chipColor + "60",
+                          }
+                        : undefined
+                    }
                   >
                     {track.track_name}
                   </button>
@@ -350,23 +301,16 @@ export default function Dashboard({ initialData }: DashboardProps) {
             </div>
           )}
 
-          {/* The chart itself */}
-          {chartView === "campaign" ? (
-            <PerformanceChart
-              data={chartData}
-              visibleEventDates={visibleEventDates}
-              highlightedDate={highlightedDate}
-            />
-          ) : (
-            <TrackComparisonChart
-              data={trackChartData}
-              selectedTracks={selectedTracks}
-              displayMode={trackDisplayMode}
-            />
-          )}
+          {/* The unified chart */}
+          <TimelineChart
+            data={chartData}
+            selectedTracks={selectedTracks}
+            visibleEventDates={visibleEventDates}
+            highlightedDate={highlightedDate}
+          />
         </div>
 
-        {/* ─── Events Card ──────────────────────────────── */}
+        {/* ─── Events Card ───────────────────────── */}
         <div
           className="mt-6 rounded-xl border overflow-hidden"
           style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
@@ -398,7 +342,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
           />
         </div>
 
-        {/* ─── Learnings Panel ──────────────────────────── */}
+        {/* ─── Learnings Panel ───────────────────── */}
         {learnings.length > 0 && (
           <div className="mt-6">
             <CampaignLearnings learnings={learnings} />
