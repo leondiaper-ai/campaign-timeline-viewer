@@ -144,7 +144,7 @@ export interface TrackInfo {
 
 export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
 
-export type MomentumDirection = "RISING" | "FALLING" | "STABLE";
+export type MomentumDirection = "RISING" | "FALLING" | "STABLE" | "DECLINING" | "PEAKING";
 
 export interface CampaignInsight {
   verdict: VerdictLevel;
