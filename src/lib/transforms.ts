@@ -1,147 +1,16 @@
 import {
   CampaignData,
   ChartDataPoint,
+  TrackChartDataPoint,
   CampaignEvent,
   AutoObservation,
   Territory,
-  MultiTrackChartPoint,
+  TrackWeeklyMetric,
+  TrackInfo,
+  TrackDisplayMode,
 } from "@/types";
 
-// ─── Track-level chart helpers ──────────────────────────────────
-
-/**
- * Get unique tracks that have weekly data for the given campaign/territory.
- */
-export function getTrackList(
-  data: CampaignData,
-  campaignId: string,
-  territory: Territory
-): Array<{ track_id: string; track_name: string }> {
-  const seen = new Map<string, string>();
-  for (const m of data.trackWeeklyMetrics) {
-    if (
-      m.campaign_id === campaignId &&
-      m.territory === territory &&
-      !seen.has(m.track_id)
-    ) {
-      seen.set(m.track_id, m.track_name);
-    }
-  }
-  return Array.from(seen.entries()).map(([track_id, track_name]) => ({
-    track_id,
-    track_name,
-  }));
-}
-
-/**
- * Build chart data for a single track's weekly streams.
- * Returns ChartDataPoint[] with total_streams = the track's streams per week.
- * Events are included in the same way as buildChartData.
- */
-export function buildTrackChartData(
-  data: CampaignData,
-  campaignId: string,
-  territory: Territory,
-  trackId: string
-): ChartDataPoint[] {
-  // Build a lookup of track streams by date
-  const trackStreamsByDate = new Map<string, number>();
-  for (const m of data.trackWeeklyMetrics) {
-    if (
-      m.campaign_id === campaignId &&
-      m.territory === territory &&
-      m.track_id === trackId
-    ) {
-      trackStreamsByDate.set(m.week_ending, m.total_streams);
-    }
-  }
-
-  const filteredEvents = data.events.filter(
-    (e) =>
-      e.campaign_id === campaignId &&
-      (e.territory === "global" || e.territory === territory)
-  );
-
-  const eventsByDate = new Map<string, CampaignEvent[]>();
-  filteredEvents.forEach((e) => {
-    const existing = eventsByDate.get(e.date) || [];
-    existing.push(e);
-    eventsByDate.set(e.date, existing);
-  });
-
-  // Use the FULL campaign timeline so every track covers all weeks.
-  // Weeks before a track has data get value 0 (continuous line from zero).
-  const campaignMetrics = data.metrics
-    .filter(
-      (m) => m.campaign_id === campaignId && m.territory === territory
-    )
-    .sort((a, b) => a.week_ending.localeCompare(b.week_ending));
-
-  return campaignMetrics.map((m) => ({
-    date: m.week_ending,
-    total_streams: trackStreamsByDate.get(m.week_ending) ?? 0,
-    physical_units: m.retail_units + m.d2c_units,
-    events: eventsByDate.get(m.week_ending) || [],
-  }));
-}
-
-/**
- * Build multi-track chart data for the Tracks comparison mode.
- * Merges campaign-level totals (as faint reference) with up to 4
- * selected track streams into a single data array for Recharts.
- */
-export function buildMultiTrackChartData(
-  data: CampaignData,
-  campaignId: string,
-  territory: Territory,
-  selectedTrackIds: string[]
-): MultiTrackChartPoint[] {
-  // Get campaign chart data for reference
-  const campaignChart = buildChartData(data, campaignId, territory);
-
-  // Build per-track lookup: trackId -> Map<date, streams>
-  const trackDataMap = new Map<string, Map<string, number>>();
-  for (const trackId of selectedTrackIds) {
-    const trackMetrics = data.trackWeeklyMetrics.filter(
-      (m) =>
-        m.campaign_id === campaignId &&
-        m.territory === territory &&
-        m.track_id === trackId
-    );
-    const dateMap = new Map<string, number>();
-    trackMetrics.forEach((m) => dateMap.set(m.week_ending, m.total_streams));
-    trackDataMap.set(trackId, dateMap);
-  }
-
-  // Build merged points — every track key is always present for every
-  // week so Recharts draws a continuous line starting at 0 before release.
-  return campaignChart.map((cp) => {
-    const point: MultiTrackChartPoint = {
-      date: cp.date,
-      total_streams_ref: cp.total_streams,
-      physical_units: cp.physical_units,
-      events: cp.events,
-      // Initialise all selected track slots to 0
-      ...(selectedTrackIds.length > 0 ? { track_0: 0 } : {}),
-      ...(selectedTrackIds.length > 1 ? { track_1: 0 } : {}),
-      ...(selectedTrackIds.length > 2 ? { track_2: 0 } : {}),
-      ...(selectedTrackIds.length > 3 ? { track_3: 0 } : {}),
-    };
-
-    selectedTrackIds.forEach((trackId, i) => {
-      if (i >= 4) return;
-      const val = trackDataMap.get(trackId)?.get(cp.date) ?? 0;
-      if (i === 0) point.track_0 = val;
-      else if (i === 1) point.track_1 = val;
-      else if (i === 2) point.track_2 = val;
-      else if (i === 3) point.track_3 = val;
-    });
-
-    return point;
-  });
-}
-
-// ─── Transform data for chart ───────────────────────────────────
+// ─── Transform data for campaign chart ──────────────────────────
 
 export function buildChartData(
   data: CampaignData,
@@ -165,7 +34,6 @@ export function buildChartData(
     eventsByDate.set(e.date, existing);
   });
 
-  // Build chart points from metric data only
   const chartPoints: ChartDataPoint[] = filteredMetrics
     .sort((a, b) => a.week_ending.localeCompare(b.week_ending))
     .map((m) => ({
@@ -175,34 +43,18 @@ export function buildChartData(
       events: eventsByDate.get(m.week_ending) || [],
     }));
 
-  // For events that fall on dates without metrics, snap them to the
-  // nearest metric week instead of creating zero-value chart points.
+  // Add orphan event dates as ghost points
   const metricDates = new Set(chartPoints.map((p) => p.date));
   filteredEvents.forEach((e) => {
     if (!metricDates.has(e.date)) {
-      let nearestPoint: ChartDataPoint | null = null;
-      let nearestDist = Infinity;
-      const eventTime = new Date(e.date + "T00:00:00").getTime();
-
-      for (const point of chartPoints) {
-        const dist = Math.abs(
-          new Date(point.date + "T00:00:00").getTime() - eventTime
-        );
-        if (dist < nearestDist) {
-          nearestDist = dist;
-          nearestPoint = point;
-        }
-      }
-
-      if (nearestPoint) {
-        if (
-          !nearestPoint.events.some(
-            (ev) =>
-              ev.date === e.date && ev.event_title === e.event_title
-          )
-        ) {
-          nearestPoint.events.push(e);
-        }
+      const existing = chartPoints.find((p) => p.date === e.date);
+      if (!existing) {
+        chartPoints.push({
+          date: e.date,
+          total_streams: 0,
+          physical_units: 0,
+          events: eventsByDate.get(e.date) || [],
+        });
       }
     }
   });
@@ -226,84 +78,111 @@ export function getFilteredEvents(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// ─── Extract top learnings from major events ────────────────────
+// ─── Track List ─────────────────────────────────────────────────
 
-export interface CampaignLearning {
-  event_title: string;
-  event_type: CampaignEvent["event_type"];
-  what_we_learned: string;
-  observed_impact: string;
-  confidence: CampaignEvent["confidence"];
-  date: string;
-  source: "manual" | "auto";
+export function getTrackList(
+  data: CampaignData,
+  campaignId: string,
+  territory: Territory
+): TrackInfo[] {
+  const trackMetrics = data.trackMetrics.filter(
+    (m) => m.campaign_id === campaignId && m.territory === territory
+  );
+
+  if (trackMetrics.length === 0) return [];
+
+  const trackMap = new Map<string, TrackWeeklyMetric[]>();
+  trackMetrics.forEach((m) => {
+    const existing = trackMap.get(m.track_name) || [];
+    existing.push(m);
+    trackMap.set(m.track_name, existing);
+  });
+
+  const tracks: TrackInfo[] = [];
+  trackMap.forEach((metrics, trackName) => {
+    const sorted = [...metrics].sort((a, b) =>
+      a.week_ending.localeCompare(b.week_ending)
+    );
+
+    // First week where streams > 0
+    const firstActive = sorted.find((m) => m.total_streams > 0);
+    const totalStreams = sorted.reduce((s, m) => s + m.total_streams, 0);
+    const peakWeek = sorted.reduce(
+      (best, m) => (m.total_streams > best.total_streams ? m : best),
+      sorted[0]
+    );
+
+    tracks.push({
+      track_name: trackName,
+      first_active_week: firstActive?.week_ending || sorted[0].week_ending,
+      total_streams: totalStreams,
+      peak_week: peakWeek.week_ending,
+      peak_streams: peakWeek.total_streams,
+    });
+  });
+
+  // Sort by total streams descending
+  tracks.sort((a, b) => b.total_streams - a.total_streams);
+  return tracks;
 }
 
-/**
- * Returns the top learnings for a campaign, prioritising:
- * 1. Manual team insights (high-confidence major events first)
- * 2. Auto-generated observations as fallback (for major events without manual notes)
- */
-export function getTopLearnings(
-  events: CampaignEvent[],
-  observations: Map<string, AutoObservation>,
-  limit = 3
-): CampaignLearning[] {
-  const results: Array<{ learning: CampaignLearning; score: number }> = [];
+// ─── Track Comparison Chart Data ────────────────────────────────
 
-  // 1. Manual learnings
-  const withManual = events.filter(
-    (e) => e.what_we_learned && e.observed_impact
+export function buildTrackChartData(
+  data: CampaignData,
+  campaignId: string,
+  territory: Territory,
+  selectedTracks: string[],
+  displayMode: TrackDisplayMode
+): TrackChartDataPoint[] {
+  const trackMetrics = data.trackMetrics.filter(
+    (m) =>
+      m.campaign_id === campaignId &&
+      m.territory === territory &&
+      selectedTracks.includes(m.track_name)
   );
 
-  for (const e of withManual) {
-    let score = 20;
-    if (e.is_major) score += 10;
-    if (e.confidence === "high") score += 6;
-    else if (e.confidence === "medium") score += 3;
-    else if (e.confidence === "low") score += 1;
+  if (trackMetrics.length === 0) return [];
 
-    results.push({
-      learning: {
-        event_title: e.event_title,
-        event_type: e.event_type,
-        what_we_learned: e.what_we_learned!,
-        observed_impact: e.observed_impact!,
-        confidence: e.confidence,
-        date: e.date,
-        source: "manual",
-      },
-      score,
+  // Collect all dates across selected tracks
+  const dateSet = new Set();
+  trackMetrics.forEach((m) => dateSet.add(m.week_ending));
+  const allDates = [...dateSet].sort();
+
+  // Build lookup: trackName → date → streams
+  const lookup = new Map();
+  trackMetrics.forEach((m) => {
+    if (!lookup.has(m.track_name)) lookup.set(m.track_name, new Map());
+    lookup.get(m.track_name).set(m.week_ending, m.total_streams);
+  });
+
+  // For indexed mode, find the first non-zero value per track
+  const firstValues = new Map();
+  if (displayMode === "indexed") {
+    selectedTracks.forEach((track) => {
+      const trackDates = lookup.get(track);
+      if (!trackDates) return;
+      for (const date of allDates) {
+        const val = trackDates.get(date) || 0;
+        if (val > 0) {
+          firstValues.set(track, val);
+          break;
+        }
+      }
     });
   }
 
-  // 2. Auto-observations
-  const manualDates = new Set(withManual.map((e) => e.date));
-  const majorWithoutManual = events.filter(
-    (e) => e.is_major && !manualDates.has(e.date)
-  );
-
-  for (const e of majorWithoutManual) {
-    const obs = observations.get(e.date);
-    if (!obs || obs.summary.startsWith("Not enough")) continue;
-
-    results.push({
-      learning: {
-        event_title: e.event_title,
-        event_type: e.event_type,
-        what_we_learned: obs.summary,
-        observed_impact:
-          obs.streams_change_pct !== null
-            ? `${obs.streams_change_pct > 0 ? "+" : ""}${obs.streams_change_pct}% streams week-on-week`
-            : "Insufficient data",
-        confidence: undefined,
-        date: e.date,
-        source: "auto",
-      },
-      score: 5,
+  return allDates.map((date) => {
+    const point = { date };
+    selectedTracks.forEach((track) => {
+      const raw = lookup.get(track)?.get(date) || 0;
+      if (displayMode === "indexed") {
+        const base = firstValues.get(track) || 1;
+        point[track] = raw > 0 ? Math.round((raw / base) * 100) : 0;
+      } else {
+        point[track] = raw;
+      }
     });
-  }
-
-  results.sort((a, b) => b.score - a.score);
-
-  return results.slice(0, limit).map((r) => r.learning);
+    return point;
+  });
 }
