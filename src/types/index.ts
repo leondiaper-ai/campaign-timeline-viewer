@@ -1,4 +1,4 @@
-// ─── Domain Types ─────────────────────────────────────────────
+// ——— Domain Types ————————————————————————————————————————————
 
 export interface Campaign {
   campaign_id: string;
@@ -26,6 +26,24 @@ export interface TrackWeeklyMetric {
   total_streams: number;
 }
 
+// ——— Tracks Lookup (new) ————————————————————————————————————
+
+export type TrackRole =
+  | "lead_single"
+  | "second_single"
+  | "focus_track"
+  | "album_track";
+
+export interface TrackLookupEntry {
+  track_name: string;
+  release_week: string; // ISO YYYY-MM-DD
+  track_role: TrackRole;
+  default_on: boolean;
+  sort_order: number;
+}
+
+// ——— Events ————————————————————————————————————————————————
+
 export type Confidence = "high" | "medium" | "low";
 
 export interface CampaignEvent {
@@ -49,7 +67,7 @@ export interface CampaignEvent {
   show_on_chart?: boolean;
 }
 
-// ─── Enums & Literals ─────────────────────────────────────────
+// ——— Enums & Literals ———————————————————————————————————————
 
 export type Territory = "global" | "UK";
 
@@ -64,7 +82,7 @@ export type EventCategory =
 export type ChartViewMode = "campaign" | "tracks";
 export type TrackDisplayMode = "raw" | "indexed";
 
-// ─── Registry Types ───────────────────────────────────────────
+// ——— Registry Types ————————————————————————————————————————
 
 export type CampaignStatus = "active" | "archived" | "draft";
 
@@ -78,7 +96,7 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
-// ─── API Response ─────────────────────────────────────────────
+// ——— API Response —————————————————————————————————————————
 
 /** Data for a single campaign sheet */
 export interface SingleCampaignData {
@@ -86,6 +104,7 @@ export interface SingleCampaignData {
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
   trackMetrics: TrackWeeklyMetric[];
+  tracksLookup: TrackLookupEntry[];
 }
 
 /** Combined data for the Dashboard (all active campaigns merged) */
@@ -94,9 +113,10 @@ export interface CampaignData {
   metrics: WeeklyMetric[];
   events: CampaignEvent[];
   trackMetrics: TrackWeeklyMetric[];
+  tracksLookup: TrackLookupEntry[];
 }
 
-// ─── Auto-Observation (system-generated) ──────────────────────
+// ——— Auto-Observation (system-generated) ———————————————————
 
 export interface AutoObservation {
   streams_before: number | null;
@@ -110,7 +130,7 @@ export interface AutoObservation {
   summary: string;
 }
 
-// ─── Chart Data (transformed for Recharts) ────────────────────
+// ——— Chart Data (transformed for Recharts) ————————————————
 
 export interface ChartDataPoint {
   date: string;
@@ -124,7 +144,7 @@ export interface TrackChartDataPoint {
   [trackName: string]: number | string; // dynamic keys for each track
 }
 
-// ─── Narrative Types ──────────────────────────────────────────
+// ——— Narrative Types ——————————————————————————————————————
 
 export interface CampaignNarrative {
   headline: string;
@@ -138,13 +158,22 @@ export interface TrackInfo {
   total_streams: number;
   peak_week: string;
   peak_streams: number;
+  // New fields from tracks_lookup
+  release_week?: string;
+  track_role?: TrackRole;
+  default_on?: boolean;
+  sort_order?: number;
 }
 
-// ─── Campaign Insight (legacy, used by insights.ts) ───────────
+// ——— Campaign Insight (legacy, used by insights.ts) ————————
 
 export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
-
-export type MomentumDirection = "RISING" | "FALLING" | "STABLE" | "DECLINING" | "PEAKING";
+export type MomentumDirection =
+  | "RISING"
+  | "FALLING"
+  | "STABLE"
+  | "DECLINING"
+  | "PEAKING";
 
 export interface CampaignInsight {
   verdict: VerdictLevel;
@@ -159,7 +188,7 @@ export interface CampaignInsight {
   momentum_context: string;
 }
 
-// ─── Track Performance (per-single snapshot) ──────────────────
+// ——— Track Performance (per-single snapshot) ——————————————
 
 export interface TrackPerformance {
   campaign_id: string;
