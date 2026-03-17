@@ -372,62 +372,71 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
 
   if (totalRows.length < 2) return learnings;
 
-  // 1. Biggest WoW spike and what moment caused it
-  let biggestSpikePct = 0, spikeWeekIdx = -1;
-  for (let i = 1; i < totalRows.length; i++) {
-    const prev = totalRows[i - 1][streamKey];
-    if (prev > 0) {
-      const pct = ((totalRows[i][streamKey] - prev) / prev) * 100;
-      if (pct > biggestSpikePct) { biggestSpikePct = pct; spikeWeekIdx = i; }
-    }
-  }
-
-  if (spikeWeekIdx > 0 && biggestSpikePct > 20) {
-    const spikeDate = totalRows[spikeWeekIdx].week_start_date;
-    // Find nearest moment
-    const nearMoment = sheet.moments
-      .filter((m) => m.is_key)
-      .find((m) => Math.abs(new Date(m.date).getTime() - new Date(spikeDate).getTime()) < 8 * 86400000);
-    if (nearMoment) {
-      learnings.push({
-        icon: "\u2191",
-        text: `+${Math.round(biggestSpikePct)}% spike w/c ${spikeDate.slice(5)} — driven by ${nearMoment.moment_title.length > 30 ? nearMoment.moment_title.slice(0, 28) + "\u2026" : nearMoment.moment_title}.`,
-      });
-    } else {
-      learnings.push({
-        icon: "\u2191",
-        text: `Biggest week-on-week jump was +${Math.round(biggestSpikePct)}% (w/c ${spikeDate.slice(5)}).`,
-      });
-    }
-  }
-
-  // 2. Physical correlation if physical exists
-  const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
-  if (totalPhysical > 0) {
-    const peakPhysical = Math.max(...sheet.physicalData.map((r) => r.units));
-    const peakPhysDate = sheet.physicalData.find((r) => r.units === peakPhysical)?.week_start_date || "";
+  // 1. Peak week — what moment drove it
+  const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
+  const peakDate = peakRow.week_start_date;
+  const nearMoment = sheet.moments
+    .filter((m) => m.is_key)
+    .find((m) => Math.abs(new Date(m.date).getTime() - new Date(peakDate).getTime()) < 8 * 86400000);
+  if (nearMoment) {
     learnings.push({
-      icon: "\u25A0",
-      text: `Physical peaked at ${fmtNum(peakPhysical)} units (w/c ${peakPhysDate.slice(5)}) — ${fmtNum(totalPhysical)} total.`,
+      icon: "\u2191",
+      text: `${nearMoment.moment_title.length > 35 ? nearMoment.moment_title.slice(0, 33) + "\u2026" : nearMoment.moment_title} \u2192 peak week ${fmtNum(peakRow[streamKey])} streams`,
+    });
+  } else {
+    learnings.push({
+      icon: "\u2191",
+      text: `Peak week hit ${fmtNum(peakRow[streamKey])} streams (w/c ${peakDate.slice(5)})`,
     });
   }
 
-  // 3. Post-peak decline or sustained interest
-  if (totalRows.length >= 4) {
-    const peak = Math.max(...totalRows.map((r) => r[streamKey]));
-    const peakIdx = totalRows.findIndex((r) => r[streamKey] === peak);
-    if (peakIdx < totalRows.length - 2) {
-      const afterPeak = totalRows.slice(peakIdx + 1);
-      const avgAfterPeak = afterPeak.reduce((s, r) => s + r[streamKey], 0) / afterPeak.length;
-      const retentionPct = Math.round((avgAfterPeak / peak) * 100);
-      if (retentionPct > 40) {
-        learnings.push({ icon: "\u2192", text: `Strong retention: ${retentionPct}% avg streams maintained after peak week.` });
-      } else if (retentionPct < 20) {
-        learnings.push({ icon: "\u2193", text: `Sharp drop-off: only ${retentionPct}% streams retained after peak — typical spike pattern.` });
+  // 2. Post-peak hold or drop — check if any track held well
+  const peakIdx = totalRows.indexOf(peakRow);
+  if (peakIdx < totalRows.length - 1) {
+    const afterPeak = totalRows.slice(peakIdx + 1);
+    if (afterPeak.length > 0) {
+      const nextWeek = afterPeak[0];
+      const holdPct = Math.round((nextWeek[streamKey] / peakRow[streamKey]) * 100);
+      if (holdPct > 30) {
+        // Find which track held best
+        const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
+        let bestHoldTrack = "";
+        let bestHoldVal = 0;
+        for (const tn of trackNames) {
+          const tRows = sheet.weeklyData.filter(r => r.track_name === tn).sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
+          const afterRows = tRows.filter(r => r.week_start_date > peakDate);
+          if (afterRows.length > 0) {
+            const avg = afterRows.reduce((s, r) => s + r[streamKey], 0) / afterRows.length;
+            if (avg > bestHoldVal) { bestHoldVal = avg; bestHoldTrack = tn; }
+          }
+        }
+        if (bestHoldTrack && bestHoldVal > 0) {
+          learnings.push({
+            icon: "\u2192",
+            text: `"\u200B${bestHoldTrack}" held post-release (~${fmtNum(bestHoldVal)}/wk)`,
+          });
+        }
       } else {
-        learnings.push({ icon: "\u2192", text: `Moderate tail: ${retentionPct}% of peak-week streams sustained on average.` });
+        learnings.push({
+          icon: "\u2193",
+          text: `Sharp drop after peak \u2014 ${holdPct}% retention into next week`,
+        });
       }
     }
+  }
+
+  // 3. Physical peak
+  const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
+  if (totalPhysical > 0) {
+    const peakPhys = Math.max(...sheet.physicalData.map((r) => r.units));
+    const peakPhysDate = sheet.physicalData.find((r) => r.units === peakPhys)?.week_start_date || "";
+    const nearPhysMoment = sheet.moments
+      .filter((m) => m.is_key)
+      .find((m) => Math.abs(new Date(m.date).getTime() - new Date(peakPhysDate).getTime()) < 8 * 86400000);
+    learnings.push({
+      icon: "\u25A0",
+      text: `Physical peaked ${nearPhysMoment ? nearPhysMoment.moment_title.split(" ").slice(0, 3).join(" ") + " week" : "w/c " + peakPhysDate.slice(5)} (${fmtNum(peakPhys)} units)`,
+    });
   }
 
   return learnings.slice(0, 3);
