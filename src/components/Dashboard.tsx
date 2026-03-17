@@ -10,7 +10,7 @@ import {
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
 import CampaignLearnings from "./CampaignLearnings";
-import TimelineChart from "./TimelineChart";
+import TimelineChart, { ChartMode } from "./TimelineChart";
 
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
@@ -24,6 +24,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [campaignIdx, setCampaignIdx] = useState(0);
   const [territory, setTerritory] = useState<Territory>("global");
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
+  const [chartMode, setChartMode] = useState<ChartMode>("campaign");
+  const [pinnedDate, setPinnedDate] = useState<string | null>(null);
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -41,8 +43,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const moments = useMemo(() => sheet ? getAllMoments(sheet) : [], [sheet]);
   const keyMomentDates = useMemo(() => new Set(moments.filter((m) => m.is_key).map((m) => m.date)), [moments]);
 
+  const handleMomentClick = useCallback((date: string) => {
+    setPinnedDate((prev) => prev === date ? null : date);
+  }, []);
+
+  const effectiveHighlight = pinnedDate || highlightedDate;
+
   const handleCampaignChange = useCallback((idx: number) => {
-    setCampaignIdx(idx); setHighlightedDate(null);
+    setCampaignIdx(idx); setHighlightedDate(null); setPinnedDate(null); setChartMode("campaign");
   }, []);
 
   if (!campaign || !sheet) {
@@ -55,7 +63,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
   return (
     <div className="min-h-screen bg-[#0D1117] text-white">
-      {/* Header */}
       <header className="border-b border-[#1E2130] px-6 py-4">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
@@ -93,47 +100,60 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Campaign Summary — single clear block replacing 3 vague cards */}
+        {/* Campaign Summary */}
         <div className="bg-[#131620] rounded-xl border border-[#1E2130] px-5 py-4">
           <div className="flex items-start gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mt-0.5 flex-shrink-0">
-              Campaign Summary
-            </span>
+            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mt-0.5 flex-shrink-0">Summary</span>
             <p className="text-[13px] text-[#D1D5DB] leading-relaxed">{summary}</p>
           </div>
         </div>
 
-        {/* Two stat cards */}
+        {/* Stat cards */}
         <CampaignInsights sheet={sheet} territory={territory} />
 
-        {/* Chart */}
+        {/* Chart — toggle is INSIDE the TimelineChart component */}
         <div className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
-          <h2 className="text-sm font-semibold text-white mb-3">Weekly Performance</h2>
           <TimelineChart
             data={chartData}
             selectedTracks={allTrackNames}
             trackRoles={trackRoles}
             visibleEventDates={keyMomentDates}
-            highlightedDate={highlightedDate}
+            highlightedDate={effectiveHighlight}
             handoverMoment={handoverMoment}
             chartInsight={chartInsight}
+            chartMode={chartMode}
+            onChartModeChange={setChartMode}
           />
         </div>
 
-        {/* Campaign Moments — full width, directly under chart */}
+        {/* Campaign Moments — full width, clickable */}
         {moments.length > 0 && (
           <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
-              Campaign Moments
-              <span className="text-[#4B5563] font-normal ml-2">({moments.length})</span>
-            </h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280]">
+                Campaign Moments
+                <span className="text-[#4B5563] font-normal ml-2">({moments.length})</span>
+              </h3>
+              {pinnedDate && (
+                <button onClick={() => setPinnedDate(null)}
+                  className="text-[10px] text-[#6B7280] hover:text-white underline underline-offset-2">
+                  Clear selection
+                </button>
+              )}
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 max-h-[320px] overflow-y-auto pr-1">
               {moments.map((moment: Moment, i: number) => {
                 const cat = getCategoryConfig(moment.moment_type);
+                const isPinned = pinnedDate === moment.date;
                 return (
                   <div key={i}
-                    className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg transition-colors cursor-pointer ${
-                      highlightedDate === moment.date ? "bg-white/5" : "hover:bg-white/[0.02]"
+                    onClick={() => handleMomentClick(moment.date)}
+                    className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg transition-all cursor-pointer ${
+                      isPinned
+                        ? "bg-white/8 ring-1 ring-white/10"
+                        : effectiveHighlight === moment.date
+                        ? "bg-white/5"
+                        : "hover:bg-white/[0.03]"
                     }`}
                     onMouseEnter={() => setHighlightedDate(moment.date)}
                     onMouseLeave={() => setHighlightedDate(null)}>
@@ -155,7 +175,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
           </div>
         )}
 
-        {/* Campaign Learnings — supporting, decision-led */}
+        {/* Campaign Learnings */}
         <CampaignLearnings sheet={sheet} territory={territory} />
       </main>
     </div>
