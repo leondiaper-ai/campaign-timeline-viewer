@@ -16,7 +16,7 @@ import { CampaignEvent } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
 import { UnifiedChartDataPoint } from "@/lib/transforms";
 
-// ─── Track palette ────────────────────────────────────────────
+// ——— Track palette ————————————————————————————————————————
 const TRACK_COLORS = [
   "#FBBF24", // amber
   "#F472B6", // pink
@@ -44,8 +44,7 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-// ─── Custom Tooltip ───────────────────────────────────────────
-
+// ——— Custom Tooltip ———————————————————————————————————————
 interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{
@@ -64,54 +63,108 @@ function CustomTooltip({ active, payload, label, selectedTracks }: CustomTooltip
   const dataPoint = payload[0]?.payload;
   const events = dataPoint?.events || [];
 
-  // Sort: campaign total first, then tracks by value, then physical
+  // Weekly streams from the campaign total entry
   const campaignEntry = payload.find((e) => e.name === "total_streams");
   const physicalEntry = payload.find((e) => e.name === "physical_units");
   const trackEntries = payload
     .filter((e) => selectedTracks.includes(e.name) && e.value !== null)
     .sort((a, b) => (b.value || 0) - (a.value || 0));
 
+  // Cumulative and week-over-week change
+  const weeklyStreams = campaignEntry?.value || 0;
+  const cumulativeStreams = dataPoint?.cumulative_streams ?? 0;
+  const prevWeek = dataPoint?.prev_week_streams;
+
+  // Compute WoW change
+  let wowPct: number | null = null;
+  let wowAbsolute: number | null = null;
+  if (prevWeek !== null && prevWeek !== undefined && prevWeek > 0) {
+    wowAbsolute = weeklyStreams - prevWeek;
+    wowPct = ((weeklyStreams - prevWeek) / prevWeek) * 100;
+  }
+
   return (
     <div
       className="bg-surface-raised rounded-xl shadow-2xl border border-border-light p-4 max-w-xs backdrop-blur-sm"
     >
+      {/* Date header */}
       <p className="text-[11px] font-semibold text-label-muted uppercase tracking-wider mb-2.5">
         {label ? formatDate(label) : ""}
       </p>
 
-      {/* Campaign total */}
+      {/* Weekly Streams */}
       {campaignEntry && (
-        <div className="flex items-center gap-2.5 mb-1.5">
+        <div className="flex items-center gap-2.5 mb-1">
           <span
             className="w-2.5 h-[3px] rounded-full inline-block"
             style={{ backgroundColor: campaignEntry.color }}
           />
-          <span className="text-xs text-label-secondary">Total Streams</span>
+          <span className="text-xs text-label-secondary">Weekly Streams</span>
           <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
-            {formatNumber(campaignEntry.value || 0)}
+            {formatNumber(weeklyStreams)}
           </span>
         </div>
       )}
 
-      {/* Track lines */}
-      {trackEntries.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2.5 mb-1">
+      {/* Week-over-week change */}
+      {wowPct !== null && (
+        <div className="flex items-center gap-2.5 mb-1 ml-[18px]">
+          <span className="text-[11px] text-label-muted">vs Last Week</span>
           <span
-            className="w-2 h-2 rounded-full flex-shrink-0"
-            style={{ backgroundColor: entry.color }}
-          />
-          <span className="text-[11px] text-label-muted truncate max-w-[140px]">
-            {entry.name}
-          </span>
-          <span className="text-xs font-semibold text-label-secondary ml-auto tabular-nums">
-            {formatNumber(entry.value || 0)}
+            className={`text-xs font-semibold ml-auto tabular-nums ${
+              wowPct >= 0 ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {wowPct >= 0 ? "+" : ""}
+            {Math.abs(wowPct) >= 1000
+              ? `${(wowPct / 1000).toFixed(1)}x`
+              : `${wowPct.toFixed(0)}%`}
+            {wowAbsolute !== null && (
+              <span className="text-label-muted font-normal">
+                {" "}({wowAbsolute >= 0 ? "+" : ""}{formatNumber(wowAbsolute)})
+              </span>
+            )}
           </span>
         </div>
-      ))}
+      )}
+
+      {/* Campaign Total to Date */}
+      {cumulativeStreams > 0 && (
+        <div className="flex items-center gap-2.5 mb-1.5 mt-1.5 pt-1.5 border-t border-border/40">
+          <span className="w-2.5 h-[3px] rounded-full inline-block bg-label-muted/30" />
+          <span className="text-xs text-label-secondary">Campaign Total</span>
+          <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
+            {formatNumber(cumulativeStreams)}
+          </span>
+        </div>
+      )}
+
+      {/* Track breakdown */}
+      {trackEntries.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border/40">
+          <p className="text-[10px] font-semibold text-label-muted uppercase tracking-wider mb-1">
+            Tracks
+          </p>
+          {trackEntries.map((entry, i) => (
+            <div key={i} className="flex items-center gap-2.5 mb-1">
+              <span
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: entry.color }}
+              />
+              <span className="text-[11px] text-label-muted truncate max-w-[140px]">
+                {entry.name}
+              </span>
+              <span className="text-xs font-semibold text-label-secondary ml-auto tabular-nums">
+                {formatNumber(entry.value || 0)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Physical */}
       {physicalEntry && physicalEntry.value !== null && physicalEntry.value > 0 && (
-        <div className="flex items-center gap-2.5 mb-1 mt-1 pt-1 border-t border-border/50">
+        <div className="flex items-center gap-2.5 mb-1 mt-1.5 pt-1.5 border-t border-border/40">
           <span
             className="w-2 h-2 rounded-sm flex-shrink-0"
             style={{ backgroundColor: "#4ADE80", opacity: 0.5 }}
@@ -123,9 +176,12 @@ function CustomTooltip({ active, payload, label, selectedTracks }: CustomTooltip
         </div>
       )}
 
-      {/* Events */}
+      {/* Events / Moments */}
       {events.length > 0 && (
         <div className="mt-2.5 pt-2.5 border-t border-border">
+          <p className="text-[10px] font-semibold text-label-muted uppercase tracking-wider mb-1">
+            Moment
+          </p>
           {events.map((event: CampaignEvent, i: number) => {
             const cat = getCategoryConfig(event.event_type);
             return (
@@ -153,8 +209,7 @@ function CustomTooltip({ active, payload, label, selectedTracks }: CustomTooltip
   );
 }
 
-// ─── Custom Event Label ───────────────────────────────────────
-
+// ——— Custom Event Label ———————————————————————————————————
 function EventLabel({
   viewBox,
   events,
@@ -165,8 +220,8 @@ function EventLabel({
   if (!viewBox?.x) return null;
   const mainEvent = events[0];
   if (!mainEvent) return null;
-
   const cat = getCategoryConfig(mainEvent.event_type);
+
   const title =
     mainEvent.event_title.length > 22
       ? mainEvent.event_title.substring(0, 20) + "..."
@@ -200,8 +255,7 @@ function EventLabel({
   );
 }
 
-// ─── Main Chart ───────────────────────────────────────────────
-
+// ——— Main Chart ———————————————————————————————————————————
 export default function TimelineChart({
   data,
   selectedTracks,
