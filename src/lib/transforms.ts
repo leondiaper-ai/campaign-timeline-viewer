@@ -322,48 +322,56 @@ export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territor
 
 
 // ——— Phase-based Campaign Learnings ——————————————————————————
-export interface CampaignLearning { icon: string; text: string; }
+export interface CampaignLearning {
+  dateLabel: string;
+  eventType: string;
+  text: string;
+  phase: "pre" | "peak" | "post";
+}
 
 export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territory): CampaignLearning[] {
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const learnings: CampaignLearning[] = [];
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
+  const fmtDate = (d: string) => {
+    const dt = new Date(d + "T00:00:00");
+    return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  };
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return learnings;
 
   const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
     .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+  if (totalRows.length < 2) return learnings;
 
-  // 1. Pre-release assessment
-  const preRows = totalRows.filter(r => r.week_start_date < albumDate);
-  if (preRows.length > 0) {
-    const peaked = preRows.some(r => r[streamKey] > 100000);
-    learnings.push({
-      icon: "\u25CB",
-      text: peaked
-        ? `Pre-release singles drove initial interest but did not sustain momentum`
-        : `Pre-release singles did not sustain momentum`,
-    });
-  }
-
-  // 2. Album peak + drop
+  // Peak week
   const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
-  const postPeakRows = totalRows.filter(r => r.week_start_date > peakRow.week_start_date);
-  if (peakRow && postPeakRows.length > 0) {
-    const dropTo = postPeakRows[0][streamKey];
-    const dropPct = Math.round((1 - dropTo / peakRow[streamKey]) * 100);
-    learnings.push({
-      icon: "\u25B2",
-      text: `Album drove peak (~${fmtNum(peakRow[streamKey])}) but dropped ${dropPct}% the following week`,
-    });
-  } else if (peakRow) {
-    learnings.push({
-      icon: "\u25B2",
-      text: `Album drove peak week (~${fmtNum(peakRow[streamKey])} streams)`,
-    });
+  const peakDate = peakRow.week_start_date;
+
+  // 1. Album release peak
+  learnings.push({
+    dateLabel: fmtDate(peakDate),
+    eventType: "ALBUM RELEASE",
+    text: `Peak week (~${fmtNum(peakRow[streamKey])} streams), primary campaign driver`,
+    phase: "peak",
+  });
+
+  // 2. Post-release drop
+  const postPeakRows = totalRows.filter(r => r.week_start_date > peakDate);
+  if (postPeakRows.length > 0) {
+    const nextWeek = postPeakRows[0];
+    const dropPct = Math.round((1 - nextWeek[streamKey] / peakRow[streamKey]) * 100);
+    if (dropPct > 5) {
+      learnings.push({
+        dateLabel: fmtDate(nextWeek.week_start_date),
+        eventType: "POST-RELEASE DROP",
+        text: `Streams declined ~${dropPct}% week-on-week`,
+        phase: "post",
+      });
+    }
   }
 
-  // 3. Post-release breakout — decision recommendation
+  // 3. DJH hold (post-release breakout)
   const roles = inferTrackRoles(sheet, territory);
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (breakout) {
@@ -372,9 +380,12 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
       .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
     const avgPost = bRows.length > 0
       ? bRows.reduce((s,r) => s + r[streamKey], 0) / bRows.length : 0;
+    const firstDate = bRows[0]?.week_start_date || peakDate;
     learnings.push({
-      icon: "\u2605",
-      text: `"\u200B${breakout.track_name}" is the only post-release track holding (~${fmtNum(avgPost)}/wk) \u2014 focus track`,
+      dateLabel: fmtDate(firstDate) + "+",
+      eventType: "DJH HOLD",
+      text: `"\u200B${breakout.track_name}" stabilised ~${fmtNum(avgPost)}/week \u2014 only track sustaining momentum`,
+      phase: "post",
     });
   }
 
