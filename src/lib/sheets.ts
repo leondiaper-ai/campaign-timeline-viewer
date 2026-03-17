@@ -105,6 +105,17 @@ function cleanCampaignType(raw: string | undefined): CampaignType {
 }
 
 /**
+ * Normalize smart/curly quotes to straight ASCII quotes.
+ * Google Sheets often uses Unicode quotation marks which cause mismatches.
+ */
+function normalizeQuotes(text: string): string {
+  return text
+    .replace(/[\u2018\u2019\u201A\uFF07]/g, "'")   // smart single quotes → '
+    .replace(/[\u201C\u201D\u201E\uFF02]/g, '"')   // smart double quotes → "
+    .replace(/[\u2013\u2014]/g, "-");                 // em/en dashes → -
+}
+
+/**
  * Check if a row is a metadata/template instruction row.
  * These are notes left in the Google Sheet template that should not be parsed.
  */
@@ -141,7 +152,7 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
   }
   const r = rows[0];
   return {
-    campaign_name: (r[0] || "Untitled Campaign").trim(),
+    campaign_name: normalizeQuotes((r[0] || "Untitled Campaign").trim()),
     artist_name: (r[1] || "Unknown Artist").trim(),
     campaign_type: cleanCampaignType(r[2]),
     release_date: isValidDate(r[3]) ? r[3].trim() : "",
@@ -158,7 +169,7 @@ async function fetchTracks(sheetId: string): Promise<Track[]> {
   return rows
     .filter((r) => r[0]?.trim() && !isMetadataRow(r[0]))
     .map((r, i) => ({
-      track_name: r[0].trim(),
+      track_name: normalizeQuotes(r[0].trim()),
       track_role: cleanTrackRole(r[1]),
       release_date: isValidDate(r[2]) ? r[2].trim() : "",
       default_on: parseBool(r[3], false),
@@ -183,7 +194,7 @@ async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
     )
     .map((r) => ({
       week_start_date: r[0].trim(),
-      track_name: r[1].trim(),
+      track_name: normalizeQuotes(r[1].trim()),
       streams_global: safeNumber(r[2]),
       streams_uk: safeNumber(r[3]),
     }));
@@ -210,7 +221,7 @@ async function fetchMoments(sheetId: string): Promise<Moment[]> {
     .filter((r) => r[0] && isValidDate(r[0]) && !isMetadataRow(r[0]))
     .map((r) => ({
       date: r[0].trim(),
-      moment_title: (r[1] || "Untitled moment").trim(),
+      moment_title: normalizeQuotes((r[1] || "Untitled moment").trim()),
       moment_type: (r[2] || "music").trim().toLowerCase(),
       is_key: parseBool(r[3], false),
     }));
