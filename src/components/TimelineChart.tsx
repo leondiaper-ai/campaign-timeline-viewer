@@ -11,6 +11,7 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
+  Label,
 } from "recharts";
 import { ChartDataPoint, Moment } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
@@ -51,6 +52,15 @@ function formatFullDate(dateStr: string): string {
     month: "short",
     year: "numeric",
   });
+}
+
+// ——— Short label for moment markers ——————————————————————————
+function shortMomentLabel(events: Moment[]): string {
+  const key = events.find((e) => e.is_key) || events[0];
+  if (!key) return "";
+  const title = key.moment_title;
+  // Truncate to ~20 chars for chart readability
+  return title.length > 22 ? title.slice(0, 20) + "…" : title;
 }
 
 // ——— Props ———————————————————————————————————————————————————
@@ -215,6 +225,34 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
+// ——— Custom Reference Line Label ——————————————————————————————
+// Renders rotated text at top of chart for each key moment marker
+interface MomentLabelProps {
+  viewBox?: { x?: number; y?: number };
+  value?: string;
+  color?: string;
+}
+
+function MomentLabel({ viewBox, value, color }: MomentLabelProps) {
+  const x = viewBox?.x ?? 0;
+  return (
+    <g>
+      <text
+        x={x + 4}
+        y={12}
+        fill={color || "#9CA3AF"}
+        fontSize={9}
+        fontWeight={600}
+        textAnchor="start"
+        dominantBaseline="middle"
+        transform={`rotate(-35, ${x + 4}, 12)`}
+      >
+        {value}
+      </text>
+    </g>
+  );
+}
+
 // ——— Chart Component ————————————————————————————————————————
 export default function TimelineChart({
   data,
@@ -222,11 +260,26 @@ export default function TimelineChart({
   visibleEventDates,
   highlightedDate,
 }: TimelineChartProps) {
-  // Dates that have key moments → show reference lines
-  const eventReferenceDates = useMemo(() => {
-    return data.filter(
-      (d) => d.events.length > 0 && d.events.some((e) => visibleEventDates.has(e.date))
-    );
+  // Key moment markers — collect date + label + color for visible events
+  const momentMarkers = useMemo(() => {
+    const markers: { date: string; label: string; color: string }[] = [];
+    data.forEach((d) => {
+      if (d.events.length > 0) {
+        const visibleEvents = d.events.filter((e) =>
+          visibleEventDates.has(e.date)
+        );
+        if (visibleEvents.length > 0) {
+          const primary = visibleEvents.find((e) => e.is_key) || visibleEvents[0];
+          const cat = getCategoryConfig(primary.moment_type);
+          markers.push({
+            date: d.date,
+            label: shortMomentLabel(visibleEvents),
+            color: cat.color,
+          });
+        }
+      }
+    });
+    return markers;
   }, [data, visibleEventDates]);
 
   // Check if there's physical data
@@ -237,11 +290,11 @@ export default function TimelineChart({
 
   return (
     <div className="w-full">
-      <div className="w-full h-[400px]">
+      <div className="w-full h-[420px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={data}
-            margin={{ top: 16, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}
+            margin={{ top: 44, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}
           >
             <CartesianGrid
               strokeDasharray="3 3"
@@ -296,16 +349,24 @@ export default function TimelineChart({
               />
             )}
 
-            {/* Key moment reference lines */}
-            {eventReferenceDates.map((d, i) => (
+            {/* Key moment markers — visible dotted lines with labels */}
+            {momentMarkers.map((m, i) => (
               <ReferenceLine
-                key={`event-${i}`}
-                x={d.date}
+                key={`moment-${i}`}
+                x={m.date}
                 yAxisId="streams"
-                stroke="#3A3D4E"
-                strokeDasharray="2 4"
-                strokeWidth={1}
-              />
+                stroke={m.color}
+                strokeDasharray="4 3"
+                strokeWidth={1.5}
+                strokeOpacity={0.7}
+              >
+                <Label
+                  content={
+                    <MomentLabel value={m.label} color={m.color} />
+                  }
+                  position="top"
+                />
+              </ReferenceLine>
             ))}
 
             {/* Total Streams — main area + line */}
@@ -390,10 +451,6 @@ export default function TimelineChart({
             <span className="text-[10px] text-label-muted">Physical</span>
           </div>
         )}
-        <div className="flex items-center gap-1.5">
-          <span className="w-3 h-[1px] border-t border-dashed border-[#3A3D4E] inline-block" />
-          <span className="text-[10px] text-label-muted">Moment</span>
-        </div>
       </div>
     </div>
   );
