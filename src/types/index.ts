@@ -1,71 +1,16 @@
-// ——— Domain Types ——————————————————————————————————————————
-export interface Campaign {
-  campaign_id: string;
-  artist: string;
-  campaign_name: string;
-  start_date?: string;   // ISO YYYY-MM-DD — first week of campaign activity
-  release_date?: string;  // ISO YYYY-MM-DD — album / single release date
-  default_territory?: Territory;
-}
+// ——— Google Sheet Schema Types ——————————————————————————————
+// These types map 1:1 to the 5 tabs in a campaign sheet.
+// This is the FINAL locked schema — do not add ad-hoc columns.
 
-export interface WeeklyMetric {
-  campaign_id: string;
-  week_ending: string;  // ISO date string YYYY-MM-DD
-  territory: Territory;
-  total_streams: number;  // all DSPs combined
-  retail_units: number;
-  d2c_units: number;
-}
-
-export interface TrackWeeklyMetric {
-  campaign_id: string;
-  week_ending: string;
-  track_name: string;
-  territory: Territory;
-  total_streams: number;
-}
-
-// ——— Tracks Lookup ——————————————————————————————————————————
+export type CampaignType = "single" | "album";
 export type TrackRole =
   | "lead_single"
   | "second_single"
   | "focus_track"
   | "album_track";
-
-export interface TrackLookupEntry {
-  campaign_id: string;     // which campaign this track belongs to
-  track_name: string;
-  release_week: string;    // ISO YYYY-MM-DD
-  track_role: TrackRole;
-  default_on: boolean;
-  sort_order: number;
-}
-
-// ——— Events ——————————————————————————————————————————————————
-export type Confidence = "high" | "medium" | "low";
-
-export interface CampaignEvent {
-  campaign_id: string;
-  date: string;  // ISO date string YYYY-MM-DD
-  event_title: string;
-  event_type: EventCategory;
-  territory: Territory | "global";
-  notes: string;
-  is_major: boolean;  // true = always visible on chart
-  // Optional learning fields
-  observed_impact?: string;
-  what_we_learned?: string;
-  confidence?: Confidence;
-  // Future-proof optional fields
-  event_subtype?: string;
-  source_platform?: string;
-  is_core_moment?: boolean;
-  show_on_chart?: boolean;
-}
-
-// ——— Enums & Literals ————————————————————————————————————————
 export type Territory = "global" | "UK";
 
+// Display category for chart markers and tooltips
 export type EventCategory =
   | "music"
   | "marketing"
@@ -73,11 +18,57 @@ export type EventCategory =
   | "product"
   | "live";
 
-// Kept for backward compatibility but no longer used in the Dashboard
-export type ChartViewMode = "campaign" | "tracks";
-export type TrackDisplayMode = "raw" | "indexed";
+// ——— Tab 1: campaign_setup (single row) —————————————————————
+export interface CampaignSetup {
+  campaign_name: string;
+  artist_name: string;
+  campaign_type: CampaignType;
+  release_date: string; // ISO YYYY-MM-DD
+  default_territory: Territory;
+}
 
-// ——— Registry Types ——————————————————————————————————————————
+// ——— Tab 2: tracks (one row per track) —————————————————————‒
+export interface Track {
+  track_name: string;
+  track_role: TrackRole;
+  release_date: string; // ISO YYYY-MM-DD
+  default_on: boolean;
+  sort_order: number;
+}
+
+// ——— Tab 3: weekly_data ————————————————————————————————————‗
+// One row per week per track. track_name = "TOTAL" for campaign aggregate.
+export interface WeeklyRow {
+  week_start_date: string; // ISO YYYY-MM-DD
+  track_name: string; // "TOTAL" or actual track name
+  streams_global: number;
+  streams_uk: number;
+}
+
+// ——— Tab 4: physical_data (optional) ————————————————————————
+export interface PhysicalRow {
+  week_start_date: string;
+  units: number;
+}
+
+// ——— Tab 5: moments ————————————————————————————————————————‑
+export interface Moment {
+  date: string; // ISO YYYY-MM-DD
+  moment_title: string;
+  moment_type: string; // e.g. "single_release", "editorial", "marketing", "live"
+  is_key: boolean; // true = show on chart by default
+}
+
+// ——— Parsed Campaign Sheet ——————————————————————————————————
+export interface CampaignSheetData {
+  setup: CampaignSetup;
+  tracks: Track[];
+  weeklyData: WeeklyRow[];
+  physicalData: PhysicalRow[];
+  moments: Moment[];
+}
+
+// ——— Registry ——————————————————————————————————————————————‗
 export type CampaignStatus = "active" | "archived" | "draft";
 
 export interface RegistryEntry {
@@ -90,106 +81,30 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
-// ——— API Response —————————————————————————————————————————
-/** Data for a single campaign sheet */
-export interface SingleCampaignData {
-  campaign: Campaign;
-  metrics: WeeklyMetric[];
-  events: CampaignEvent[];
-  trackMetrics: TrackWeeklyMetric[];
-  tracksLookup: TrackLookupEntry[];
+// ——— App Data (API response) ————————————————————————————————
+export interface LoadedCampaign {
+  campaign_id: string;
+  sheet: CampaignSheetData;
 }
 
-/** Combined data for the Dashboard (all active campaigns merged) */
-export interface CampaignData {
-  campaigns: Campaign[];
-  metrics: WeeklyMetric[];
-  events: CampaignEvent[];
-  trackMetrics: TrackWeeklyMetric[];
-  tracksLookup: TrackLookupEntry[];
+export interface AppData {
+  campaigns: LoadedCampaign[];
 }
 
-// ——— Auto-Observation (system-generated) ——————————————————————
-export interface AutoObservation {
-  streams_before: number | null;
-  streams_after: number | null;
-  streams_change_pct: number | null;
-  units_before: number | null;
-  units_after: number | null;
-  units_change_pct: number | null;
-  was_momentum_rising: boolean;
-  near_campaign_peak: boolean;
-  summary: string;
-}
-
-// ——— Chart Data (transformed for Recharts) ————————————————————
+// ——— Chart Data (transformed for Recharts) —————————————————‘
 export interface ChartDataPoint {
   date: string;
   total_streams: number;
   physical_units: number;
   cumulative_streams: number;
   prev_week_streams: number | null;
-  events: CampaignEvent[];
+  events: Moment[];
+  // Dynamic track keys: [trackName]: number | null
+  [key: string]: number | string | null | Moment[];
 }
 
-export interface TrackChartDataPoint {
-  date: string;
-  [trackName: string]: number | string;  // dynamic keys for each track
-}
-
-// ——— Narrative Types ————————————————————————————————————————
-export interface CampaignNarrative {
-  headline: string;
-  summary: string;
-  highlights: string[];
-}
-
-export interface TrackInfo {
-  track_name: string;
-  first_active_week: string;
-  total_streams: number;
-  peak_week: string;
-  peak_streams: number;
-  // Fields from tracks_lookup
-  release_week?: string;
-  track_role?: TrackRole;
-  default_on?: boolean;
-  sort_order?: number;
-}
-
-// ——— Campaign Insight (legacy, used by insights.ts) —————————
-export type VerdictLevel = "STRONG" | "MODERATE" | "WEAK";
-export type MomentumDirection =
-  | "RISING"
-  | "FALLING"
-  | "STABLE"
-  | "DECLINING"
-  | "PEAKING";
-
-export interface CampaignInsight {
-  verdict: VerdictLevel;
-  verdict_explanation: string;
-  top_moment: {
-    event_title: string;
-    date: string;
-    streams_delta_pct: number | null;
-    sales_delta_pct: number | null;
-  } | null;
-  momentum: MomentumDirection;
-  momentum_context: string;
-}
-
-// ——— Track Performance (per-single snapshot) ——————————————————
-export interface TrackPerformance {
-  campaign_id: string;
-  track_name: string;
-  territory: Territory;
-  release_type: string;
-  release_date: string;
-  streams_7d: number;
-  streams_14d: number;
-  streams_28d: number;
-  saves_28d: number;
-  playlist_adds_28d: number;
-  editorial_adds_28d: number;
+// ——— Validation —————————————————————————————————————————————‖
+export interface ValidationWarning {
+  tab: string;
+  message: string;
 }
