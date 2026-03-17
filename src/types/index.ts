@@ -1,8 +1,9 @@
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Google Sheet Schema Types Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Google Sheet Schema Types ————————————————————————————————
 // These types map 1:1 to the 5 tabs in a campaign sheet.
-// This is the FINAL locked schema Ã¢ÂÂ do not add ad-hoc columns.
+// This is the FINAL locked schema — do not add ad-hoc columns.
 
 export type CampaignType = "single" | "album";
+
 export type TrackRole =
   | "lead_single"
   | "second_single"
@@ -11,6 +12,7 @@ export type TrackRole =
   | "focus_track"
   | "album_track"
   | "title_track";
+
 export type Territory = "global" | "UK";
 
 // Display category for chart markers and tooltips
@@ -21,7 +23,7 @@ export type EventCategory =
   | "product"
   | "live";
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tab 1: campaign_setup (single row) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Tab 1: campaign_setup (single row) ———————————————————
 export interface CampaignSetup {
   campaign_name: string;
   artist_name: string;
@@ -30,7 +32,7 @@ export interface CampaignSetup {
   default_territory: Territory;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tab 2: tracks (one row per track) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Tab 2: tracks (one row per track) ———————————————————
 export interface Track {
   track_name: string;
   track_role: TrackRole;
@@ -39,7 +41,7 @@ export interface Track {
   sort_order: number;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tab 3: weekly_data Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Tab 3: weekly_data —————————————————————————————————
 // One row per week per track. track_name = "TOTAL" for campaign aggregate.
 export interface WeeklyRow {
   week_start_date: string; // ISO YYYY-MM-DD
@@ -48,13 +50,13 @@ export interface WeeklyRow {
   streams_uk: number;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tab 4: physical_data (optional) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Tab 4: physical_data (optional) ——————————————————————
 export interface PhysicalRow {
   week_start_date: string;
   units: number;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Tab 5: moments Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Tab 5: moments ————————————————————————————————————
 export interface Moment {
   date: string; // ISO YYYY-MM-DD
   moment_title: string;
@@ -62,7 +64,17 @@ export interface Moment {
   is_key: boolean; // true = show on chart by default
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Parsed Campaign Sheet Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Track Weekly Metrics (for By Track chart view) ———————
+export interface TrackWeeklyMetric {
+  campaign_id: string;
+  track_id: string;
+  track_name: string;
+  week_ending: string;
+  territory: Territory;
+  total_streams: number;
+}
+
+// ——— Parsed Campaign Sheet ————————————————————————————————
 export interface CampaignSheetData {
   setup: CampaignSetup;
   tracks: Track[];
@@ -71,7 +83,7 @@ export interface CampaignSheetData {
   moments: Moment[];
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Registry Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Registry ————————————————————————————————————————————
 export type CampaignStatus = "active" | "archived" | "draft";
 
 export interface RegistryEntry {
@@ -84,17 +96,18 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ App Data (API response) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— App Data (API response) ——————————————————————————————
 export interface LoadedCampaign {
   campaign_id: string;
   sheet: CampaignSheetData;
+  trackWeeklyMetrics: TrackWeeklyMetric[];
 }
 
 export interface AppData {
   campaigns: LoadedCampaign[];
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Chart Data (transformed for Recharts) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Chart Data (transformed for Recharts) ————————————————
 export interface ChartDataPoint {
   date: string;
   total_streams: number;
@@ -106,17 +119,15 @@ export interface ChartDataPoint {
   [key: string]: number | string | null | Moment[];
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Validation Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Validation ————————————————————————————————————————
 export interface ValidationWarning {
   tab: string;
   message: string;
 }
 
-
-// âââ Backward Compatibility Stubs ââââââââââââââââââââââââââââ
+// ——— Backward Compatibility Stubs ————————————————————————
 // Retained so legacy components compile. Will be removed when
 // those files are cleaned up.
-
 export interface WeeklyMetric {
   campaign_id: string;
   week_ending: string;
