@@ -3,56 +3,116 @@ import { EventCategory } from "@/types";
 interface CategoryConfig {
   label: string;
   color: string;
+  bgColor: string;
   icon: string;
 }
 
-export const EVENT_CATEGORIES: Record<EventCategory, CategoryConfig> = {
+const EVENT_CATEGORIES: Record<EventCategory, CategoryConfig> = {
   music: {
     label: "Music",
-    color: "#A78BFA",
-    icon: "M",
+    color: "#8B5CF6",
+    bgColor: "#8B5CF620",
+    icon: "♫",
   },
   marketing: {
     label: "Marketing",
-    color: "#FBBF24",
-    icon: "O",
+    color: "#F59E0B",
+    bgColor: "#F59E0B20",
+    icon: "◎",
   },
   editorial: {
     label: "Editorial",
-    color: "#F472B6",
-    icon: "E",
+    color: "#EC4899",
+    bgColor: "#EC489920",
+    icon: "✎",
   },
   product: {
     label: "Product",
-    color: "#22D3EE",
-    icon: "P",
+    color: "#06B6D4",
+    bgColor: "#06B6D420",
+    icon: "▢",
   },
   live: {
     label: "Live",
-    color: "#FB7185",
-    icon: "L",
+    color: "#EF4444",
+    bgColor: "#EF444420",
+    icon: "●",
   },
 };
 
-export function getCategoryConfig(type: EventCategory): CategoryConfig {
-  return EVENT_CATEGORIES[type] || EVENT_CATEGORIES.music;
+/**
+ * Maps a moment_type string (from the moments sheet tab) to an EventCategory.
+ * Handles both direct matches ("marketing") and descriptive types ("single_release").
+ */
+export function mapMomentType(momentType: string): EventCategory {
+  const val = momentType.toLowerCase().trim();
+
+  // Direct match
+  if (val in EVENT_CATEGORIES) return val as EventCategory;
+
+  // Music-related
+  if (
+    val.includes("release") ||
+    val.includes("single") ||
+    val.includes("album") ||
+    val.includes("preorder")
+  )
+    return "music";
+
+  // Editorial
+  if (
+    val.includes("editorial") ||
+    val.includes("press") ||
+    val.includes("review") ||
+    val.includes("playlist")
+  )
+    return "editorial";
+
+  // Marketing
+  if (
+    val.includes("marketing") ||
+    val.includes("ad") ||
+    val.includes("social") ||
+    val.includes("promo") ||
+    val.includes("paid")
+  )
+    return "marketing";
+
+  // Product
+  if (
+    val.includes("product") ||
+    val.includes("merch") ||
+    val.includes("vinyl") ||
+    val.includes("physical")
+  )
+    return "product";
+
+  // Live
+  if (
+    val.includes("live") ||
+    val.includes("tour") ||
+    val.includes("gig") ||
+    val.includes("concert") ||
+    val.includes("festival")
+  )
+    return "live";
+
+  // Default fallback
+  return "music";
 }
 
-export const MAJOR_EVENT_KEYWORDS = [
-  "single",
-  "album release",
-  "album out",
-  "pre-save",
-  "vinyl",
-  "merch",
-  "deluxe",
-  "release",
-  "pre-order",
-  "playlist placement",
-  "best new track",
-];
+/**
+ * Get display config for a moment_type string.
+ * Works with both EventCategory values and descriptive moment_type strings.
+ */
+export function getCategoryConfig(momentType: string): CategoryConfig {
+  const category = mapMomentType(momentType);
+  return EVENT_CATEGORIES[category];
+}
 
-export function inferIsMajor(title: string): boolean {
-  const lower = title.toLowerCase();
-  return MAJOR_EVENT_KEYWORDS.some((kw) => lower.includes(kw));
+export function getAllCategories(): Record<
+  EventCategory,
+  CategoryConfig
+> {
+  return EVENT_CATEGORIES;
 }
