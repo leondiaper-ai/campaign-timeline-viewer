@@ -39,10 +39,6 @@ async function fetchRows(
   return (response.data.values as string[][]) || [];
 }
 
-/**
- * Safe fetch that returns empty array if the tab doesn't exist.
- * Used for optional tabs like physical_data.
- */
 async function fetchRowsSafe(
   spreadsheetId: string,
   tabName: string
@@ -51,7 +47,10 @@ async function fetchRowsSafe(
     return await fetchRows(spreadsheetId, tabName);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("Unable to parse range") || msg.includes("not found")) {
+    if (
+      msg.includes("Unable to parse range") ||
+      msg.includes("not found")
+    ) {
       console.log(`[CTV] Tab "${tabName}" not found — skipping.`);
       return [];
     }
@@ -105,14 +104,30 @@ function cleanCampaignType(raw: string | undefined): CampaignType {
   return "album";
 }
 
-// ——— Tab Parsers ———————————————————————————————————————————
-
-/** Tab 1: campaign_setup — single row
- *  Columns: campaign_name | artist_name | campaign_type | release_date | default_territory
+/**
+ * Check if a row is a metadata/template instruction row.
+ * These are notes left in the Google Sheet template that should not be parsed.
  */
-async function fetchCampaignSetup(
-  sheetId: string
-): Promise<CampaignSetup> {
+function isMetadataRow(firstCell: string): boolean {
+  if (!firstCell) return true;
+  const val = firstCell.trim().toLowerCase();
+  if (val.startsWith("notes")) return true;
+  if (val.startsWith("track_role")) return true;
+  if (val.startsWith("default_on")) return true;
+  if (val.startsWith("sort_order")) return true;
+  if (val.startsWith("week_start_date")) return true;
+  if (val.startsWith("track_name")) return true;
+  if (val.startsWith("streams_")) return true;
+  if (val.startsWith("moment_")) return true;
+  if (val.startsWith("is_key")) return true;
+  if (val.startsWith("units")) return true;
+  // Long rows with colons are likely instructions
+  if (val.includes(":") && val.length > 40) return true;
+  return false;
+}
+
+// ——— Tab Parsers ———————————————————————————————————————————
+async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
   const rows = await fetchRows(sheetId, "campaign_setup");
   if (rows.length === 0) {
     console.warn("[CTV] campaign_setup tab is empty — using defaults.");
@@ -134,9 +149,6 @@ async function fetchCampaignSetup(
   };
 }
 
-/** Tab 2: tracks — master track list
- *  Columns: track_name | track_role | release_date | default_on | sort_order
- */
 async function fetchTracks(sheetId: string): Promise<Track[]> {
   const rows = await fetchRows(sheetId, "tracks");
   if (rows.length === 0) {
@@ -144,7 +156,7 @@ async function fetchTracks(sheetId: string): Promise<Track[]> {
     return [];
   }
   return rows
-    .filter((r) => r[0]?.trim())
+    .filter((r) => r[0]?.trim() && !isMetadataRow(r[0]))
     .map((r, i) => ({
       track_name: r[0].trim(),
       track_role: cleanTrackRole(r[1]),
@@ -154,9 +166,6 @@ async function fetchTracks(sheetId: string): Promise<Track[]> {
     }));
 }
 
-/** Tab 3: weekly_data — one row per week per track + TOTAL rows
- *  Columns: week_start_date | track_name | streams_global | streams_uk
- */
 async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
   const rows = await fetchRows(sheetId, "weekly_data");
   if (rows.length === 0) {
@@ -164,7 +173,14 @@ async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
     return [];
   }
   return rows
-    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim())
+    .filter(
+      (r) =>
+        r[0] &&
+        isValidDate(r[0]) &&
+        r[1]?.trim() &&
+        !isMetadataRow(r[0]) &&
+        !isMetadataRow(r[1])
+    )
     .map((r) => ({
       week_start_date: r[0].trim(),
       track_name: r[1].trim(),
@@ -173,9 +189,6 @@ async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
     }));
 }
 
-/** Tab 4: physical_data — optional, one row per week
- *  Columns: week_start_date | units
- */
 async function fetchPhysicalData(sheetId: string): Promise<PhysicalRow[]> {
   const rows = await fetchRowsSafe(sheetId, "physical_data");
   if (rows.length === 0) return [];
@@ -187,9 +200,6 @@ async function fetchPhysicalData(sheetId: string): Promise<PhysicalRow[]> {
     }));
 }
 
-/** Tab 5: moments
- *  Columns: date | moment_title | moment_type | is_key
- */
 async function fetchMoments(sheetId: string): Promise<Moment[]> {
   const rows = await fetchRows(sheetId, "moments");
   if (rows.length === 0) {
@@ -197,7 +207,7 @@ async function fetchMoments(sheetId: string): Promise<Moment[]> {
     return [];
   }
   return rows
-    .filter((r) => r[0] && isValidDate(r[0]))
+    .filter((r) => r[0] && isValidDate(r[0]) && !isMetadataRow(r[0]))
     .map((r) => ({
       date: r[0].trim(),
       moment_title: (r[1] || "Untitled moment").trim(),
@@ -207,34 +217,25 @@ async function fetchMoments(sheetId: string): Promise<Moment[]> {
 }
 
 // ——— Validation ————————————————————————————————————————————
-function validateSheetData(
-  data: CampaignSheetData
-): ValidationWarning[] {
+function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
   const trackNames = new Set(data.tracks.map((t) => t.track_name));
 
-  // Tracks tab
   if (data.tracks.length === 0) {
     warnings.push({ tab: "tracks", message: "No tracks defined." });
   }
 
-  // Weekly data
   if (data.weeklyData.length === 0) {
     warnings.push({ tab: "weekly_data", message: "No weekly data rows." });
   } else {
-    // Check for TOTAL rows
-    const hasTotalRows = data.weeklyData.some(
-      (r) => r.track_name === "TOTAL"
-    );
+    const hasTotalRows = data.weeklyData.some((r) => r.track_name === "TOTAL");
     if (!hasTotalRows) {
       warnings.push({
         tab: "weekly_data",
-        message:
-          "No TOTAL rows found. Campaign totals will be missing.",
+        message: "No TOTAL rows found. Campaign totals will be missing.",
       });
     }
 
-    // Track names in weekly_data not in tracks tab
     const weeklyTrackNames = new Set(
       data.weeklyData
         .filter((r) => r.track_name !== "TOTAL")
@@ -249,7 +250,6 @@ function validateSheetData(
       }
     }
 
-    // Tracks defined but missing from weekly_data
     for (const name of trackNames) {
       if (!weeklyTrackNames.has(name)) {
         warnings.push({
@@ -259,7 +259,6 @@ function validateSheetData(
       }
     }
 
-    // Check for week gaps in TOTAL rows
     const totalDates = data.weeklyData
       .filter((r) => r.track_name === "TOTAL")
       .map((r) => r.week_start_date)
@@ -278,19 +277,8 @@ function validateSheetData(
         }
       }
     }
-
-    // Invalid dates
-    for (const row of data.weeklyData) {
-      if (!isValidDate(row.week_start_date)) {
-        warnings.push({
-          tab: "weekly_data",
-          message: `Invalid date: "${row.week_start_date}"`,
-        });
-      }
-    }
   }
 
-  // Moments invalid dates
   for (const m of data.moments) {
     if (!isValidDate(m.date)) {
       warnings.push({
@@ -316,15 +304,8 @@ export async function fetchCampaignSheetData(
       fetchMoments(sheetId),
     ]);
 
-  const data: CampaignSheetData = {
-    setup,
-    tracks,
-    weeklyData,
-    physicalData,
-    moments,
-  };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments };
 
-  // Run validation and log warnings
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {
     console.warn(
