@@ -4,21 +4,20 @@ import {
   Moment,
   Territory,
   Track,
+  TrackWeeklyMetric,
 } from "@/types";
 
 // ——— Build Chart Data ———————————————————————————————————————
 // Creates a continuous weekly dataset with campaign totals,
 // per-track streams, physical units, and moments layered in.
 // This is the ONLY chart-data builder — no legacy variants.
-
 export function buildChartData(
   sheet: CampaignSheetData,
   territory: Territory,
   selectedTracks: string[]
 ): ChartDataPoint[] {
   // 1. Pick the right streams column based on territory
-  const streamKey =
-    territory === "UK" ? "streams_uk" : "streams_global";
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
 
   // 2. Build TOTAL series (campaign aggregate)
   const totalByDate = new Map<string, number>();
@@ -65,10 +64,9 @@ export function buildChartData(
   // 7. Collect all unique dates from data
   const allDates = new Set<string>();
   totalByDate.forEach((_, d) => allDates.add(d));
-  trackByDate.forEach((dates) =>
-    dates.forEach((_, d) => allDates.add(d))
-  );
+  trackByDate.forEach((dates) => dates.forEach((_, d) => allDates.add(d)));
   physicalByDate.forEach((_, d) => allDates.add(d));
+
   const sortedDates = [...allDates].sort();
 
   // 8. Build data points
@@ -128,18 +126,103 @@ export function buildChartData(
   return result;
 }
 
+// ——— Build Track Chart Data (for By Track view) ————————————
+// Returns chart data showing a single track's streams alongside
+// the total campaign streams as a reference.
+export function buildTrackChartData(
+  sheet: CampaignSheetData,
+  territory: Territory,
+  trackWeeklyMetrics: TrackWeeklyMetric[],
+  trackId: string
+): ChartDataPoint[] {
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+
+  // Total campaign streams by date (for reference line)
+  const totalByDate = new Map<string, number>();
+  sheet.weeklyData
+    .filter((r) => r.track_name === "TOTAL")
+    .forEach((r) => totalByDate.set(r.week_start_date, r[streamKey]));
+
+  // Track streams by date from trackWeeklyMetrics
+  const trackByDate = new Map<string, number>();
+  trackWeeklyMetrics
+    .filter(
+      (m) =>
+        m.track_id === trackId &&
+        m.territory === territory
+    )
+    .forEach((m) => trackByDate.set(m.week_ending, m.total_streams));
+
+  // Physical data
+  const physicalByDate = new Map<string, number>();
+  sheet.physicalData.forEach((r) =>
+    physicalByDate.set(r.week_start_date, r.units)
+  );
+
+  // Moments
+  const momentsByDate = new Map<string, Moment[]>();
+  sheet.moments.forEach((m) => {
+    const existing = momentsByDate.get(m.date) || [];
+    existing.push(m);
+    momentsByDate.set(m.date, existing);
+  });
+
+  // Collect all dates
+  const allDates = new Set<string>();
+  totalByDate.forEach((_, d) => allDates.add(d));
+  trackByDate.forEach((_, d) => allDates.add(d));
+  physicalByDate.forEach((_, d) => allDates.add(d));
+
+  const sortedDates = [...allDates].sort();
+
+  const result: ChartDataPoint[] = sortedDates.map((date) => ({
+    date,
+    total_streams: totalByDate.get(date) ?? 0, // used as reference
+    track_streams: trackByDate.get(date) ?? 0,
+    physical_units: physicalByDate.get(date) ?? 0,
+    cumulative_streams: 0,
+    prev_week_streams: null,
+    events: momentsByDate.get(date) || [],
+  }));
+
+  // Compute cumulative
+  let runningTotal = 0;
+  for (let i = 0; i < result.length; i++) {
+    runningTotal += (result[i].track_streams as number) || 0;
+    result[i].cumulative_streams = runningTotal;
+    result[i].prev_week_streams =
+      i > 0 ? ((result[i - 1].track_streams as number) || 0) : null;
+  }
+
+  return result;
+}
+
+// ——— Get Track List for By Track selector ————————————————
+export function getTrackListForChart(
+  trackWeeklyMetrics: TrackWeeklyMetric[],
+  territory: Territory
+): Array<{ track_id: string; track_name: string }> {
+  const seen = new Map<string, string>();
+  trackWeeklyMetrics
+    .filter((m) => m.territory === territory)
+    .forEach((m) => {
+      if (!seen.has(m.track_id)) {
+        seen.set(m.track_id, m.track_name);
+      }
+    });
+  return Array.from(seen.entries()).map(([track_id, track_name]) => ({
+    track_id,
+    track_name,
+  }));
+}
+
 // ——— Track List (sorted by sort_order) ——————————————————————
 export function getTrackList(sheet: CampaignSheetData): Track[] {
   return [...sheet.tracks].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 // ——— Default Track Selection ————————————————————————————————
-// Priority: explicit default_on → singles (rollout narrative) → first 2
-// The chart should tell the rollout story by default:
-//   singles release sequence → album spike visible in total line
-// Album tracks / title tracks are available but NOT default — they
-// dominate the scale and obscure the narrative arc.
-
+// Priority: explicit default_on -> singles (rollout narrative) -> first 2
 export function getDefaultTracks(tracks: Track[]): string[] {
   // 1. Use explicit default_on if set on ANY track
   const withDefault = tracks.filter((t) => t.default_on);
@@ -183,8 +266,7 @@ export function getPeakWeekStats(
   sheet: CampaignSheetData,
   territory: Territory
 ): PeakWeekStats {
-  const streamKey =
-    territory === "UK" ? "streams_uk" : "streams_global";
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
 
   // Total streams from TOTAL rows
   const totalRows = sheet.weeklyData.filter(
