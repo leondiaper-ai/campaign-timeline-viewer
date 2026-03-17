@@ -11,7 +11,6 @@ import {
   Tooltip,
   CartesianGrid,
   ReferenceLine,
-  Label,
 } from "recharts";
 import { ChartDataPoint, Moment } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
@@ -225,34 +224,6 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-// ——— Custom Reference Line Label ——————————————————————————————
-// Renders rotated text at top of chart for each key moment marker
-interface MomentLabelProps {
-  viewBox?: { x?: number; y?: number };
-  value?: string;
-  color?: string;
-}
-
-function MomentLabel({ viewBox, value, color }: MomentLabelProps) {
-  const x = viewBox?.x ?? 0;
-  return (
-    <g>
-      <text
-        x={x + 4}
-        y={12}
-        fill={color || "#9CA3AF"}
-        fontSize={9}
-        fontWeight={600}
-        textAnchor="start"
-        dominantBaseline="middle"
-        transform={`rotate(-35, ${x + 4}, 12)`}
-      >
-        {value}
-      </text>
-    </g>
-  );
-}
-
 // ——— Chart Component ————————————————————————————————————————
 export default function TimelineChart({
   data,
@@ -359,14 +330,15 @@ export default function TimelineChart({
                 strokeDasharray="4 3"
                 strokeWidth={1.5}
                 strokeOpacity={0.7}
-              >
-                <Label
-                  content={
-                    <MomentLabel value={m.label} color={m.color} />
-                  }
-                  position="top"
-                />
-              </ReferenceLine>
+                label={{
+                  value: m.label,
+                  position: "insideTopRight",
+                  fill: m.color,
+                  fontSize: 9,
+                  fontWeight: 600,
+                  offset: 6,
+                }}
+              />
             ))}
 
             {/* Total Streams — main area + line */}
