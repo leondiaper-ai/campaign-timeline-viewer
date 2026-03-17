@@ -32,6 +32,8 @@ function truncLabel(title: string, max: number = 16): string {
   return (sp > max * 0.4 ? cut.slice(0, sp) : cut) + "\u2026";
 }
 
+export type ChartMode = "campaign" | "tracks";
+
 interface TimelineChartProps {
   data: ChartDataPoint[];
   selectedTracks: string[];
@@ -40,32 +42,44 @@ interface TimelineChartProps {
   highlightedDate: string | null;
   handoverMoment?: HandoverMoment | null;
   chartInsight?: string | null;
+  chartMode: ChartMode;
+  onChartModeChange: (mode: ChartMode) => void;
 }
 
-// ——— Tooltip ————————————————————————————————————————————————
-function CustomTooltip({ active, payload, label, trackRoles }: {
-  active?: boolean; payload?: any[]; label?: string; trackRoles: TrackWithRole[];
+function CustomTooltip({ active, payload, label, trackRoles, chartMode }: {
+  active?: boolean; payload?: any[]; label?: string; trackRoles: TrackWithRole[]; chartMode: ChartMode;
 }) {
   if (!active || !payload || !payload.length) return null;
   const dp = payload[0]?.payload;
   if (!dp) return null;
   const events = dp.events || [];
+  const mainStreams = dp.total_streams;
+  const prevStreams = dp.prev_week_streams;
+  const wowChange = prevStreams !== null && prevStreams > 0 && mainStreams > 0
+    ? ((mainStreams - prevStreams) / prevStreams) * 100 : null;
 
   return (
     <div className="bg-[#1A1D2E] rounded-xl border border-[#2A2D3E] p-4 max-w-xs shadow-2xl">
       <p className="text-[11px] font-semibold text-[#6B7280] mb-2">{label ? formatFullDate(label) : ""}</p>
-      {dp.total_streams > 0 && (
+      {mainStreams > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: TOTAL_COLOR }} />
             <span className="text-xs text-[#9CA3AF]">Total Streams</span>
           </div>
-          <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.total_streams)}</span>
+          <span className="text-xs font-semibold text-white tabular-nums">{fmt(mainStreams)}</span>
         </div>
       )}
-      {/* Track values — ordered by role */}
-      {trackRoles
-        .filter(tr => dp[tr.track_name] != null && dp[tr.track_name] > 0)
+      {wowChange !== null && (
+        <div className="flex items-center justify-between gap-4 mb-1">
+          <span className="text-xs text-[#6B7280] ml-4">WoW</span>
+          <span className={`text-xs font-semibold tabular-nums ${wowChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+            {wowChange >= 0 ? "+" : ""}{wowChange.toFixed(0)}%
+          </span>
+        </div>
+      )}
+      {chartMode === "tracks" && trackRoles
+        .filter(tr => dp[tr.track_name] != null && (dp[tr.track_name] as number) > 0)
         .sort((a,b) => b.strokeWidth - a.strokeWidth)
         .map((tr, i) => (
           <div key={i} className="flex items-center justify-between gap-4 mb-1">
@@ -73,7 +87,7 @@ function CustomTooltip({ active, payload, label, trackRoles }: {
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tr.color }} />
               <span className="text-xs text-[#9CA3AF] truncate max-w-[120px]">{tr.track_name}</span>
               {tr.role === "POST_RELEASE_BREAKOUT" && (
-                <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded bg-amber-500/15 text-amber-400">BREAKOUT</span>
+                <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded bg-amber-500/15 text-amber-400">HOLD</span>
               )}
             </div>
             <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp[tr.track_name] as number)}</span>
@@ -106,7 +120,6 @@ function CustomTooltip({ active, payload, label, trackRoles }: {
 }
 
 
-// ——— Moment label layout ————————————————————————————————————
 interface MomentMarker { date: string; label: string; color: string; row: number; }
 
 function layoutMomentMarkers(data: ChartDataPoint[], visibleDates: Set<string>): MomentMarker[] {
@@ -124,34 +137,48 @@ function layoutMomentMarkers(data: ChartDataPoint[], visibleDates: Set<string>):
         }
         const cat = getCategoryConfig(bestEvent.moment_type);
         const existing = byDate.get(d.date);
-        if (!existing || bestP > existing.priority) {
+        if (!existing || bestP > existing.priority)
           byDate.set(d.date, { date: d.date, label: truncLabel(bestEvent.moment_title, 18), color: cat.color, priority: bestP });
-        }
       }
     }
   });
-  const deduped = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 7);
-  return deduped.map((m, i) => ({ date: m.date, label: m.label, color: m.color, row: i % 2 }));
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 7)
+    .map((m, i) => ({ date: m.date, label: m.label, color: m.color, row: i % 2 }));
 }
 
-// ——— Main Chart ————————————————————————————————————————————
 export default function TimelineChart({
   data, selectedTracks, trackRoles, visibleEventDates,
-  highlightedDate, handoverMoment, chartInsight,
+  highlightedDate, handoverMoment, chartInsight, chartMode, onChartModeChange,
 }: TimelineChartProps) {
 
   const momentMarkers = useMemo(() => layoutMomentMarkers(data, visibleEventDates), [data, visibleEventDates]);
   const hasPhysical = useMemo(() => data.some((d) => d.physical_units > 0), [data]);
-
-  // Build role lookup for selected tracks
   const roleMap = useMemo(() => {
     const map = new Map<string, TrackWithRole>();
     trackRoles.forEach(r => map.set(r.track_name, r));
     return map;
   }, [trackRoles]);
+  const isCampaign = chartMode === "campaign";
 
   return (
     <div className="w-full">
+      {/* Toggle: Campaign | Tracks */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-1 bg-[#0D1117] rounded-lg p-0.5 border border-[#1E2130]">
+          <button onClick={() => onChartModeChange("campaign")}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+              isCampaign ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"
+            }`}>Campaign</button>
+          <button onClick={() => onChartModeChange("tracks")}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-md transition-all ${
+              !isCampaign ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"
+            }`}>Tracks</button>
+        </div>
+        <span className="text-[10px] text-[#4B5563]">
+          {isCampaign ? "Overall campaign performance" : "Individual track breakdown"}
+        </span>
+      </div>
+
       {/* Moment labels above chart */}
       {momentMarkers.length > 0 && (
         <div className="relative w-full mb-1" style={{ height: 44 }}>
@@ -188,38 +215,50 @@ export default function TimelineChart({
               <YAxis yAxisId="physical" orientation="right" tickFormatter={fmt}
                 tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
             )}
-            <Tooltip content={<CustomTooltip trackRoles={trackRoles} />}
+            <Tooltip content={<CustomTooltip trackRoles={trackRoles} chartMode={chartMode} />}
               cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
 
-            {/* Highlighted date */}
             {highlightedDate && (
               <ReferenceLine x={highlightedDate} yAxisId="streams" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />
             )}
-
-            {/* Key moment vertical lines */}
             {momentMarkers.map((m, i) => (
               <ReferenceLine key={`mk-${i}`} x={m.date} yAxisId="streams"
                 stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.5} />
             ))}
-
-            {/* HANDOVER MARKER — "Post-release single" */}
-            {handoverMoment && (
+            {handoverMoment && !isCampaign && (
               <ReferenceLine x={handoverMoment.date} yAxisId="streams"
                 stroke="#FBBF24" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.8}
                 label={{ value: handoverMoment.label, position: "insideTopRight",
                   fill: "#FBBF24", fontSize: 10, fontWeight: 700, offset: 8 }} />
             )}
 
-            {/* Total streams area + line */}
-            <Area yAxisId="streams" type="monotone" dataKey="total_streams"
-              fill={`${TOTAL_COLOR}08`} stroke="none" />
-            <Line yAxisId="streams" type="monotone" dataKey="total_streams"
-              stroke={TOTAL_COLOR} strokeWidth={2} dot={false}
-              activeDot={{ r: 4, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }}
-              name="Total Streams" />
+            {/* CAMPAIGN MODE: total dominant, tracks muted */}
+            {isCampaign && (
+              <Area yAxisId="streams" type="monotone" dataKey="total_streams"
+                fill={`${TOTAL_COLOR}15`} stroke="none" />
+            )}
+            {isCampaign && (
+              <Line yAxisId="streams" type="monotone" dataKey="total_streams"
+                stroke={TOTAL_COLOR} strokeWidth={3} dot={false}
+                activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }}
+                name="Total Streams" />
+            )}
+            {isCampaign && selectedTracks.map((track) => {
+              const role = roleMap.get(track);
+              return (
+                <Line key={track} yAxisId="streams" type="monotone" dataKey={track}
+                  stroke={role?.color ?? "#4B5563"} strokeWidth={1} strokeOpacity={0.25}
+                  dot={false} activeDot={false} connectNulls={false} name={track} />
+              );
+            })}
 
-            {/* Track lines — rendered with narrative role hierarchy */}
-            {selectedTracks.map((track) => {
+            {/* TRACKS MODE: tracks prominent with hierarchy, total as faint reference */}
+            {!isCampaign && (
+              <Line yAxisId="streams" type="monotone" dataKey="total_streams"
+                stroke={TOTAL_COLOR} strokeWidth={1.5} strokeOpacity={0.15}
+                dot={false} activeDot={false} name="Total Streams" />
+            )}
+            {!isCampaign && selectedTracks.map((track) => {
               const role = roleMap.get(track);
               const sw = role?.strokeWidth ?? 1.5;
               const op = role?.opacity ?? 0.5;
@@ -233,7 +272,6 @@ export default function TimelineChart({
               );
             })}
 
-            {/* Physical bars */}
             {hasPhysical && (
               <Bar yAxisId="physical" dataKey="physical_units"
                 fill={`${PHYSICAL_COLOR}35`} stroke={PHYSICAL_COLOR} strokeWidth={1}
@@ -243,32 +281,31 @@ export default function TimelineChart({
         </ResponsiveContainer>
       </div>
 
-      {/* Inline insight */}
       {chartInsight && (
         <p className="text-[11px] text-[#9CA3AF] italic text-center mt-2">{chartInsight}</p>
       )}
 
-      {/* Legend with role indicators */}
+      {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
-        <LegendItem color={TOTAL_COLOR} label="Total Streams" type="line" />
+        <LI color={TOTAL_COLOR} label="Total Streams" type="line" opacity={isCampaign ? 1 : 0.15} bold={isCampaign} />
         {trackRoles
           .filter(tr => selectedTracks.includes(tr.track_name))
           .sort((a, b) => b.strokeWidth - a.strokeWidth)
           .map((tr) => (
-            <LegendItem key={tr.track_name} color={tr.color} label={tr.track_name} type="line"
-              opacity={tr.opacity} bold={tr.role === "POST_RELEASE_BREAKOUT"} />
+            <LI key={tr.track_name} color={tr.color} label={tr.track_name} type="line"
+              opacity={isCampaign ? 0.25 : tr.opacity} bold={!isCampaign && tr.role === "POST_RELEASE_BREAKOUT"} />
           ))}
-        {hasPhysical && <LegendItem color={PHYSICAL_COLOR} label="Physical" type="bar" />}
+        {hasPhysical && <LI color={PHYSICAL_COLOR} label="Physical" type="bar" />}
       </div>
     </div>
   );
 }
 
-function LegendItem({ color, label, type, opacity = 1, bold = false }: {
+function LI({ color, label, type, opacity = 1, bold = false }: {
   color: string; label: string; type: "line" | "bar"; opacity?: number; bold?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1.5" style={{ opacity }}>
+    <div className="flex items-center gap-1.5" style={{ opacity: Math.max(opacity, 0.3) }}>
       {type === "line" ? (
         <span className={`inline-block rounded-full ${bold ? "w-4 h-1" : "w-3 h-0.5"}`} style={{ backgroundColor: color }} />
       ) : (
