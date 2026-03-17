@@ -14,6 +14,8 @@ export interface UnifiedChartDataPoint {
   date: string;
   total_streams: number;
   physical_units: number;
+  cumulative_streams: number; // running total of streams up to this week
+  prev_week_streams: number | null; // previous week's total_streams (null for first week)
   events: CampaignEvent[];
   // Dynamic track keys: [trackName]: number | null
   [key: string]: number | string | null | CampaignEvent[];
@@ -112,13 +114,15 @@ export function buildUnifiedChartData(
     }
   });
 
-  // 10. Build unified data points
+  // 10. Build unified data points (cumulative/prev computed after sort)
   const result: UnifiedChartDataPoint[] = sortedDates.map((date) => {
     const metric = metricsLookup.get(date);
     const point: UnifiedChartDataPoint = {
       date,
       total_streams: metric?.streams ?? 0,
       physical_units: metric?.physical ?? 0,
+      cumulative_streams: 0, // computed after sort
+      prev_week_streams: null, // computed after sort
       events: eventsByDate.get(date) || [],
     };
 
@@ -145,6 +149,8 @@ export function buildUnifiedChartData(
         date: e.date,
         total_streams: 0,
         physical_units: 0,
+        cumulative_streams: 0,
+        prev_week_streams: null,
         events: eventsByDate.get(e.date) || [],
       };
       selectedTracks.forEach((track) => {
@@ -154,7 +160,16 @@ export function buildUnifiedChartData(
     }
   });
 
-  return result.sort((a, b) => a.date.localeCompare(b.date));
+  // 12. Sort and compute cumulative + previous week streams
+  result.sort((a, b) => a.date.localeCompare(b.date));
+  let runningTotal = 0;
+  for (let i = 0; i < result.length; i++) {
+    runningTotal += result[i].total_streams;
+    result[i].cumulative_streams = runningTotal;
+    result[i].prev_week_streams = i > 0 ? result[i - 1].total_streams : null;
+  }
+
+  return result;
 }
 
 // ——— Legacy buildChartData (kept for compatibility) ——————————
@@ -168,6 +183,8 @@ export function buildChartData(
     date: p.date,
     total_streams: p.total_streams,
     physical_units: p.physical_units,
+    cumulative_streams: p.cumulative_streams,
+    prev_week_streams: p.prev_week_streams,
     events: p.events,
   }));
 }
