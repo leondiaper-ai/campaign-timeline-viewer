@@ -2,25 +2,15 @@
 
 import { useMemo } from "react";
 import {
-  ResponsiveContainer,
-  ComposedChart,
-  Line,
-  Bar,
-  Area,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  ReferenceLine,
+  ResponsiveContainer, ComposedChart, Line, Bar, Area,
+  XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine,
 } from "recharts";
 import { ChartDataPoint, Moment } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
 
 const TOTAL_COLOR = "#6C9EFF";
 const PHYSICAL_COLOR = "#4ADE80";
-const TRACK_COLORS = [
-  "#FBBF24", "#F472B6", "#22D3EE", "#A78BFA", "#FB7185", "#F97316",
-];
+const TRACK_COLORS = ["#FBBF24", "#F472B6", "#22D3EE", "#A78BFA", "#FB7185", "#F97316"];
 
 function fmt(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
@@ -40,6 +30,15 @@ function formatFullDate(dateStr: string): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
 
+// Aggressive label truncation for chart markers
+function truncLabel(title: string, max: number = 16): string {
+  if (title.length <= max) return title;
+  // Try to cut at a word boundary
+  const cut = title.slice(0, max - 1);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > max * 0.4 ? cut.slice(0, lastSpace) : cut) + "\u2026";
+}
+
 interface TimelineChartProps {
   data: ChartDataPoint[];
   selectedTracks: string[];
@@ -52,112 +51,78 @@ interface TimelineChartProps {
 }
 
 interface TooltipPayloadEntry {
-  name: string;
-  value: number | null;
-  color: string;
-  dataKey: string;
-  payload: ChartDataPoint;
+  name: string; value: number | null; color: string; dataKey: string; payload: ChartDataPoint;
 }
 
-interface CustomTooltipProps {
-  active?: boolean;
-  payload?: TooltipPayloadEntry[];
-  label?: string;
-  streamView?: "total" | "by_track";
-  trackName?: string;
-}
-
-function CustomTooltip({ active, payload, label, streamView, trackName }: CustomTooltipProps) {
+function CustomTooltip({ active, payload, label, streamView, trackName }: {
+  active?: boolean; payload?: TooltipPayloadEntry[]; label?: string;
+  streamView?: "total" | "by_track"; trackName?: string;
+}) {
   if (!active || !payload || !payload.length) return null;
-  const dataPoint = payload[0]?.payload;
-  if (!dataPoint) return null;
+  const dp = payload[0]?.payload;
+  if (!dp) return null;
 
-  const events = dataPoint.events || [];
+  const events = dp.events || [];
   const isByTrack = streamView === "by_track";
-  const mainStreams = isByTrack ? ((dataPoint.track_streams as number) || 0) : dataPoint.total_streams;
-  const prevStreams = dataPoint.prev_week_streams;
+  const mainStreams = isByTrack ? ((dp.track_streams as number) || 0) : dp.total_streams;
+  const prevStreams = dp.prev_week_streams;
   const wowChange = prevStreams !== null && prevStreams > 0
     ? ((mainStreams - prevStreams) / prevStreams) * 100 : null;
 
   return (
-    <div className="bg-surface-raised rounded-xl border border-border p-4 max-w-xs shadow-lg">
-      <p className="text-[11px] font-semibold text-label-muted mb-2">
-        {label ? formatFullDate(label) : ""}
-      </p>
-
+    <div className="bg-[#1A1D2E] rounded-xl border border-[#2A2D3E] p-4 max-w-xs shadow-2xl">
+      <p className="text-[11px] font-semibold text-[#6B7280] mb-2">{label ? formatFullDate(label) : ""}</p>
       {mainStreams > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: TOTAL_COLOR }} />
-            <span className="text-xs text-label-secondary">
-              {isByTrack ? trackName || "Track" : "Weekly Streams"}
-            </span>
+            <span className="text-xs text-[#9CA3AF]">{isByTrack ? trackName || "Track" : "Weekly Streams"}</span>
           </div>
-          <span className="text-xs font-semibold text-label-primary tabular-nums">{fmt(mainStreams)}</span>
+          <span className="text-xs font-semibold text-white tabular-nums">{fmt(mainStreams)}</span>
         </div>
       )}
-
       {wowChange !== null && (
         <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-label-muted ml-4">vs Last Week</span>
+          <span className="text-xs text-[#6B7280] ml-4">vs Last Week</span>
           <span className={`text-xs font-semibold tabular-nums ${wowChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
             {wowChange >= 0 ? "+" : ""}{wowChange.toFixed(1)}%
           </span>
         </div>
       )}
-
-      {isByTrack && dataPoint.total_streams > 0 && (
+      {dp.cumulative_streams > 0 && !isByTrack && (
         <div className="flex items-center justify-between gap-4 mb-1">
-          <div className="flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full opacity-30" style={{ backgroundColor: TOTAL_COLOR }} />
-            <span className="text-xs text-label-muted">Total Campaign</span>
-          </div>
-          <span className="text-xs font-medium text-label-muted tabular-nums">{fmt(dataPoint.total_streams)}</span>
+          <span className="text-xs text-[#6B7280] ml-4">Campaign Total</span>
+          <span className="text-xs font-medium text-[#9CA3AF] tabular-nums">{fmt(dp.cumulative_streams)}</span>
         </div>
       )}
-
-      {dataPoint.cumulative_streams > 0 && !isByTrack && (
-        <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-label-muted ml-4">Campaign Total</span>
-          <span className="text-xs font-medium text-label-secondary tabular-nums">{fmt(dataPoint.cumulative_streams)}</span>
-        </div>
-      )}
-
-      {!isByTrack && payload
-        .filter((entry) => entry.dataKey !== "total_streams" && entry.dataKey !== "physical_units" && entry.value !== null && entry.value !== undefined)
+      {!isByTrack && payload.filter((e) => e.dataKey !== "total_streams" && e.dataKey !== "physical_units" && e.value != null)
         .map((entry, i) => (
           <div key={i} className="flex items-center justify-between gap-4 mb-1">
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-              <span className="text-xs text-label-secondary truncate max-w-[120px]">{entry.dataKey}</span>
+              <span className="text-xs text-[#9CA3AF] truncate max-w-[120px]">{entry.dataKey}</span>
             </div>
-            <span className="text-xs font-semibold text-label-primary tabular-nums">{fmt(entry.value as number)}</span>
+            <span className="text-xs font-semibold text-white tabular-nums">{fmt(entry.value as number)}</span>
           </div>
         ))}
-
-      {dataPoint.physical_units > 0 && (
+      {dp.physical_units > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: PHYSICAL_COLOR }} />
-            <span className="text-xs text-label-secondary">Physical</span>
+            <span className="text-xs text-[#9CA3AF]">Physical</span>
           </div>
-          <span className="text-xs font-semibold text-label-primary tabular-nums">{fmt(dataPoint.physical_units)}</span>
+          <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.physical_units)}</span>
         </div>
       )}
-
       {events.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border">
-          {events.map((moment: Moment, i: number) => {
-            const cat = getCategoryConfig(moment.moment_type);
+        <div className="mt-3 pt-3 border-t border-[#2A2D3E]">
+          {events.map((m: Moment, i: number) => {
+            const cat = getCategoryConfig(m.moment_type);
             return (
-              <div key={i} className="mb-2 last:mb-0">
-                <div className="flex items-center gap-1.5">
-                  <span style={{ color: cat.color }} className="text-xs">{cat.icon}</span>
-                  <span className="text-xs font-medium text-label-primary">{moment.moment_title}</span>
-                  {moment.is_key && (
-                    <span className="text-[8px] font-semibold uppercase px-1 py-0.5 rounded bg-amber-500/10 text-amber-400">Key</span>
-                  )}
-                </div>
+              <div key={i} className="mb-1.5 last:mb-0 flex items-center gap-1.5">
+                <span style={{ color: cat.color }} className="text-xs">{cat.icon}</span>
+                <span className="text-xs font-medium text-white">{m.moment_title}</span>
+                {m.is_key && <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded bg-amber-500/15 text-amber-400">KEY</span>}
               </div>
             );
           })}
@@ -167,76 +132,128 @@ function CustomTooltip({ active, payload, label, streamView, trackName }: Custom
   );
 }
 
+
+// ——— Moment marker layout: stagger to avoid collision, max 7 ———
+interface MomentMarker {
+  date: string;
+  label: string;
+  color: string;
+  row: number; // 0 = top row, 1 = staggered row
+}
+
+function layoutMomentMarkers(data: ChartDataPoint[], visibleDates: Set<string>): MomentMarker[] {
+  // Collect key moments from data
+  const raw: { date: string; label: string; color: string; priority: number }[] = [];
+  data.forEach((d) => {
+    if (d.events.length > 0) {
+      const keyEvents = d.events.filter((e) => e.is_key && visibleDates.has(e.date));
+      if (keyEvents.length > 0) {
+        const primary = keyEvents[0];
+        const cat = getCategoryConfig(primary.moment_type);
+        // Priority: music > live > editorial > marketing > product
+        const priorityMap: Record<string, number> = { music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
+        const mapped = cat.label.toLowerCase();
+        raw.push({
+          date: d.date,
+          label: truncLabel(primary.moment_title, 18),
+          color: cat.color,
+          priority: priorityMap[mapped] || 1,
+        });
+      }
+    }
+  });
+
+  // Sort by date, cap at 7
+  raw.sort((a, b) => a.date.localeCompare(b.date));
+  const capped = raw.slice(0, 7);
+
+  // Stagger: alternate row 0 and 1 for adjacent markers
+  return capped.map((m, i) => ({
+    date: m.date,
+    label: m.label,
+    color: m.color,
+    row: i % 2, // alternate to avoid overlap
+  }));
+}
+
 export default function TimelineChart({
-  data,
-  selectedTracks,
-  visibleEventDates,
-  highlightedDate,
-  streamView = "total",
-  trackData,
-  trackName,
+  data, selectedTracks, visibleEventDates, highlightedDate,
+  streamView = "total", trackData, trackName,
 }: TimelineChartProps) {
   const isByTrack = streamView === "by_track" && trackData;
-
-  const momentMarkers = useMemo(() => {
-    const markers: { date: string; color: string }[] = [];
-    const sourceData = isByTrack ? trackData : data;
-    if (!sourceData) return markers;
-    sourceData.forEach((d) => {
-      if (d.events.length > 0) {
-        const visibleEvents = d.events.filter((e) => visibleEventDates.has(e.date));
-        if (visibleEvents.length > 0) {
-          const primary = visibleEvents.find((e) => e.is_key) || visibleEvents[0];
-          const cat = getCategoryConfig(primary.moment_type);
-          markers.push({ date: d.date, color: cat.color });
-        }
-      }
-    });
-    return markers;
-  }, [data, trackData, isByTrack, visibleEventDates]);
-
-  const hasPhysical = useMemo(() => {
-    const sourceData = isByTrack ? trackData : data;
-    return sourceData ? sourceData.some((d) => d.physical_units > 0) : false;
-  }, [data, trackData, isByTrack]);
-
   const chartSource = isByTrack ? trackData! : data;
+
+  // Build moment markers with stagger layout
+  const momentMarkers = useMemo(
+    () => layoutMomentMarkers(chartSource, visibleEventDates),
+    [chartSource, visibleEventDates]
+  );
+
+  const hasPhysical = useMemo(
+    () => chartSource.some((d) => d.physical_units > 0),
+    [chartSource]
+  );
 
   return (
     <div className="w-full">
-      <div className="w-full h-[420px]">
+      {/* ——— K Trap-style moment labels above chart ——— */}
+      {momentMarkers.length > 0 && (
+        <div className="relative w-full mb-1" style={{ height: 44 }}>
+          {/* We position labels using approximate % across chart width */}
+          {/* Chart left margin ~55px, right ~60px on ~full width */}
+          <div className="absolute inset-0 flex items-end">
+            {momentMarkers.map((m, i) => {
+              // Calculate approximate horizontal position
+              const dates = chartSource.map((d) => d.date).sort();
+              const dateIdx = dates.indexOf(m.date);
+              const pct = dates.length > 1 ? (dateIdx / (dates.length - 1)) * 100 : 50;
+              // Offset to account for chart margins
+              const leftPct = 4 + pct * 0.88; // ~4% left margin, ~88% chart area
+
+              return (
+                <div
+                  key={i}
+                  className="absolute flex flex-col items-center"
+                  style={{
+                    left: `${leftPct}%`,
+                    bottom: m.row === 0 ? 20 : 2,
+                    transform: "translateX(-50%)",
+                  }}
+                >
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-wider whitespace-nowrap px-1"
+                    style={{ color: m.color }}
+                  >
+                    {m.label}
+                  </span>
+                  <div className="w-px h-1.5 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.4 }} />
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ——— Main Chart ——— */}
+      <div className="w-full h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={chartSource}
-            margin={{ top: 20, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}
+            margin={{ top: 8, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#2A2D3E" vertical={false} />
+            <CartesianGrid strokeDasharray="3 3" stroke="#1E2130" vertical={false} />
             <XAxis
-              dataKey="date"
-              tickFormatter={formatDate}
-              tick={{ fontSize: 11, fill: "#6B7280" }}
-              axisLine={{ stroke: "#2A2D3E" }}
-              tickLine={false}
-              dy={8}
+              dataKey="date" tickFormatter={formatDate}
+              tick={{ fontSize: 10, fill: "#4B5563" }}
+              axisLine={{ stroke: "#1E2130" }} tickLine={false} dy={8}
               interval="preserveStartEnd"
             />
-            <YAxis
-              yAxisId="streams"
-              tickFormatter={fmt}
-              tick={{ fontSize: 11, fill: "#6B7280" }}
-              axisLine={false}
-              tickLine={false}
-              width={55}
+            <YAxis yAxisId="streams" tickFormatter={fmt}
+              tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
             />
             {hasPhysical && (
-              <YAxis
-                yAxisId="physical"
-                orientation="right"
-                tickFormatter={fmt}
-                tick={{ fontSize: 11, fill: "#6B7280" }}
-                axisLine={false}
-                tickLine={false}
-                width={55}
+              <YAxis yAxisId="physical" orientation="right" tickFormatter={fmt}
+                tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
               />
             )}
             <Tooltip
@@ -244,104 +261,54 @@ export default function TimelineChart({
               cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }}
             />
 
+            {/* Highlighted date from moments list hover */}
             {highlightedDate && (
               <ReferenceLine x={highlightedDate} yAxisId="streams" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />
             )}
 
+            {/* Key moment vertical dotted lines — visible, colored */}
             {momentMarkers.map((m, i) => (
               <ReferenceLine
-                key={`moment-${i}`}
-                x={m.date}
-                yAxisId="streams"
-                stroke={m.color}
-                strokeDasharray="4 3"
-                strokeWidth={1}
-                strokeOpacity={0.5}
+                key={`mk-${i}`} x={m.date} yAxisId="streams"
+                stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.6}
               />
             ))}
 
-            {/* Total Campaign mode: area fill */}
+            {/* Total Campaign mode */}
             {!isByTrack && (
-              <Area
-                yAxisId="streams"
-                type="monotone"
-                dataKey="total_streams"
-                fill={`${TOTAL_COLOR}10`}
-                stroke="none"
-              />
+              <Area yAxisId="streams" type="monotone" dataKey="total_streams"
+                fill={`${TOTAL_COLOR}12`} stroke="none" />
             )}
-
-            {/* Total Campaign mode: main line */}
             {!isByTrack && (
-              <Line
-                yAxisId="streams"
-                type="monotone"
-                dataKey="total_streams"
-                stroke={TOTAL_COLOR}
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 4, fill: TOTAL_COLOR }}
-                name="Total Streams"
-              />
+              <Line yAxisId="streams" type="monotone" dataKey="total_streams"
+                stroke={TOTAL_COLOR} strokeWidth={2.5} dot={false}
+                activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }}
+                name="Total Streams" />
             )}
-
-            {/* Total Campaign mode: individual track lines */}
             {!isByTrack && selectedTracks.map((track, i) => (
-              <Line
-                key={track}
-                yAxisId="streams"
-                type="monotone"
-                dataKey={track}
-                stroke={TRACK_COLORS[i % TRACK_COLORS.length]}
-                strokeWidth={1.5}
-                dot={false}
+              <Line key={track} yAxisId="streams" type="monotone" dataKey={track}
+                stroke={TRACK_COLORS[i % TRACK_COLORS.length]} strokeWidth={1.5} dot={false}
                 activeDot={{ r: 3, fill: TRACK_COLORS[i % TRACK_COLORS.length] }}
-                connectNulls={false}
-                name={track}
-              />
+                connectNulls={false} name={track} />
             ))}
 
-            {/* By Track mode: faint total campaign reference */}
+            {/* By Track mode */}
             {isByTrack && (
-              <Line
-                yAxisId="streams"
-                type="monotone"
-                dataKey="total_streams"
-                stroke={TOTAL_COLOR}
-                strokeWidth={1.5}
-                strokeOpacity={0.2}
-                dot={false}
-                activeDot={false}
-                name="Total Campaign"
-              />
+              <Line yAxisId="streams" type="monotone" dataKey="total_streams"
+                stroke={TOTAL_COLOR} strokeWidth={1.5} strokeOpacity={0.2}
+                dot={false} activeDot={false} name="Total Campaign" />
+            )}
+            {isByTrack && (
+              <Line yAxisId="streams" type="monotone" dataKey="track_streams"
+                stroke={TOTAL_COLOR} strokeWidth={2.5} dot={false}
+                activeDot={{ r: 4, fill: TOTAL_COLOR }} name={trackName || "Track"} />
             )}
 
-            {/* By Track mode: selected track line */}
-            {isByTrack && (
-              <Line
-                yAxisId="streams"
-                type="monotone"
-                dataKey="track_streams"
-                stroke={TOTAL_COLOR}
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 4, fill: TOTAL_COLOR }}
-                name={trackName || "Track"}
-              />
-            )}
-
-            {/* Physical units — BAR chart on right axis */}
+            {/* Physical bars */}
             {hasPhysical && (
-              <Bar
-                yAxisId="physical"
-                dataKey="physical_units"
-                fill={`${PHYSICAL_COLOR}40`}
-                stroke={PHYSICAL_COLOR}
-                strokeWidth={1}
-                radius={[2, 2, 0, 0]}
-                name="Physical Units"
-                barSize={20}
-              />
+              <Bar yAxisId="physical" dataKey="physical_units"
+                fill={`${PHYSICAL_COLOR}35`} stroke={PHYSICAL_COLOR} strokeWidth={1}
+                radius={[3, 3, 0, 0]} name="Physical Units" barSize={18} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
@@ -349,38 +316,35 @@ export default function TimelineChart({
 
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
-        {isByTrack ? (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 rounded-full inline-block" style={{ backgroundColor: TOTAL_COLOR }} />
-              <span className="text-[10px] text-label-muted">{trackName || "Track"}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 rounded-full inline-block opacity-20" style={{ backgroundColor: TOTAL_COLOR }} />
-              <span className="text-[10px] text-label-muted">Total Campaign</span>
-            </div>
-          </div>
-        ) : (
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
-              <span className="w-3 h-0.5 rounded-full inline-block" style={{ backgroundColor: TOTAL_COLOR }} />
-              <span className="text-[10px] text-label-muted">Total Streams</span>
-            </div>
+        {!isByTrack && (
+          <>
+            <LegendItem color={TOTAL_COLOR} label="Total Streams" type="line" />
             {selectedTracks.map((track, i) => (
-              <div key={track} className="flex items-center gap-1.5">
-                <span className="w-3 h-0.5 rounded-full inline-block" style={{ backgroundColor: TRACK_COLORS[i % TRACK_COLORS.length] }} />
-                <span className="text-[10px] text-label-muted">{track}</span>
-              </div>
+              <LegendItem key={track} color={TRACK_COLORS[i % TRACK_COLORS.length]} label={track} type="line" />
             ))}
-          </div>
+          </>
         )}
-        {hasPhysical && (
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: `${PHYSICAL_COLOR}40`, border: `1px solid ${PHYSICAL_COLOR}` }} />
-            <span className="text-[10px] text-label-muted">Physical</span>
-          </div>
+        {isByTrack && (
+          <>
+            <LegendItem color={TOTAL_COLOR} label={trackName || "Track"} type="line" />
+            <LegendItem color={TOTAL_COLOR} label="Total Campaign" type="line" opacity={0.2} />
+          </>
         )}
+        {hasPhysical && <LegendItem color={PHYSICAL_COLOR} label="Physical" type="bar" />}
       </div>
+    </div>
+  );
+}
+
+function LegendItem({ color, label, type, opacity = 1 }: { color: string; label: string; type: "line" | "bar"; opacity?: number }) {
+  return (
+    <div className="flex items-center gap-1.5" style={{ opacity }}>
+      {type === "line" ? (
+        <span className="w-3 h-0.5 rounded-full inline-block" style={{ backgroundColor: color }} />
+      ) : (
+        <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: `${color}40`, border: `1px solid ${color}` }} />
+      )}
+      <span className="text-[10px] text-[#6B7280]">{label}</span>
     </div>
   );
 }
