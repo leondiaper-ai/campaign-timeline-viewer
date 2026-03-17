@@ -15,8 +15,7 @@ import {
 } from "@/types";
 import { inferIsMajor } from "./event-categories";
 
-// ——— Google Sheets Client ————————————————————————————————
-
+// ——— Google Sheets Client ——————————————————————————————————
 function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
     credentials: {
@@ -28,8 +27,7 @@ function getSheetsClient() {
   return google.sheets({ version: "v4", auth });
 }
 
-// ——— Fetch Helpers —————————————————————————————————————————
-
+// ——— Fetch Helpers ——————————————————————————————————————————
 async function fetchRows(
   spreadsheetId: string,
   tabName: string
@@ -63,8 +61,7 @@ async function fetchRowsSafe(
   }
 }
 
-// ——— Validation Helpers ——————————————————————————————————————
-
+// ——— Validation Helpers ————————————————————————————————————
 const VALID_TERRITORIES = new Set(["global", "UK"]);
 const VALID_EVENT_TYPES = new Set([
   "music",
@@ -92,8 +89,7 @@ function cleanEventType(raw: string | undefined): EventCategory {
   // Map common aliases
   if (val === "release" || val === "single" || val === "album") return "music";
   if (val === "press" || val === "pr" || val === "review") return "editorial";
-  if (val === "merch" || val === "vinyl" || val === "physical")
-    return "product";
+  if (val === "merch" || val === "vinyl" || val === "physical") return "product";
   if (
     val === "tour" ||
     val === "gig" ||
@@ -138,8 +134,73 @@ function parseBool(val: string | undefined, fallback: boolean): boolean {
   return fallback;
 }
 
-// ——— Registry ———————————————————————————————————————————————
+// ——— Data Validation Layer ———————————————————————————————————
+// Returns warnings as console.warn — does not throw.
+// Safe fallbacks are applied inline during parsing.
+function validateWeeklyMetrics(
+  metrics: WeeklyMetric[],
+  campaignId: string,
+  expectedTerritories: Set<string>
+): void {
+  const weeks = new Set<string>();
+  const warnings: string[] = [];
 
+  for (const m of metrics) {
+    if (!isValidDate(m.week_ending)) {
+      warnings.push(`[weekly_metrics] Invalid date: "${m.week_ending}"`);
+    }
+    if (!expectedTerritories.has(m.territory)) {
+      warnings.push(
+        `[weekly_metrics] Unexpected territory "${m.territory}" in week ${m.week_ending}`
+      );
+    }
+    weeks.add(`${m.week_ending}|${m.territory}`);
+  }
+
+  if (warnings.length > 0) {
+    console.warn(
+      `[CTV Validation] ${campaignId} weekly_metrics:\n` +
+        warnings.join("\n")
+    );
+  }
+}
+
+function validateTrackMetrics(
+  trackMetrics: TrackWeeklyMetric[],
+  tracksLookup: TrackLookupEntry[],
+  campaignId: string
+): void {
+  const warnings: string[] = [];
+  const lookupNames = new Set(tracksLookup.map((t) => t.track_name));
+  const metricNames = new Set(trackMetrics.map((t) => t.track_name));
+
+  // Check for track names in metrics that don't exist in lookup
+  for (const name of metricNames) {
+    if (lookupNames.size > 0 && !lookupNames.has(name)) {
+      warnings.push(
+        `[track_metrics] Track "${name}" has data but no matching entry in campaign_setup/tracks_lookup`
+      );
+    }
+  }
+
+  // Check for tracks in lookup with no metric data
+  for (const name of lookupNames) {
+    if (!metricNames.has(name)) {
+      warnings.push(
+        `[tracks_lookup] Track "${name}" is defined but has no track_metrics data`
+      );
+    }
+  }
+
+  if (warnings.length > 0) {
+    console.warn(
+      `[CTV Validation] ${campaignId} track data:\n` +
+        warnings.join("\n")
+    );
+  }
+}
+
+// ——— Registry ——————————————————————————————————————————————
 const REGISTRY_SPREADSHEET_ID = process.env.REGISTRY_SPREADSHEET_ID!;
 
 export async function fetchRegistry(): Promise<RegistryEntry[]> {
@@ -160,27 +221,60 @@ export async function fetchActiveCampaigns(): Promise<RegistryEntry[]> {
   return all.filter((e) => e.status === "active");
 }
 
-// ——— Campaign Sheet Parsers ——————————————————————————————————
-// Each campaign lives in its own spreadsheet with required tabs:
-//   campaign_setup · campaign_moments · weekly_metrics
-// And optional tabs:
-//   track_metrics · tracks_lookup
+// ——— Campaign Sheet Parsers ————————————————————————————————
+// campaign_setup is now multi-row: one row per track.
+// Row 1 has the campaign-level info + first track.
+// Subsequent rows have track info only.
+// Columns: campaign_name(0) | campaign_slug(1) | artist(2) | start_week(3) |
+//           end_week(4) | territories(5) | track_name(6) | release_week(7) |
+//           track_role(8) | default_on(9) | sort_order(10) | release_date(11)
 
 export async function fetchCampaignSetup(
   sheetId: string
-): Promise<Campaign> {
+): Promise<{ campaign: Campaign; tracksLookup: TrackLookupEntry[] }> {
   const rows = await fetchRows(sheetId, "campaign_setup");
-  const row = rows[0] || [];
-  return {
-    campaign_id: row[0] || "unknown",
-    artist: row[1] || "Unknown Artist",
-    campaign_name: row[2] || "Untitled Campaign",
-    start_date: isValidDate(row[3]) ? row[3].trim() : undefined,
-    release_date: isValidDate(row[4]) ? row[4].trim() : undefined,
-    default_territory: row[5]
-      ? (cleanTerritory(row[5]) as Territory)
+  if (rows.length === 0) {
+    return {
+      campaign: {
+        campaign_id: "unknown",
+        artist: "Unknown Artist",
+        campaign_name: "Untitled Campaign",
+      },
+      tracksLookup: [],
+    };
+  }
+
+  // Campaign-level info from first row
+  const firstRow = rows[0];
+  const campaignId = (firstRow[1] || firstRow[0] || "unknown").trim();
+  const campaign: Campaign = {
+    campaign_id: campaignId,
+    artist: (firstRow[2] || firstRow[1] || "Unknown Artist").trim(),
+    campaign_name: (firstRow[0] || "Untitled Campaign").trim(),
+    start_date: isValidDate(firstRow[3]) ? firstRow[3].trim() : undefined,
+    release_date: isValidDate(firstRow[11]) ? firstRow[11].trim() : (isValidDate(firstRow[4]) ? firstRow[4].trim() : undefined),
+    default_territory: firstRow[5]
+      ? (cleanTerritory(firstRow[5]) as Territory)
       : undefined,
   };
+
+  // Parse track entries from ALL rows (including first)
+  const tracksLookup: TrackLookupEntry[] = [];
+  rows.forEach((row, index) => {
+    const trackName = row[6]?.trim();
+    if (!trackName) return; // skip rows without a track name
+
+    tracksLookup.push({
+      campaign_id: campaignId,
+      track_name: trackName,
+      release_week: isValidDate(row[7]) ? row[7].trim() : "",
+      track_role: cleanTrackRole(row[8]),
+      default_on: parseBool(row[9], false),
+      sort_order: safeNumber(row[10]) || index + 1,
+    });
+  });
+
+  return { campaign, tracksLookup };
 }
 
 export async function fetchCampaignMoments(
@@ -277,12 +371,12 @@ export async function fetchTrackMetrics(
     }));
 }
 
-// ——— Tracks Lookup (new) ————————————————————————————————————
-// Optional tab: tracks_lookup
+// ——— Tracks Lookup (legacy fallback) ——————————————————————————
+// If campaign_setup doesn't have track rows, try the legacy tracks_lookup tab.
 // Columns: track_name | release_week | track_role | default_on | sort_order
-
-export async function fetchTracksLookup(
-  sheetId: string
+async function fetchTracksLookupLegacy(
+  sheetId: string,
+  campaignId: string
 ): Promise<TrackLookupEntry[]> {
   const rows = await fetchRowsSafe(sheetId, "tracks_lookup");
   if (rows.length === 0) return [];
@@ -290,6 +384,7 @@ export async function fetchTracksLookup(
   return rows
     .filter((row) => row[0]?.trim()) // need at least a track name
     .map((row, index) => ({
+      campaign_id: campaignId,
       track_name: row[0].trim(),
       release_week: isValidDate(row[1]) ? row[1].trim() : "",
       track_role: cleanTrackRole(row[2]),
@@ -299,18 +394,36 @@ export async function fetchTracksLookup(
 }
 
 // ——— Full Campaign Loader ——————————————————————————————————
-
 export async function fetchCampaignSheetData(
   sheetId: string,
   campaignId: string
 ): Promise<SingleCampaignData> {
-  const [campaign, events, metrics, trackMetrics, tracksLookup] =
-    await Promise.all([
-      fetchCampaignSetup(sheetId),
-      fetchCampaignMoments(sheetId, campaignId),
-      fetchCampaignMetrics(sheetId, campaignId),
-      fetchTrackMetrics(sheetId, campaignId),
-      fetchTracksLookup(sheetId),
-    ]);
+  // Fetch campaign_setup first (now includes both campaign + tracks)
+  const setupResult = await fetchCampaignSetup(sheetId);
+  const campaign = setupResult.campaign;
+  // Override campaign_id with the one from the registry (authoritative)
+  campaign.campaign_id = campaignId;
+
+  // Fetch remaining tabs in parallel
+  const [events, metrics, trackMetrics] = await Promise.all([
+    fetchCampaignMoments(sheetId, campaignId),
+    fetchCampaignMetrics(sheetId, campaignId),
+    fetchTrackMetrics(sheetId, campaignId),
+  ]);
+
+  // Use tracks from campaign_setup; fall back to legacy tracks_lookup tab
+  let tracksLookup = setupResult.tracksLookup;
+  if (tracksLookup.length === 0) {
+    tracksLookup = await fetchTracksLookupLegacy(sheetId, campaignId);
+  }
+
+  // Ensure all tracksLookup entries have the correct campaign_id
+  tracksLookup = tracksLookup.map((t) => ({ ...t, campaign_id: campaignId }));
+
+  // ——— Validation ———————————————————————————————
+  const expectedTerritories = new Set(["global", "UK"]);
+  validateWeeklyMetrics(metrics, campaignId, expectedTerritories);
+  validateTrackMetrics(trackMetrics, tracksLookup, campaignId);
+
   return { campaign, events, metrics, trackMetrics, tracksLookup };
 }
