@@ -32,8 +32,7 @@ function formatDate(dateStr: string): string {
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-// ─── Custom Tooltip ─────────────────────────────────────────────
-
+// ——— Custom Tooltip ———————————————————————————————————————
 interface CustomTooltipProps {
   active?: boolean;
   payload?: Array<{
@@ -51,35 +50,99 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   const dataPoint = payload[0]?.payload;
   const events = dataPoint?.events || [];
 
+  const streamsEntry = payload.find((e) => e.name === "total_streams");
+  const physicalEntry = payload.find((e) => e.name === "physical_units");
+
+  const weeklyStreams = streamsEntry?.value || 0;
+  const cumulativeStreams = dataPoint?.cumulative_streams ?? 0;
+  const prevWeek = dataPoint?.prev_week_streams;
+
+  // Compute WoW change
+  let wowPct: number | null = null;
+  let wowAbsolute: number | null = null;
+  if (prevWeek !== null && prevWeek !== undefined && prevWeek > 0) {
+    wowAbsolute = weeklyStreams - prevWeek;
+    wowPct = ((weeklyStreams - prevWeek) / prevWeek) * 100;
+  }
+
   return (
     <div className="bg-surface-raised rounded-xl shadow-2xl border border-border-light p-4 max-w-xs backdrop-blur-sm">
+      {/* Date header */}
       <p className="text-[11px] font-semibold text-label-muted uppercase tracking-wider mb-2.5">
         {label ? formatDate(label) : ""}
       </p>
 
-      {payload.map((entry, i) => (
-        <div key={i} className="flex items-center gap-2.5 mb-1.5">
+      {/* Weekly Streams */}
+      {streamsEntry && (
+        <div className="flex items-center gap-2.5 mb-1">
           <span
             className="w-2 h-2 rounded-full"
-            style={{ backgroundColor: entry.color }}
+            style={{ backgroundColor: streamsEntry.color }}
           />
-          <span className="text-xs text-label-secondary">
-            {entry.name === "total_streams"
-              ? "Total DSP Streams"
-              : "Physical Units"}
-          </span>
+          <span className="text-xs text-label-secondary">Weekly Streams</span>
           <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
-            {formatNumber(entry.value)}
+            {formatNumber(weeklyStreams)}
           </span>
         </div>
-      ))}
+      )}
 
+      {/* Week-over-week change */}
+      {wowPct !== null && (
+        <div className="flex items-center gap-2.5 mb-1 ml-[18px]">
+          <span className="text-[11px] text-label-muted">vs Last Week</span>
+          <span
+            className={`text-xs font-semibold ml-auto tabular-nums ${
+              wowPct >= 0 ? "text-emerald-400" : "text-red-400"
+            }`}
+          >
+            {wowPct >= 0 ? "+" : ""}
+            {Math.abs(wowPct) >= 1000
+              ? `${(wowPct / 1000).toFixed(1)}x`
+              : `${wowPct.toFixed(0)}%`}
+            {wowAbsolute !== null && (
+              <span className="text-label-muted font-normal">
+                {" "}({wowAbsolute >= 0 ? "+" : ""}{formatNumber(wowAbsolute)})
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+
+      {/* Campaign Total to Date */}
+      {cumulativeStreams > 0 && (
+        <div className="flex items-center gap-2.5 mb-1.5 mt-1.5 pt-1.5 border-t border-border/40">
+          <span className="w-2 h-2 rounded-full bg-label-muted/30" />
+          <span className="text-xs text-label-secondary">Campaign Total</span>
+          <span className="text-sm font-bold text-label-primary ml-auto tabular-nums">
+            {formatNumber(cumulativeStreams)}
+          </span>
+        </div>
+      )}
+
+      {/* Physical */}
+      {physicalEntry && physicalEntry.value > 0 && (
+        <div className="flex items-center gap-2.5 mb-1 mt-1.5 pt-1.5 border-t border-border/40">
+          <span
+            className="w-2 h-2 rounded-sm flex-shrink-0"
+            style={{ backgroundColor: "#4ADE80", opacity: 0.5 }}
+          />
+          <span className="text-[11px] text-label-muted">Physical Units</span>
+          <span className="text-xs font-semibold text-label-secondary ml-auto tabular-nums">
+            {formatNumber(physicalEntry.value)}
+          </span>
+        </div>
+      )}
+
+      {/* Events */}
       {events.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-border">
+        <div className="mt-2.5 pt-2.5 border-t border-border">
+          <p className="text-[10px] font-semibold text-label-muted uppercase tracking-wider mb-1">
+            Moment
+          </p>
           {events.map((event: CampaignEvent, i: number) => {
             const cat = getCategoryConfig(event.event_type);
             return (
-              <div key={i} className="mb-2 last:mb-0">
+              <div key={i} className="mb-1.5 last:mb-0">
                 <div className="flex items-center gap-1.5">
                   <span
                     className="w-1.5 h-1.5 rounded-full"
@@ -89,9 +152,11 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
                     {event.event_title}
                   </span>
                 </div>
-                <p className="text-[11px] text-label-muted ml-3">
-                  {event.notes}
-                </p>
+                {event.notes && (
+                  <p className="text-[10px] text-label-muted ml-3">
+                    {event.notes}
+                  </p>
+                )}
               </div>
             );
           })}
@@ -101,8 +166,7 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   );
 }
 
-// ─── Custom Reference Line Label ────────────────────────────────
-
+// ——— Custom Reference Line Label ——————————————————————————
 function EventLabel({
   viewBox,
   events,
@@ -148,8 +212,7 @@ function EventLabel({
   );
 }
 
-// ─── Main Chart ─────────────────────────────────────────────────
-
+// ——— Main Chart ———————————————————————————————————————————
 export default function PerformanceChart({
   data,
   visibleEventDates,
