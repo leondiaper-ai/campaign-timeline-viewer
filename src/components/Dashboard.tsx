@@ -3,12 +3,12 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
 import {
-  buildChartData, getTrackList, getDefaultTracks, getAllTrackNames,
-  getAllMoments, inferTrackRoles, detectHandoverMoment, getChartInsight,
+  buildChartData, getAllTrackNames, getAllMoments,
+  inferTrackRoles, detectHandoverMoment, getChartInsight,
+  getCampaignSummary,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
-import CampaignStatusRow from "./CampaignStatusRow";
 import CampaignLearnings from "./CampaignLearnings";
 import TimelineChart from "./TimelineChart";
 
@@ -32,40 +32,17 @@ export default function Dashboard({ initialData }: DashboardProps) {
     if (sheet?.setup.default_territory) setTerritory(sheet.setup.default_territory);
   }, [sheet]);
 
-  // ALL tracks from weekly data (not just tracks tab) — ensures DJH shows
   const allTrackNames = useMemo(() => sheet ? getAllTrackNames(sheet) : [], [sheet]);
-
-  // Narrative roles — computed from data patterns
   const trackRoles = useMemo(() => sheet ? inferTrackRoles(sheet, territory) : [], [sheet, territory]);
-
-  // Chart data with ALL tracks
-  const chartData = useMemo(
-    () => sheet ? buildChartData(sheet, territory, allTrackNames) : [],
-    [sheet, territory, allTrackNames]
-  );
-
-  // Handover moment detection
-  const handoverMoment = useMemo(
-    () => sheet ? detectHandoverMoment(sheet, territory) : null,
-    [sheet, territory]
-  );
-
-  // Chart insight
-  const chartInsight = useMemo(
-    () => sheet ? getChartInsight(sheet, territory) : null,
-    [sheet, territory]
-  );
-
-  // Moments
+  const chartData = useMemo(() => sheet ? buildChartData(sheet, territory, allTrackNames) : [], [sheet, territory, allTrackNames]);
+  const handoverMoment = useMemo(() => sheet ? detectHandoverMoment(sheet, territory) : null, [sheet, territory]);
+  const chartInsight = useMemo(() => sheet ? getChartInsight(sheet, territory) : null, [sheet, territory]);
+  const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
   const moments = useMemo(() => sheet ? getAllMoments(sheet) : [], [sheet]);
-  const keyMomentDates = useMemo(
-    () => new Set(moments.filter((m) => m.is_key).map((m) => m.date)),
-    [moments]
-  );
+  const keyMomentDates = useMemo(() => new Set(moments.filter((m) => m.is_key).map((m) => m.date)), [moments]);
 
   const handleCampaignChange = useCallback((idx: number) => {
-    setCampaignIdx(idx);
-    setHighlightedDate(null);
+    setCampaignIdx(idx); setHighlightedDate(null);
   }, []);
 
   if (!campaign || !sheet) {
@@ -116,13 +93,20 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* 1. Status Row — Verdict, Top Moment, Momentum */}
-        <CampaignStatusRow sheet={sheet} territory={territory} />
+        {/* Campaign Summary — single clear block replacing 3 vague cards */}
+        <div className="bg-[#131620] rounded-xl border border-[#1E2130] px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mt-0.5 flex-shrink-0">
+              Campaign Summary
+            </span>
+            <p className="text-[13px] text-[#D1D5DB] leading-relaxed">{summary}</p>
+          </div>
+        </div>
 
-        {/* 2. Two stat cards only */}
+        {/* Two stat cards */}
         <CampaignInsights sheet={sheet} territory={territory} />
 
-        {/* 3. Chart (primary storytelling layer) */}
+        {/* Chart */}
         <div className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
           <h2 className="text-sm font-semibold text-white mb-3">Weekly Performance</h2>
           <TimelineChart
@@ -136,14 +120,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
           />
         </div>
 
-        {/* 4. Campaign Moments (primary narrative) */}
+        {/* Campaign Moments — full width, directly under chart */}
         {moments.length > 0 && (
-          <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-4">
+          <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-5">
             <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
               Campaign Moments
               <span className="text-[#4B5563] font-normal ml-2">({moments.length})</span>
             </h3>
-            <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-1 max-h-[320px] overflow-y-auto pr-1">
               {moments.map((moment: Moment, i: number) => {
                 const cat = getCategoryConfig(moment.moment_type);
                 return (
@@ -171,7 +155,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
           </div>
         )}
 
-        {/* 5. Campaign Learnings (supporting) */}
+        {/* Campaign Learnings — supporting, decision-led */}
         <CampaignLearnings sheet={sheet} territory={territory} />
       </main>
     </div>
