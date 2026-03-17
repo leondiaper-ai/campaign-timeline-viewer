@@ -1,7 +1,12 @@
-import { Campaign, WeeklyMetric, CampaignEvent, TrackWeeklyMetric, TrackLookupEntry } from "@/types";
+import {
+  Campaign,
+  WeeklyMetric,
+  CampaignEvent,
+  TrackWeeklyMetric,
+  TrackLookupEntry,
+} from "@/types";
 
-// âââ Campaigns ââââââââââââââââââââââââââââââââââââââââââââââââââ
-
+// ——— Campaigns ————————————————————————————————————————————
 export const mockCampaigns: Campaign[] = [
   {
     campaign_id: "arlo_parks_deluxe",
@@ -23,8 +28,7 @@ export const mockCampaigns: Campaign[] = [
   },
 ];
 
-// âââ Helper to generate weekly dates ââââââââââââââââââââââââââââ
-
+// ——— Helper to generate weekly dates ————————————————————————
 function weeklyDates(start: string, count: number): string[] {
   const dates: string[] = [];
   const d = new Date(start);
@@ -35,8 +39,7 @@ function weeklyDates(start: string, count: number): string[] {
   return dates;
 }
 
-// âââ Weekly Metrics âââââââââââââââââââââââââââââââââââââââââââââ
-
+// ——— Weekly Metrics ————————————————————————————————————————
 function generateMetrics(
   campaignId: string,
   startDate: string,
@@ -47,11 +50,9 @@ function generateMetrics(
 ): WeeklyMetric[] {
   const dates = weeklyDates(startDate, weeks);
   const metrics: WeeklyMetric[] = [];
-
   dates.forEach((date, i) => {
     const peakFactor = Math.exp(-0.5 * Math.pow((i - 7) / 3, 2));
     const noise = () => 0.9 + Math.random() * 0.2;
-
     const globalStreams = Math.round(
       baseStreams * (0.4 + peakFactor * 0.8) * noise()
     );
@@ -61,7 +62,6 @@ function generateMetrics(
     const globalD2c = Math.round(
       baseD2cUnits * (0.25 + peakFactor * 1.2) * noise()
     );
-
     const ukStreams = Math.round(globalStreams * (0.15 + Math.random() * 0.05));
     const ukRetail = Math.round(globalRetail * (0.22 + Math.random() * 0.06));
     const ukD2c = Math.round(globalD2c * (0.18 + Math.random() * 0.06));
@@ -85,7 +85,6 @@ function generateMetrics(
       }
     );
   });
-
   return metrics;
 }
 
@@ -95,13 +94,12 @@ export const mockMetrics: WeeklyMetric[] = [
   ...generateMetrics("billie_marten_album", "2026-01-19", 13, 900000, 1400, 800),
 ];
 
-// âââ Track Weekly Metrics âââââââââââââââââââââââââââââââââââââââ
-
+// ——— Track Weekly Metrics ——————————————————————————————————
 function generateTrackMetrics(
   campaignId: string,
   startDate: string,
   weeks: number,
-  tracks: Array<{ name: string; share: number; peakOffset: number }>
+  tracks: Array<{ name: string; share: number; peakOffset: number; startWeek?: number }>
 ): TrackWeeklyMetric[] {
   const dates = weeklyDates(startDate, weeks);
   const metrics: TrackWeeklyMetric[] = [];
@@ -116,6 +114,9 @@ function generateTrackMetrics(
     const totalStreams = campaignWeek?.total_streams || 0;
 
     tracks.forEach((track) => {
+      // Skip weeks before the track's start week
+      if (track.startWeek !== undefined && i < track.startWeek) return;
+
       // Each track peaks at different times
       const trackPeak = Math.exp(
         -0.5 * Math.pow((i - (7 + track.peakOffset)) / 3, 2)
@@ -161,9 +162,9 @@ export const mockTrackMetrics: TrackWeeklyMetric[] = [
   ...generateTrackMetrics("james_blake_album", "2026-02-02", 12, [
     { name: "Death Of Love", share: 0.3, peakOffset: 0 },
     { name: "I Had A Dream", share: 0.25, peakOffset: -1 },
-    { name: "Trying Times", share: 0.22, peakOffset: 1 },
-    { name: "Loading", share: 0.13, peakOffset: 2 },
-    { name: "Say What You Will", share: 0.1, peakOffset: -1 },
+    { name: "Trying Times", share: 0.22, peakOffset: 1, startWeek: 2 },
+    { name: "Loading", share: 0.13, peakOffset: 2, startWeek: 4 },
+    { name: "Say What You Will", share: 0.1, peakOffset: -1, startWeek: 4 },
   ]),
   ...generateTrackMetrics("billie_marten_album", "2026-01-19", 13, [
     { name: "Willow", share: 0.32, peakOffset: 0 },
@@ -173,10 +174,9 @@ export const mockTrackMetrics: TrackWeeklyMetric[] = [
   ]),
 ];
 
-// âââ Campaign Events ââââââââââââââââââââââââââââââââââââââââââââ
-
+// ——— Campaign Events ———————————————————————————————————————
 export const mockEvents: CampaignEvent[] = [
-  // ââ Arlo Parks ââââââââââââââââââââââââââââââââ
+  // —— Arlo Parks ——————————————————————————————
   {
     campaign_id: "arlo_parks_deluxe",
     date: "2026-01-12",
@@ -274,7 +274,8 @@ export const mockEvents: CampaignEvent[] = [
     territory: "global",
     notes: "Deluxe edition worldwide release",
     is_major: true,
-    observed_impact: "2.4M streams in release week. D2C peaked at \u00a318.2K.",
+    observed_impact:
+      "2.4M streams in release week. D2C peaked at \u00a318.2K.",
     what_we_learned:
       "Stacking vinyl drop + pre-save push in the two weeks before release built the strongest first-week we've had for this artist.",
     confidence: "high",
@@ -321,7 +322,7 @@ export const mockEvents: CampaignEvent[] = [
     source_platform: "meta",
   },
 
-  // ââ James Blake âââââââââââââââââââââââââââââââ
+  // —— James Blake ——————————————————————————————
   {
     campaign_id: "james_blake_album",
     date: "2026-02-09",
@@ -398,7 +399,8 @@ export const mockEvents: CampaignEvent[] = [
     territory: "global",
     notes: "20 creators seeded",
     is_major: false,
-    observed_impact: "Mixed \u2014 3 of 20 posts went viral, rest underperformed",
+    observed_impact:
+      "Mixed \u2014 3 of 20 posts went viral, rest underperformed",
     what_we_learned:
       "Creator seeding is high-variance. Fewer creators with stronger briefs would be a better use of budget.",
     confidence: "low",
@@ -406,7 +408,7 @@ export const mockEvents: CampaignEvent[] = [
     source_platform: "tiktok",
   },
 
-  // ââ Billie Marten âââââââââââââââââââââââââââââ
+  // —— Billie Marten ———————————————————————————
   {
     campaign_id: "billie_marten_album",
     date: "2026-01-26",
@@ -443,7 +445,8 @@ export const mockEvents: CampaignEvent[] = [
     territory: "UK",
     notes: "Arts section feature",
     is_major: false,
-    observed_impact: "Moderate \u2014 social shares high, stream lift small",
+    observed_impact:
+      "Moderate \u2014 social shares high, stream lift small",
     what_we_learned:
       "Guardian audience overlaps well with Billie's demo. Good for brand building, not direct conversion.",
     confidence: "medium",
@@ -456,7 +459,8 @@ export const mockEvents: CampaignEvent[] = [
     territory: "UK",
     notes: "Limited signed copies on D2C",
     is_major: true,
-    observed_impact: "680 units sold, \u00a39.5K D2C revenue in 48 hours",
+    observed_impact:
+      "680 units sold, \u00a39.5K D2C revenue in 48 hours",
     what_we_learned:
       "Signed product is the strongest D2C lever for this artist. Should do two drops (announcement + release week) next time.",
     confidence: "high",
@@ -499,20 +503,26 @@ export const mockEvents: CampaignEvent[] = [
 ];
 
 // ——— Tracks Lookup (metadata for track toggles) ————————————————
-
+// FIXED: Now references the actual campaigns and track names that exist
+// in the mock data above. Each entry includes campaign_id for filtering.
 export const mockTracksLookup: TrackLookupEntry[] = [
-  // K Trap tracks
-  { track_name: "Impurities", release_week: "2025-01-17", track_role: "lead_single", default_on: true, sort_order: 1 },
-  { track_name: "Different Cloth", release_week: "2025-02-14", track_role: "second_single", default_on: true, sort_order: 2 },
-  { track_name: "Warm", release_week: "2025-03-07", track_role: "focus_track", default_on: false, sort_order: 3 },
-  { track_name: "Glorious", release_week: "2025-03-07", track_role: "album_track", default_on: false, sort_order: 4 },
-  { track_name: "Paper Plans", release_week: "2025-03-07", track_role: "album_track", default_on: false, sort_order: 5 },
-  // Keshi tracks
-  { track_name: "blue", release_week: "2024-11-01", track_role: "lead_single", default_on: true, sort_order: 1 },
-  { track_name: "limbo", release_week: "2024-11-15", track_role: "second_single", default_on: true, sort_order: 2 },
-  { track_name: "mango", release_week: "2024-12-06", track_role: "album_track", default_on: false, sort_order: 3 },
-  // Central Cee tracks
-  { track_name: "Band4Band", release_week: "2025-02-07", track_role: "lead_single", default_on: true, sort_order: 1 },
-  { track_name: "Limitless", release_week: "2025-02-21", track_role: "second_single", default_on: true, sort_order: 2 },
-  { track_name: "One By One", release_week: "2025-03-14", track_role: "focus_track", default_on: false, sort_order: 3 },
+  // Arlo Parks — Deluxe Campaign
+  { campaign_id: "arlo_parks_deluxe", track_name: "Devotion (Deluxe)", release_week: "2026-01-05", track_role: "lead_single", default_on: true, sort_order: 1 },
+  { campaign_id: "arlo_parks_deluxe", track_name: "Weightless", release_week: "2026-01-05", track_role: "second_single", default_on: true, sort_order: 2 },
+  { campaign_id: "arlo_parks_deluxe", track_name: "Softly", release_week: "2026-01-05", track_role: "focus_track", default_on: false, sort_order: 3 },
+  { campaign_id: "arlo_parks_deluxe", track_name: "Impurities", release_week: "2026-01-05", track_role: "album_track", default_on: false, sort_order: 4 },
+  { campaign_id: "arlo_parks_deluxe", track_name: "Blades", release_week: "2026-01-05", track_role: "album_track", default_on: false, sort_order: 5 },
+
+  // James Blake — Album Launch
+  { campaign_id: "james_blake_album", track_name: "Death Of Love", release_week: "2026-02-02", track_role: "lead_single", default_on: true, sort_order: 1 },
+  { campaign_id: "james_blake_album", track_name: "I Had A Dream", release_week: "2026-02-02", track_role: "second_single", default_on: true, sort_order: 2 },
+  { campaign_id: "james_blake_album", track_name: "Trying Times", release_week: "2026-02-16", track_role: "focus_track", default_on: false, sort_order: 3 },
+  { campaign_id: "james_blake_album", track_name: "Loading", release_week: "2026-03-02", track_role: "album_track", default_on: false, sort_order: 4 },
+  { campaign_id: "james_blake_album", track_name: "Say What You Will", release_week: "2026-03-02", track_role: "album_track", default_on: false, sort_order: 5 },
+
+  // Billie Marten — Album Campaign
+  { campaign_id: "billie_marten_album", track_name: "Willow", release_week: "2026-01-19", track_role: "lead_single", default_on: true, sort_order: 1 },
+  { campaign_id: "billie_marten_album", track_name: "Garden Song", release_week: "2026-01-19", track_role: "second_single", default_on: true, sort_order: 2 },
+  { campaign_id: "billie_marten_album", track_name: "Ribbon", release_week: "2026-01-19", track_role: "focus_track", default_on: false, sort_order: 3 },
+  { campaign_id: "billie_marten_album", track_name: "Human Replacement", release_week: "2026-01-19", track_role: "album_track", default_on: false, sort_order: 4 },
 ];
