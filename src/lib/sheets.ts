@@ -360,13 +360,14 @@ export async function fetchTrackMetrics(
   const rows = await fetchRowsSafe(sheetId, "track_metrics");
   if (rows.length === 0) return [];
 
+  // Columns: week_ending(0) | territory(1) | track_name(2) | total_streams(3)
   return rows
-    .filter((row) => row[0] && isValidDate(row[0]) && row[1]) // need date + track name
+    .filter((row) => row[0] && isValidDate(row[0]) && row[2]) // need date + track name
     .map((row) => ({
       campaign_id: campaignId,
       week_ending: row[0].trim(),
-      track_name: row[1].trim(),
-      territory: cleanTerritory(row[2]) as Territory,
+      track_name: row[2].trim(),
+      territory: cleanTerritory(row[1]) as Territory,
       total_streams: safeNumber(row[3]),
     }));
 }
