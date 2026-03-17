@@ -9,6 +9,9 @@ export async function GET() {
     return NextResponse.json(data);
   } catch (error) {
     console.error("Failed to fetch campaign data:", error);
-    return NextResponse.json({ error: "Failed to fetch data" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch data" },
+      { status: 500 }
+    );
   }
 }
