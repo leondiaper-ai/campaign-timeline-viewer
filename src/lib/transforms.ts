@@ -128,25 +128,44 @@ export function buildChartData(
   return result;
 }
 
-// ——— Track List (sorted by sort_order) —————————————————————‒
+// ——— Track List (sorted by sort_order) ——————————————————————
 export function getTrackList(sheet: CampaignSheetData): Track[] {
   return [...sheet.tracks].sort((a, b) => a.sort_order - b.sort_order);
 }
 
 // ——— Default Track Selection ————————————————————————————————
+// Priority: explicit default_on → singles (rollout narrative) → first 2
+// The chart should tell the rollout story by default:
+//   singles release sequence → album spike visible in total line
+// Album tracks / title tracks are available but NOT default — they
+// dominate the scale and obscure the narrative arc.
+
 export function getDefaultTracks(tracks: Track[]): string[] {
-  // 1. Use explicit default_on if set
+  // 1. Use explicit default_on if set on ANY track
   const withDefault = tracks.filter((t) => t.default_on);
   if (withDefault.length > 0) return withDefault.map((t) => t.track_name);
 
-  // 2. Fallback for album: lead_single + second_single
-  const leads = tracks.filter(
-    (t) =>
-      t.track_role === "lead_single" || t.track_role === "second_single"
+  // 2. Prefer singles — they tell the rollout story
+  const NARRATIVE_ROLES = [
+    "lead_single",
+    "second_single",
+    "third_single",
+    "promo_single",
+    "focus_track",
+  ];
+  const singles = tracks.filter((t) =>
+    NARRATIVE_ROLES.includes(t.track_role)
   );
-  if (leads.length > 0) return leads.map((t) => t.track_name);
+  if (singles.length > 0) return singles.map((t) => t.track_name);
 
-  // 3. Fallback: first 2 tracks by sort_order
+  // 3. Fallback: first 2 non-album tracks by sort_order
+  const nonAlbum = tracks.filter(
+    (t) => t.track_role !== "album_track" && t.track_role !== "title_track"
+  );
+  if (nonAlbum.length > 0)
+    return nonAlbum.slice(0, 2).map((t) => t.track_name);
+
+  // 4. Final fallback: first 2 tracks
   return tracks.slice(0, 2).map((t) => t.track_name);
 }
 
