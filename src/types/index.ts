@@ -90,7 +90,7 @@ export interface RegistryEntry {
   campaign_owner: string;
 }
 
-// ——— API Response ————————————————————————————————————————————
+// ——— API Response —————————————————————————————————————————
 /** Data for a single campaign sheet */
 export interface SingleCampaignData {
   campaign: Campaign;
@@ -127,6 +127,8 @@ export interface ChartDataPoint {
   date: string;
   total_streams: number;
   physical_units: number;
+  cumulative_streams: number;
+  prev_week_streams: number | null;
   events: CampaignEvent[];
 }
 
