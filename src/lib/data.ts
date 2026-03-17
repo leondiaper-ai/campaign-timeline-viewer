@@ -1,7 +1,13 @@
 import { CampaignData, SingleCampaignData, RegistryEntry } from "@/types";
-import { mockCampaigns, mockMetrics, mockEvents, mockTrackMetrics } from "./mock-data";
+import {
+  mockCampaigns,
+  mockMetrics,
+  mockEvents,
+  mockTrackMetrics,
+  mockTracksLookup,
+} from "./mock-data";
 
-// ─── Data Fetcher (mock or Google Sheets) ───────────────────────
+// ——— Data Fetcher (mock or Google Sheets) ———————————————————
 // This file is server-only. Client components should import from
 // @/lib/transforms instead for buildChartData / getFilteredEvents.
 
@@ -41,6 +47,7 @@ export async function getCampaignData(): Promise<CampaignData> {
       metrics: mockMetrics,
       events: mockEvents,
       trackMetrics: mockTrackMetrics,
+      tracksLookup: mockTracksLookup,
     };
   }
 
@@ -61,5 +68,6 @@ export async function getCampaignData(): Promise<CampaignData> {
     metrics: results.flatMap((r) => r.metrics),
     events: results.flatMap((r) => r.events),
     trackMetrics: results.flatMap((r) => r.trackMetrics),
+    tracksLookup: results.flatMap((r) => r.tracksLookup),
   };
 }
