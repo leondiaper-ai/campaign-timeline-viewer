@@ -1,25 +1,35 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
-import { CampaignData, Territory } from "@/types";
+import { useMemo, useState, useCallback, useEffect } from "react";
+import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
 import {
-  buildUnifiedChartData,
-  getFilteredEvents,
-  getTopLearnings,
+  buildChartData,
   getTrackList,
   getDefaultTracks,
+  getPeakWeekStats,
+  getAllMoments,
 } from "@/lib/transforms";
-import { generateObservations } from "@/lib/observations";
-import CampaignSelector from "./CampaignSelector";
-import TerritoryToggle from "./TerritoryToggle";
-import CampaignInsights from "./CampaignInsights";
+import { getCategoryConfig } from "@/lib/event-categories";
 import TimelineChart from "./TimelineChart";
-import EventList from "./EventList";
-import CategoryLegend from "./CategoryLegend";
-import CampaignLearnings from "./CampaignLearnings";
 
-// ——— Track palette (must match TimelineChart) ————————————————
+// ——— Number formatting ——————————————————————————————————————
+function fmt(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
+  return value.toLocaleString();
+}
 
+function formatDate(dateStr: string): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr + "T00:00:00");
+  return date.toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+// ——— Track Colors ——————————————————————————————————————————
 const TRACK_COLORS = [
   "#FBBF24",
   "#F472B6",
@@ -29,348 +39,309 @@ const TRACK_COLORS = [
   "#F97316",
 ];
 
-// ——— Role labels for track chips ————————————————————————————
-
-const ROLE_LABELS: Record<string, string> = {
-  lead_single: "Lead",
-  second_single: "2nd",
-  focus_track: "Focus",
-  album_track: "Album",
-};
-
+// ——— Dashboard ——————————————————————————————————————————————
 interface DashboardProps {
-  initialData: CampaignData;
+  initialData: AppData;
 }
 
 export default function Dashboard({ initialData }: DashboardProps) {
-  const [campaignId, setCampaignId] = useState(
-    initialData.campaigns[0]?.campaign_id || ""
-  );
+  const campaigns = initialData.campaigns;
+
+  // State
+  const [campaignIdx, setCampaignIdx] = useState(0);
   const [territory, setTerritory] = useState<Territory>("global");
-  const [toggledDates, setToggledDates] = useState<Set<string>>(new Set());
-  const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
-  const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
-  const [tracksInitialized, setTracksInitialized] = useState(false);
-
-  // ——— Derived Data ———————————————————————————————————
-
-  const trackList = useMemo(
-    () => getTrackList(initialData, campaignId, territory),
-    [initialData, campaignId, territory]
+  const [selectedTracks, setSelectedTracks] = useState<string[] | null>(
+    null
+  );
+  const [highlightedDate, setHighlightedDate] = useState<string | null>(
+    null
   );
 
-  // Auto-select default tracks on first render / campaign change
-  if (!tracksInitialized && trackList.length > 0) {
-    const defaults = getDefaultTracks(trackList);
-    if (defaults.length > 0) {
-      setSelectedTracks(defaults);
-      setTracksInitialized(true);
-    }
-  }
+  // Current campaign
+  const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
+  const sheet = campaign?.sheet;
 
+  // Set default territory from campaign setup
+  useEffect(() => {
+    if (sheet?.setup.default_territory) {
+      setTerritory(sheet.setup.default_territory);
+    }
+  }, [sheet]);
+
+  // Track list (sorted by sort_order)
+  const trackList = useMemo(
+    () => (sheet ? getTrackList(sheet) : []),
+    [sheet]
+  );
+
+  // Active tracks (default or user-selected)
+  const activeTracks = useMemo(() => {
+    if (selectedTracks !== null) return selectedTracks;
+    return getDefaultTracks(trackList);
+  }, [selectedTracks, trackList]);
+
+  // Chart data
   const chartData = useMemo(
     () =>
-      buildUnifiedChartData(
-        initialData,
-        campaignId,
-        territory,
-        selectedTracks
-      ),
-    [initialData, campaignId, territory, selectedTracks]
+      sheet ? buildChartData(sheet, territory, activeTracks) : [],
+    [sheet, territory, activeTracks]
   );
 
-  const events = useMemo(
-    () => getFilteredEvents(initialData, campaignId, territory),
-    [initialData, campaignId, territory]
+  // KPI stats
+  const stats = useMemo(
+    () => (sheet ? getPeakWeekStats(sheet, territory) : null),
+    [sheet, territory]
   );
 
-  const observations = useMemo(
-    () =>
-      generateObservations(
-        initialData.events,
-        initialData.metrics,
-        campaignId,
-        territory
-      ),
-    [initialData, campaignId, territory]
+  // Moments
+  const moments = useMemo(
+    () => (sheet ? getAllMoments(sheet) : []),
+    [sheet]
+  );
+  const keyMomentDates = useMemo(
+    () => new Set(moments.filter((m) => m.is_key).map((m) => m.date)),
+    [moments]
   );
 
-  const learnings = useMemo(
-    () => getTopLearnings(events, observations, 3),
-    [events, observations]
+  // Track toggle handler
+  const toggleTrack = useCallback(
+    (trackName: string) => {
+      setSelectedTracks((prev) => {
+        const current = prev ?? getDefaultTracks(trackList);
+        if (current.includes(trackName)) {
+          return current.filter((t) => t !== trackName);
+        }
+        return [...current, trackName];
+      });
+    },
+    [trackList]
   );
 
-  const selectedCampaign = initialData.campaigns.find(
-    (c) => c.campaign_id === campaignId
-  );
-
-  // ——— Handlers ——————————————————————————————————————
-
-  const handleCampaignChange = useCallback((id: string) => {
-    setCampaignId(id);
-    setToggledDates(new Set());
-    setSelectedTracks([]);
-    setTracksInitialized(false);
+  // Campaign switch
+  const handleCampaignChange = useCallback((idx: number) => {
+    setCampaignIdx(idx);
+    setSelectedTracks(null);
+    setHighlightedDate(null);
   }, []);
 
-  const handleTerritoryChange = useCallback((t: Territory) => {
-    setTerritory(t);
-    setToggledDates(new Set());
-    setSelectedTracks([]);
-    setTracksInitialized(false);
-  }, []);
-
-  const handleToggleVisibility = useCallback((date: string) => {
-    setToggledDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) {
-        next.delete(date);
-      } else {
-        next.add(date);
-      }
-      return next;
-    });
-  }, []);
-
-  const handleTrackToggle = useCallback((trackName: string) => {
-    setSelectedTracks((prev) => {
-      if (prev.includes(trackName)) {
-        return prev.filter((t) => t !== trackName);
-      }
-      if (prev.length >= 6) return prev; // max 6 tracks
-      return [...prev, trackName];
-    });
-  }, []);
-
-  const visibleEventDates = useMemo(() => {
-    const dates = new Set<string>();
-    events.forEach((e) => {
-      if (e.is_major || toggledDates.has(e.date)) {
-        dates.add(e.date);
-      }
-    });
-    return dates;
-  }, [events, toggledDates]);
-
-  const majorCount = events.filter((e) => e.is_major).length;
-
-  // ——— Render ————————————————————————————————————————
+  if (!campaign || !sheet) {
+    return (
+      <div className="min-h-screen bg-surface-base flex items-center justify-center">
+        <p className="text-label-muted text-lg">
+          No active campaigns found.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#0F1117" }}>
-      {/* ——— Header ————————————————————————— */}
-      <header
-        className="border-b"
-        style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
-      >
-        <div className="max-w-[1440px] mx-auto px-8 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-8">
-            <div className="flex items-center gap-3">
-              <div className="w-1 h-6 rounded-full bg-streams" />
-              <h1 className="text-base font-bold text-label-primary tracking-tight">
-                Campaign Timeline
+    <div className="min-h-screen bg-surface-base text-label-primary">
+      {/* Header */}
+      <header className="border-b border-border px-6 py-4">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {campaigns.length > 1 ? (
+              <select
+                className="bg-surface-raised border border-border rounded-lg px-3 py-1.5 text-sm font-medium text-label-primary"
+                value={campaignIdx}
+                onChange={(e) =>
+                  handleCampaignChange(Number(e.target.value))
+                }
+              >
+                {campaigns.map((c, i) => (
+                  <option key={c.campaign_id} value={i}>
+                    {c.sheet.setup.artist_name} —{" "}
+                    {c.sheet.setup.campaign_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <h1 className="text-lg font-semibold">
+                {sheet.setup.artist_name}{" "}
+                <span className="text-label-muted font-normal">
+                  — {sheet.setup.campaign_name}
+                </span>
               </h1>
-            </div>
-            <div className="w-px h-6 bg-border" />
-            <CampaignSelector
-              campaigns={initialData.campaigns}
-              selectedId={campaignId}
-              onChange={handleCampaignChange}
-            />
+            )}
+            <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full bg-surface-raised text-label-muted border border-border">
+              {sheet.setup.campaign_type}
+            </span>
           </div>
 
-          <TerritoryToggle
-            selected={territory}
-            onChange={handleTerritoryChange}
-          />
+          {/* Territory toggle */}
+          <div className="flex items-center gap-1 bg-surface-raised rounded-lg p-0.5 border border-border">
+            {(["global", "UK"] as Territory[]).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTerritory(t)}
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  territory === t
+                    ? "bg-white/10 text-label-primary shadow-sm"
+                    : "text-label-muted hover:text-label-secondary"
+                }`}
+              >
+                {t === "global" ? "Global" : "UK"}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      {/* ——— Main ——————————————————————————— */}
-      <main className="max-w-[1440px] mx-auto px-8 py-8">
-        {/* Campaign hero */}
-        <div className="mb-6 flex items-end justify-between">
-          <div>
-            <h2 className="text-3xl font-bold text-label-primary tracking-tight">
-              {selectedCampaign?.artist}
-            </h2>
-            <p className="text-sm text-label-muted mt-1">
-              {selectedCampaign?.campaign_name}
-              <span className="mx-2 text-border">|</span>
-              {territory === "global" ? "Global" : territory}
-              <span className="mx-2 text-border">|</span>
-              {majorCount} key moments &middot; {events.length} total
-            </p>
+      <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
+        {/* KPI Cards */}
+        {stats && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KPICard
+              label="Total Streams"
+              value={fmt(stats.totalStreams)}
+            />
+            <KPICard
+              label="Peak Week"
+              value={fmt(stats.peakWeekStreams)}
+              sub={
+                stats.peakWeekDate
+                  ? formatDate(stats.peakWeekDate)
+                  : undefined
+              }
+            />
+            <KPICard
+              label="Top Track"
+              value={stats.topTrackName}
+              sub={
+                stats.topTrackStreams > 0
+                  ? fmt(stats.topTrackStreams)
+                  : undefined
+              }
+            />
+            <KPICard
+              label="Physical Units"
+              value={fmt(stats.totalPhysical)}
+            />
           </div>
-          <CategoryLegend />
-        </div>
+        )}
 
-        {/* ——— KPI Cards ————————————————————— */}
-        <CampaignInsights
-          data={initialData}
-          campaignId={campaignId}
-          territory={territory}
-        />
-
-        {/* ——— Chart Card ———————————————————— */}
-        <div
-          className="rounded-xl border overflow-hidden"
-          style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
-        >
-          <div className="px-6 pt-5 pb-2 flex items-center justify-between">
-            <h3 className="text-[11px] font-bold text-label-muted uppercase tracking-[0.15em]">
-              Weekly Performance
-            </h3>
-
-            {/* Chart legend */}
-            <div className="flex items-center gap-5">
-              {/* Campaign total */}
-              <div className="flex items-center gap-2">
-                <span className="w-5 h-[3px] rounded-full bg-streams inline-block" />
-                <span className="text-[11px] text-label-muted font-medium">
-                  Total Streams
-                </span>
-              </div>
-
-              {/* Track legend entries */}
-              {selectedTracks.map((track, i) => (
-                <div key={track} className="flex items-center gap-2">
+        {/* Track Toggles */}
+        {trackList.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-label-muted mr-1">
+              Tracks
+            </span>
+            {trackList.map((track, i) => {
+              const isOn = activeTracks.includes(track.track_name);
+              const color = TRACK_COLORS[i % TRACK_COLORS.length];
+              return (
+                <button
+                  key={track.track_name}
+                  onClick={() => toggleTrack(track.track_name)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+                    isOn
+                      ? "border-white/20 bg-white/5 text-label-primary"
+                      : "border-border bg-transparent text-label-muted hover:text-label-secondary"
+                  }`}
+                >
                   <span
-                    className="w-4 h-[2px] rounded-full inline-block"
+                    className="w-2 h-2 rounded-full flex-shrink-0"
                     style={{
-                      backgroundColor:
-                        TRACK_COLORS[i % TRACK_COLORS.length],
-                      opacity: 0.7,
+                      backgroundColor: isOn ? color : "#3A3D4E",
+                      opacity: isOn ? 1 : 0.4,
                     }}
                   />
+                  {track.track_name}
                   <span className="text-[10px] text-label-muted">
-                    {track.length > 18
-                      ? track.substring(0, 16) + "\u2026"
-                      : track}
+                    {track.track_role.replace(/_/g, " ")}
                   </span>
-                </div>
-              ))}
-
-              {/* Physical */}
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-4 h-3 rounded-sm inline-block"
-                  style={{ backgroundColor: "#4ADE80", opacity: 0.25 }}
-                />
-                <span className="text-[11px] text-label-muted font-medium">
-                  Physical
-                </span>
-              </div>
-
-              {/* Moments */}
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-4 h-[2px] inline-block"
-                  style={{
-                    background:
-                      "repeating-linear-gradient(90deg, #353849 0, #353849 2px, transparent 2px, transparent 5px)",
-                  }}
-                />
-                <span className="text-[11px] text-label-muted font-medium">
-                  Moment
-                </span>
-              </div>
-            </div>
+                </button>
+              );
+            })}
           </div>
+        )}
 
-          {/* Track selector chips */}
-          {trackList.length > 0 && (
-            <div className="px-6 pb-2 flex flex-wrap gap-2">
-              {trackList.map((track) => {
-                const isSelected = selectedTracks.includes(track.track_name);
-                const trackIndex = selectedTracks.indexOf(track.track_name);
-                const chipColor =
-                  trackIndex >= 0
-                    ? TRACK_COLORS[trackIndex % TRACK_COLORS.length]
-                    : undefined;
-                const roleLabel = track.track_role
-                  ? ROLE_LABELS[track.track_role]
-                  : undefined;
-
-                return (
-                  <button
-                    key={track.track_name}
-                    onClick={() => handleTrackToggle(track.track_name)}
-                    className={`px-3 py-1.5 text-[11px] font-medium rounded-lg border transition-all ${
-                      isSelected
-                        ? "text-label-primary"
-                        : "bg-transparent border-border text-label-muted hover:border-border-light"
-                    }`}
-                    style={
-                      isSelected && chipColor
-                        ? {
-                            backgroundColor: chipColor + "15",
-                            borderColor: chipColor + "60",
-                          }
-                        : undefined
-                    }
-                  >
-                    {track.track_name}
-                    {roleLabel && (
-                      <span
-                        className="ml-1.5 text-[9px] uppercase tracking-wider opacity-60"
-                      >
-                        {roleLabel}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {/* The unified chart */}
+        {/* Chart */}
+        <div className="bg-surface-raised rounded-2xl border border-border p-5">
           <TimelineChart
             data={chartData}
-            selectedTracks={selectedTracks}
-            visibleEventDates={visibleEventDates}
+            selectedTracks={activeTracks}
+            visibleEventDates={keyMomentDates}
             highlightedDate={highlightedDate}
           />
         </div>
 
-        {/* ——— Events Card ———————————————————— */}
-        <div
-          className="mt-6 rounded-xl border overflow-hidden"
-          style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
-        >
-          <div className="px-5 pt-5 pb-2 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <h3 className="text-[11px] font-bold text-label-muted uppercase tracking-[0.15em]">
-                Campaign Moments
-              </h3>
-              <span className="text-[10px] text-label-muted font-mono px-2 py-0.5 rounded bg-surface-primary border border-border/50">
-                {events.length}
+        {/* Moments List */}
+        {moments.length > 0 && (
+          <div className="bg-surface-raised rounded-2xl border border-border p-5">
+            <h2 className="text-sm font-semibold text-label-primary mb-4">
+              Campaign Moments
+              <span className="text-label-muted font-normal ml-2">
+                ({moments.length})
               </span>
+            </h2>
+            <div className="space-y-2 max-h-[320px] overflow-y-auto">
+              {moments.map((moment: Moment, i: number) => {
+                const cat = getCategoryConfig(moment.moment_type);
+                return (
+                  <div
+                    key={i}
+                    className={`flex items-start gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
+                      highlightedDate === moment.date
+                        ? "bg-white/5"
+                        : "hover:bg-white/[0.02]"
+                    }`}
+                    onMouseEnter={() =>
+                      setHighlightedDate(moment.date)
+                    }
+                    onMouseLeave={() => setHighlightedDate(null)}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0"
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-label-primary">
+                          {moment.moment_title}
+                        </span>
+                        {moment.is_key && (
+                          <span className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
+                            Key
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-label-muted">
+                        {formatDate(moment.date)} · {cat.label}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-            <p className="text-[11px] text-label-muted">
-              <span className="text-streams font-medium">Key</span> moments
-              always visible &middot; click to expand insights &middot; minor
-              rows toggle chart markers
-            </p>
-          </div>
-          <EventList
-            events={events}
-            observations={observations}
-            visibleDates={toggledDates}
-            onToggleVisibility={handleToggleVisibility}
-            onHoverDate={setHighlightedDate}
-            trackPerformance={[]}
-            territory={territory}
-          />
-        </div>
-
-        {/* ——— Learnings Panel ————————————————— */}
-        {learnings.length > 0 && (
-          <div className="mt-6">
-            <CampaignLearnings learnings={learnings} />
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+// ——— KPI Card ——————————————————————————————————————————————
+function KPICard({
+  label,
+  value,
+  sub,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+}) {
+  return (
+    <div className="bg-surface-raised rounded-xl border border-border p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-label-muted mb-1">
+        {label}
+      </p>
+      <p className="text-xl font-bold text-label-primary tabular-nums truncate">
+        {value}
+      </p>
+      {sub && (
+        <p className="text-[11px] text-label-muted mt-0.5">{sub}</p>
+      )}
     </div>
   );
 }
