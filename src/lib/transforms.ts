@@ -167,9 +167,13 @@ export function buildChartData(
       cumulative_streams: 0, prev_week_streams: null, events: momentsByDate.get(date) || [],
     };
     selectedTracks.forEach((track) => {
-      const releaseDate = trackReleaseDates.get(track);
-      if (releaseDate && date < releaseDate) point[track] = null;
-      else point[track] = trackByDate.get(track)?.get(date) ?? 0;
+      const trackDates = trackByDate.get(track);
+      if (!trackDates || !trackDates.has(date)) {
+        // Track has no data for this week — null (skip, don't plot)
+        point[track] = null;
+      } else {
+        point[track] = trackDates.get(date)!;
+      }
     });
     return point;
   });
@@ -192,7 +196,9 @@ export function buildChartData(
   for (let i = 0; i < result.length; i++) {
     runningTotal += result[i].total_streams;
     result[i].cumulative_streams = runningTotal;
-    result[i].prev_week_streams = i > 0 ? result[i - 1].total_streams : null;
+    result[i].prev_week_streams = (i > 0 && result[i].total_streams > 0)
+      ? (() => { for (let j = i - 1; j >= 0; j--) { if (result[j].total_streams > 0) return result[j].total_streams; } return null; })()
+      : null;
   }
   return result;
 }
@@ -328,37 +334,47 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
   const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
     .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
 
-  // 1. Pre-release phase
+  // 1. Pre-release assessment
   const preRows = totalRows.filter(r => r.week_start_date < albumDate);
   if (preRows.length > 0) {
-    const preTotal = preRows.reduce((s, r) => s + r[streamKey], 0);
+    const peaked = preRows.some(r => r[streamKey] > 100000);
     learnings.push({
       icon: "\u25CB",
-      text: `Pre-release singles drove light setup — ${fmtNum(preTotal)} total, no sustained lift`,
+      text: peaked
+        ? `Pre-release singles drove initial interest but did not sustain momentum`
+        : `Pre-release singles did not sustain momentum`,
     });
   }
 
-  // 2. Album peak
+  // 2. Album peak + drop
   const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
-  if (peakRow) {
+  const postPeakRows = totalRows.filter(r => r.week_start_date > peakRow.week_start_date);
+  if (peakRow && postPeakRows.length > 0) {
+    const dropTo = postPeakRows[0][streamKey];
+    const dropPct = Math.round((1 - dropTo / peakRow[streamKey]) * 100);
     learnings.push({
       icon: "\u25B2",
-      text: `Album release drove peak week (~${fmtNum(peakRow[streamKey])} streams)`,
+      text: `Album drove peak (~${fmtNum(peakRow[streamKey])}) but dropped ${dropPct}% the following week`,
+    });
+  } else if (peakRow) {
+    learnings.push({
+      icon: "\u25B2",
+      text: `Album drove peak week (~${fmtNum(peakRow[streamKey])} streams)`,
     });
   }
 
-  // 3. Post-release breakout
+  // 3. Post-release breakout — decision recommendation
   const roles = inferTrackRoles(sheet, territory);
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (breakout) {
-    const breakoutRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r.week_start_date >= albumDate)
+    const bRows = sheet.weeklyData
+      .filter(r => r.track_name === breakout.track_name && r[streamKey] > 0)
       .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
-    const avgPost = breakoutRows.length > 0
-      ? breakoutRows.reduce((s,r) => s + r[streamKey], 0) / breakoutRows.length : 0;
+    const avgPost = bRows.length > 0
+      ? bRows.reduce((s,r) => s + r[streamKey], 0) / bRows.length : 0;
     learnings.push({
       icon: "\u2605",
-      text: `Post-release, "\u200B${breakout.track_name}" holds while others decline (~${fmtNum(avgPost)}/wk)`,
+      text: `"\u200B${breakout.track_name}" is the only post-release track holding (~${fmtNum(avgPost)}/wk) \u2014 focus track`,
     });
   }
 
@@ -371,4 +387,31 @@ export function getChartInsight(sheet: CampaignSheetData, territory: Territory):
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (!breakout) return null;
   return `Post-album, "\u200B${breakout.track_name}" is the only track holding meaningful volume`;
+}
+
+
+// ——— Single Campaign Summary (replaces 3 vague cards) ————————
+export function getCampaignSummary(sheet: CampaignSheetData, territory: Territory): string {
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
+
+  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+
+  const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
+  const peakDate = peakRow?.week_start_date || "";
+  const peakDateFmt = peakDate ? new Date(peakDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
+
+  const roles = inferTrackRoles(sheet, territory);
+  const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
+
+  if (breakout) {
+    const bRows = sheet.weeklyData
+      .filter(r => r.track_name === breakout.track_name && r[streamKey] > 0);
+    const avgPost = bRows.length > 0
+      ? bRows.reduce((s,r) => s + r[streamKey], 0) / bRows.length : 0;
+    return `Album peaked at ~${fmtNum(peakRow[streamKey])} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
+  }
+
+  return `Album peaked at ~${fmtNum(peakRow[streamKey])} streams (w/c ${peakDateFmt}).`;
 }
