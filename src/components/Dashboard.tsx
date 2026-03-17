@@ -10,7 +10,6 @@ import {
   getDefaultTracks,
 } from "@/lib/transforms";
 import { generateObservations } from "@/lib/observations";
-
 import CampaignSelector from "./CampaignSelector";
 import TerritoryToggle from "./TerritoryToggle";
 import CampaignInsights from "./CampaignInsights";
@@ -19,7 +18,8 @@ import EventList from "./EventList";
 import CategoryLegend from "./CategoryLegend";
 import CampaignLearnings from "./CampaignLearnings";
 
-// ─── Track palette (must match TimelineChart) ─────────────────
+// ——— Track palette (must match TimelineChart) ————————————————
+
 const TRACK_COLORS = [
   "#FBBF24",
   "#F472B6",
@@ -28,6 +28,15 @@ const TRACK_COLORS = [
   "#FB7185",
   "#F97316",
 ];
+
+// ——— Role labels for track chips ————————————————————————————
+
+const ROLE_LABELS: Record<string, string> = {
+  lead_single: "Lead",
+  second_single: "2nd",
+  focus_track: "Focus",
+  album_track: "Album",
+};
 
 interface DashboardProps {
   initialData: CampaignData;
@@ -43,7 +52,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [selectedTracks, setSelectedTracks] = useState<string[]>([]);
   const [tracksInitialized, setTracksInitialized] = useState(false);
 
-  // ─── Derived Data ─────────────────────────────────────────
+  // ——— Derived Data ———————————————————————————————————
 
   const trackList = useMemo(
     () => getTrackList(initialData, campaignId, territory),
@@ -61,7 +70,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
   const chartData = useMemo(
     () =>
-      buildUnifiedChartData(initialData, campaignId, territory, selectedTracks),
+      buildUnifiedChartData(
+        initialData,
+        campaignId,
+        territory,
+        selectedTracks
+      ),
     [initialData, campaignId, territory, selectedTracks]
   );
 
@@ -90,17 +104,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
     (c) => c.campaign_id === campaignId
   );
 
-  // ─── Handlers ─────────────────────────────────────────────
+  // ——— Handlers ——————————————————————————————————————
 
-  const handleCampaignChange = useCallback(
-    (id: string) => {
-      setCampaignId(id);
-      setToggledDates(new Set());
-      setSelectedTracks([]);
-      setTracksInitialized(false);
-    },
-    []
-  );
+  const handleCampaignChange = useCallback((id: string) => {
+    setCampaignId(id);
+    setToggledDates(new Set());
+    setSelectedTracks([]);
+    setTracksInitialized(false);
+  }, []);
 
   const handleTerritoryChange = useCallback((t: Territory) => {
     setTerritory(t);
@@ -143,11 +154,11 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
   const majorCount = events.filter((e) => e.is_major).length;
 
-  // ─── Render ───────────────────────────────────────────────
+  // ——— Render ————————————————————————————————————————
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#0F1117" }}>
-      {/* ─── Header ──────────────────────────────── */}
+      {/* ——— Header ————————————————————————— */}
       <header
         className="border-b"
         style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
@@ -167,6 +178,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
               onChange={handleCampaignChange}
             />
           </div>
+
           <TerritoryToggle
             selected={territory}
             onChange={handleTerritoryChange}
@@ -174,7 +186,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
       </header>
 
-      {/* ─── Main ────────────────────────────────── */}
+      {/* ——— Main ——————————————————————————— */}
       <main className="max-w-[1440px] mx-auto px-8 py-8">
         {/* Campaign hero */}
         <div className="mb-6 flex items-end justify-between">
@@ -193,14 +205,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
           <CategoryLegend />
         </div>
 
-        {/* ─── KPI Cards ─────────────────────────── */}
+        {/* ——— KPI Cards ————————————————————— */}
         <CampaignInsights
-          metrics={initialData.metrics}
+          data={initialData}
           campaignId={campaignId}
           territory={territory}
         />
 
-        {/* ─── Chart Card ────────────────────────── */}
+        {/* ——— Chart Card ———————————————————— */}
         <div
           className="rounded-xl border overflow-hidden"
           style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
@@ -226,13 +238,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
                   <span
                     className="w-4 h-[2px] rounded-full inline-block"
                     style={{
-                      backgroundColor: TRACK_COLORS[i % TRACK_COLORS.length],
+                      backgroundColor:
+                        TRACK_COLORS[i % TRACK_COLORS.length],
                       opacity: 0.7,
                     }}
                   />
                   <span className="text-[10px] text-label-muted">
                     {track.length > 18
-                      ? track.substring(0, 16) + "..."
+                      ? track.substring(0, 16) + "\u2026"
                       : track}
                   </span>
                 </div>
@@ -275,6 +288,9 @@ export default function Dashboard({ initialData }: DashboardProps) {
                   trackIndex >= 0
                     ? TRACK_COLORS[trackIndex % TRACK_COLORS.length]
                     : undefined;
+                const roleLabel = track.track_role
+                  ? ROLE_LABELS[track.track_role]
+                  : undefined;
 
                 return (
                   <button
@@ -295,6 +311,13 @@ export default function Dashboard({ initialData }: DashboardProps) {
                     }
                   >
                     {track.track_name}
+                    {roleLabel && (
+                      <span
+                        className="ml-1.5 text-[9px] uppercase tracking-wider opacity-60"
+                      >
+                        {roleLabel}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -310,7 +333,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
           />
         </div>
 
-        {/* ─── Events Card ───────────────────────── */}
+        {/* ——— Events Card ———————————————————— */}
         <div
           className="mt-6 rounded-xl border overflow-hidden"
           style={{ backgroundColor: "#161922", borderColor: "#2A2D3E" }}
@@ -330,7 +353,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
               rows toggle chart markers
             </p>
           </div>
-
           <EventList
             events={events}
             observations={observations}
@@ -342,7 +364,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
           />
         </div>
 
-        {/* ─── Learnings Panel ───────────────────── */}
+        {/* ——— Learnings Panel ————————————————— */}
         {learnings.length > 0 && (
           <div className="mt-6">
             <CampaignLearnings learnings={learnings} />
