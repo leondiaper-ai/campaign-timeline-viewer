@@ -142,37 +142,46 @@ interface MomentMarker {
 }
 
 function layoutMomentMarkers(data: ChartDataPoint[], visibleDates: Set<string>): MomentMarker[] {
-  // Collect key moments from data
-  const raw: { date: string; label: string; color: string; priority: number }[] = [];
+  // Collect key moments — dedupe by date (pick highest priority per date)
+  const byDate = new Map<string, { date: string; label: string; color: string; priority: number }>();
+  const priorityMap: Record<string, number> = { music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
+
   data.forEach((d) => {
     if (d.events.length > 0) {
       const keyEvents = d.events.filter((e) => e.is_key && visibleDates.has(e.date));
       if (keyEvents.length > 0) {
-        const primary = keyEvents[0];
-        const cat = getCategoryConfig(primary.moment_type);
-        // Priority: music > live > editorial > marketing > product
-        const priorityMap: Record<string, number> = { music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
-        const mapped = cat.label.toLowerCase();
-        raw.push({
-          date: d.date,
-          label: truncLabel(primary.moment_title, 18),
-          color: cat.color,
-          priority: priorityMap[mapped] || 1,
-        });
+        // Pick the highest-priority event for this date
+        let bestEvent = keyEvents[0];
+        let bestPriority = 0;
+        for (const e of keyEvents) {
+          const cat = getCategoryConfig(e.moment_type);
+          const p = priorityMap[cat.label.toLowerCase()] || 1;
+          if (p > bestPriority) { bestPriority = p; bestEvent = e; }
+        }
+        const cat = getCategoryConfig(bestEvent.moment_type);
+        const existing = byDate.get(d.date);
+        if (!existing || bestPriority > existing.priority) {
+          byDate.set(d.date, {
+            date: d.date,
+            label: truncLabel(bestEvent.moment_title, 18),
+            color: cat.color,
+            priority: bestPriority,
+          });
+        }
       }
     }
   });
 
   // Sort by date, cap at 7
-  raw.sort((a, b) => a.date.localeCompare(b.date));
-  const capped = raw.slice(0, 7);
+  const deduped = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const capped = deduped.slice(0, 7);
 
   // Stagger: alternate row 0 and 1 for adjacent markers
   return capped.map((m, i) => ({
     date: m.date,
     label: m.label,
     color: m.color,
-    row: i % 2, // alternate to avoid overlap
+    row: i % 2,
   }));
 }
 
