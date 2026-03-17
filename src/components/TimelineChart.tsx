@@ -5,6 +5,7 @@ import {
   ResponsiveContainer,
   ComposedChart,
   Line,
+  Bar,
   Area,
   XAxis,
   YAxis,
@@ -53,21 +54,17 @@ function formatFullDate(dateStr: string): string {
   });
 }
 
-// ——— Short label for moment markers ——————————————————————————
-function shortMomentLabel(events: Moment[]): string {
-  const key = events.find((e) => e.is_key) || events[0];
-  if (!key) return "";
-  const title = key.moment_title;
-  // Truncate to ~20 chars for chart readability
-  return title.length > 22 ? title.slice(0, 20) + "…" : title;
-}
-
 // ——— Props ———————————————————————————————————————————————————
 interface TimelineChartProps {
   data: ChartDataPoint[];
   selectedTracks: string[];
   visibleEventDates: Set<string>;
   highlightedDate: string | null;
+  // New for By Track mode:
+  streamView?: "total" | "by_track";
+  trackData?: ChartDataPoint[] | null;
+  trackName?: string;
+  totalCampaignData?: ChartDataPoint[];
 }
 
 // ——— Custom Tooltip ——————————————————————————————————————————
@@ -83,22 +80,33 @@ interface CustomTooltipProps {
   active?: boolean;
   payload?: TooltipPayloadEntry[];
   label?: string;
+  streamView?: "total" | "by_track";
+  trackName?: string;
 }
 
-function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
+function CustomTooltip({
+  active,
+  payload,
+  label,
+  streamView,
+  trackName,
+}: CustomTooltipProps) {
   if (!active || !payload || !payload.length) return null;
 
   const dataPoint = payload[0]?.payload;
   if (!dataPoint) return null;
 
   const events = dataPoint.events || [];
+  const isByTrack = streamView === "by_track";
 
   // WoW change
+  const mainStreams = isByTrack
+    ? ((dataPoint.track_streams as number) || 0)
+    : dataPoint.total_streams;
+  const prevStreams = dataPoint.prev_week_streams;
   const wowChange =
-    dataPoint.prev_week_streams !== null && dataPoint.prev_week_streams > 0
-      ? ((dataPoint.total_streams - dataPoint.prev_week_streams) /
-          dataPoint.prev_week_streams) *
-        100
+    prevStreams !== null && prevStreams > 0
+      ? ((mainStreams - prevStreams) / prevStreams) * 100
       : null;
 
   return (
@@ -107,8 +115,8 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
         {label ? formatFullDate(label) : ""}
       </p>
 
-      {/* Weekly Streams */}
-      {dataPoint.total_streams > 0 && (
+      {/* Main streams line */}
+      {mainStreams > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
           <div className="flex items-center gap-2">
             <span
@@ -116,11 +124,11 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
               style={{ backgroundColor: TOTAL_COLOR }}
             />
             <span className="text-xs text-label-secondary">
-              Weekly Streams
+              {isByTrack ? trackName || "Track" : "Weekly Streams"}
             </span>
           </div>
           <span className="text-xs font-semibold text-label-primary tabular-nums">
-            {fmt(dataPoint.total_streams)}
+            {fmt(mainStreams)}
           </span>
         </div>
       )}
@@ -128,7 +136,9 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
       {/* WoW Change */}
       {wowChange !== null && (
         <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-label-muted ml-4">vs Last Week</span>
+          <span className="text-xs text-label-muted ml-4">
+            vs Last Week
+          </span>
           <span
             className={`text-xs font-semibold tabular-nums ${
               wowChange >= 0 ? "text-emerald-400" : "text-red-400"
@@ -140,44 +150,65 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
         </div>
       )}
 
-      {/* Cumulative */}
-      {dataPoint.cumulative_streams > 0 && (
+      {/* Total campaign reference (By Track mode) */}
+      {isByTrack && dataPoint.total_streams > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-label-muted ml-4">Campaign Total</span>
+          <div className="flex items-center gap-2">
+            <span
+              className="w-2 h-2 rounded-full opacity-30"
+              style={{ backgroundColor: TOTAL_COLOR }}
+            />
+            <span className="text-xs text-label-muted">
+              Total Campaign
+            </span>
+          </div>
+          <span className="text-xs font-medium text-label-muted tabular-nums">
+            {fmt(dataPoint.total_streams)}
+          </span>
+        </div>
+      )}
+
+      {/* Cumulative */}
+      {dataPoint.cumulative_streams > 0 && !isByTrack && (
+        <div className="flex items-center justify-between gap-4 mb-1">
+          <span className="text-xs text-label-muted ml-4">
+            Campaign Total
+          </span>
           <span className="text-xs font-medium text-label-secondary tabular-nums">
             {fmt(dataPoint.cumulative_streams)}
           </span>
         </div>
       )}
 
-      {/* Track lines */}
-      {payload
-        .filter(
-          (entry) =>
-            entry.dataKey !== "total_streams" &&
-            entry.dataKey !== "physical_units" &&
-            entry.value !== null &&
-            entry.value !== undefined
-        )
-        .map((entry, i) => (
-          <div
-            key={i}
-            className="flex items-center justify-between gap-4 mb-1"
-          >
-            <div className="flex items-center gap-2">
-              <span
-                className="w-2 h-2 rounded-full"
-                style={{ backgroundColor: entry.color }}
-              />
-              <span className="text-xs text-label-secondary truncate max-w-[120px]">
-                {entry.dataKey}
+      {/* Track lines (Total Campaign mode only) */}
+      {!isByTrack &&
+        payload
+          .filter(
+            (entry) =>
+              entry.dataKey !== "total_streams" &&
+              entry.dataKey !== "physical_units" &&
+              entry.value !== null &&
+              entry.value !== undefined
+          )
+          .map((entry, i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between gap-4 mb-1"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: entry.color }}
+                />
+                <span className="text-xs text-label-secondary truncate max-w-[120px]">
+                  {entry.dataKey}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-label-primary tabular-nums">
+                {fmt(entry.value as number)}
               </span>
             </div>
-            <span className="text-xs font-semibold text-label-primary tabular-nums">
-              {fmt(entry.value as number)}
-            </span>
-          </div>
-        ))}
+          ))}
 
       {/* Physical */}
       {dataPoint.physical_units > 0 && (
@@ -187,7 +218,9 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
               className="w-2 h-2 rounded-full"
               style={{ backgroundColor: PHYSICAL_COLOR }}
             />
-            <span className="text-xs text-label-secondary">Physical</span>
+            <span className="text-xs text-label-secondary">
+              Physical
+            </span>
           </div>
           <span className="text-xs font-semibold text-label-primary tabular-nums">
             {fmt(dataPoint.physical_units)}
@@ -203,7 +236,10 @@ function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
             return (
               <div key={i} className="mb-2 last:mb-0">
                 <div className="flex items-center gap-1.5">
-                  <span style={{ color: cat.color }} className="text-xs">
+                  <span
+                    style={{ color: cat.color }}
+                    className="text-xs"
+                  >
                     {cat.icon}
                   </span>
                   <span className="text-xs font-medium text-label-primary">
@@ -230,49 +266,65 @@ export default function TimelineChart({
   selectedTracks,
   visibleEventDates,
   highlightedDate,
+  streamView = "total",
+  trackData,
+  trackName,
+  totalCampaignData,
 }: TimelineChartProps) {
+  const isByTrack = streamView === "by_track" && trackData;
+
   // Key moment markers — collect date + label + color for visible events
   const momentMarkers = useMemo(() => {
     const markers: { date: string; label: string; color: string }[] = [];
-    data.forEach((d) => {
+    const sourceData = isByTrack ? trackData : data;
+    if (!sourceData) return markers;
+
+    sourceData.forEach((d) => {
       if (d.events.length > 0) {
         const visibleEvents = d.events.filter((e) =>
           visibleEventDates.has(e.date)
         );
         if (visibleEvents.length > 0) {
-          const primary = visibleEvents.find((e) => e.is_key) || visibleEvents[0];
+          const primary =
+            visibleEvents.find((e) => e.is_key) || visibleEvents[0];
           const cat = getCategoryConfig(primary.moment_type);
           markers.push({
             date: d.date,
-            label: shortMomentLabel(visibleEvents),
+            label: "", // Labels on hover only via tooltip
             color: cat.color,
           });
         }
       }
     });
     return markers;
-  }, [data, visibleEventDates]);
+  }, [data, trackData, isByTrack, visibleEventDates]);
 
   // Check if there's physical data
-  const hasPhysical = useMemo(
-    () => data.some((d) => d.physical_units > 0),
-    [data]
-  );
+  const hasPhysical = useMemo(() => {
+    const sourceData = isByTrack ? trackData : data;
+    return sourceData ? sourceData.some((d) => d.physical_units > 0) : false;
+  }, [data, trackData, isByTrack]);
+
+  const chartSource = isByTrack ? trackData! : data;
 
   return (
     <div className="w-full">
       <div className="w-full h-[420px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
-            data={data}
-            margin={{ top: 44, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}
+            data={chartSource}
+            margin={{
+              top: 20,
+              right: hasPhysical ? 60 : 24,
+              left: 8,
+              bottom: 8,
+            }}
           >
             <CartesianGrid
               strokeDasharray="3 3"
               stroke="#2A2D3E"
               vertical={false}
             />
-
             <XAxis
               dataKey="date"
               tickFormatter={formatDate}
@@ -282,7 +334,6 @@ export default function TimelineChart({
               dy={8}
               interval="preserveStartEnd"
             />
-
             <YAxis
               yAxisId="streams"
               tickFormatter={fmt}
@@ -291,7 +342,6 @@ export default function TimelineChart({
               tickLine={false}
               width={55}
             />
-
             {hasPhysical && (
               <YAxis
                 yAxisId="physical"
@@ -303,10 +353,17 @@ export default function TimelineChart({
                 width={55}
               />
             )}
-
             <Tooltip
-              content={<CustomTooltip />}
-              cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }}
+              content={
+                <CustomTooltip
+                  streamView={streamView}
+                  trackName={trackName}
+                />
+              }
+              cursor={{
+                stroke: "#3A3D4E",
+                strokeDasharray: "4 4",
+              }}
             />
 
             {/* Highlighted date reference line */}
@@ -320,7 +377,7 @@ export default function TimelineChart({
               />
             )}
 
-            {/* Key moment markers — visible dotted lines with labels */}
+            {/* Key moment markers — subtle vertical lines (labels on hover) */}
             {momentMarkers.map((m, i) => (
               <ReferenceLine
                 key={`moment-${i}`}
@@ -328,69 +385,95 @@ export default function TimelineChart({
                 yAxisId="streams"
                 stroke={m.color}
                 strokeDasharray="4 3"
-                strokeWidth={1.5}
-                strokeOpacity={0.7}
-                label={{
-                  value: m.label,
-                  position: "insideTopRight",
-                  fill: m.color,
-                  fontSize: 9,
-                  fontWeight: 600,
-                  offset: 6,
-                }}
+                strokeWidth={1}
+                strokeOpacity={0.5}
               />
             ))}
 
-            {/* Total Streams — main area + line */}
-            <Area
-              yAxisId="streams"
-              type="monotone"
-              dataKey="total_streams"
-              fill={`${TOTAL_COLOR}10`}
-              stroke="none"
-            />
-            <Line
-              yAxisId="streams"
-              type="monotone"
-              dataKey="total_streams"
-              stroke={TOTAL_COLOR}
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4, fill: TOTAL_COLOR }}
-              name="Total Streams"
-            />
+            {/* ===== TOTAL CAMPAIGN MODE ===== */}
+            {!isByTrack && (
+              <>
+                {/* Total Streams — main area + line */}
+                <Area
+                  yAxisId="streams"
+                  type="monotone"
+                  dataKey="total_streams"
+                  fill={`${TOTAL_COLOR}10`}
+                  stroke="none"
+                />
+                <Line
+                  yAxisId="streams"
+                  type="monotone"
+                  dataKey="total_streams"
+                  stroke={TOTAL_COLOR}
+                  strokeWidth={2}
+                  dot={false}
+                  activeDot={{ r: 4, fill: TOTAL_COLOR }}
+                  name="Total Streams"
+                />
 
-            {/* Track lines */}
-            {selectedTracks.map((track, i) => (
-              <Line
-                key={track}
-                yAxisId="streams"
-                type="monotone"
-                dataKey={track}
-                stroke={TRACK_COLORS[i % TRACK_COLORS.length]}
-                strokeWidth={1.5}
-                dot={false}
-                activeDot={{
-                  r: 3,
-                  fill: TRACK_COLORS[i % TRACK_COLORS.length],
-                }}
-                connectNulls={false}
-                name={track}
-              />
-            ))}
+                {/* Track lines */}
+                {selectedTracks.map((track, i) => (
+                  <Line
+                    key={track}
+                    yAxisId="streams"
+                    type="monotone"
+                    dataKey={track}
+                    stroke={TRACK_COLORS[i % TRACK_COLORS.length]}
+                    strokeWidth={1.5}
+                    dot={false}
+                    activeDot={{
+                      r: 3,
+                      fill: TRACK_COLORS[i % TRACK_COLORS.length],
+                    }}
+                    connectNulls={false}
+                    name={track}
+                  />
+                ))}
+              </>
+            )}
 
-            {/* Physical units — dashed line on right axis */}
+            {/* ===== BY TRACK MODE ===== */}
+            {isByTrack && (
+              <>
+                {/* Background reference: total campaign (faint) */}
+                <Line
+                  yAxisId="streams"
+                  type="monotone"
+                  dataKey="total_streams"
+                  stroke={TOTAL_COLOR}
+                  strokeWidth={1.5}
+                  strokeOpacity={0.2}
+                  dot={false}
+                  activeDot={false}
+                  name="Total Campaign"
+                />
+
+                {/* Main track line */}
+                <Line
+                  yAxisId="streams"
+                  type="monotone"
+                  dataKey="track_streams"
+                  stroke={TOTAL_COLOR}
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 4, fill: TOTAL_COLOR }}
+                  name={trackName || "Track"}
+                />
+              </>
+            )}
+
+            {/* Physical units — BAR chart on right axis */}
             {hasPhysical && (
-              <Line
+              <Bar
                 yAxisId="physical"
-                type="monotone"
                 dataKey="physical_units"
+                fill={`${PHYSICAL_COLOR}40`}
                 stroke={PHYSICAL_COLOR}
-                strokeWidth={1.5}
-                strokeDasharray="6 3"
-                dot={false}
-                activeDot={{ r: 3, fill: PHYSICAL_COLOR }}
+                strokeWidth={1}
+                radius={[2, 2, 0, 0]}
                 name="Physical Units"
+                barSize={20}
               />
             )}
           </ComposedChart>
@@ -399,28 +482,63 @@ export default function TimelineChart({
 
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
-        <div className="flex items-center gap-1.5">
-          <span
-            className="w-3 h-0.5 rounded-full inline-block"
-            style={{ backgroundColor: TOTAL_COLOR }}
-          />
-          <span className="text-[10px] text-label-muted">Total Streams</span>
-        </div>
-        {selectedTracks.map((track, i) => (
-          <div key={track} className="flex items-center gap-1.5">
-            <span
-              className="w-3 h-0.5 rounded-full inline-block"
-              style={{
-                backgroundColor: TRACK_COLORS[i % TRACK_COLORS.length],
-              }}
-            />
-            <span className="text-[10px] text-label-muted">{track}</span>
-          </div>
-        ))}
+        {isByTrack ? (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="w-3 h-0.5 rounded-full inline-block"
+                style={{ backgroundColor: TOTAL_COLOR }}
+              />
+              <span className="text-[10px] text-label-muted">
+                {trackName || "Track"}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="w-3 h-0.5 rounded-full inline-block opacity-20"
+                style={{ backgroundColor: TOTAL_COLOR }}
+              />
+              <span className="text-[10px] text-label-muted">
+                Total Campaign
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="w-3 h-0.5 rounded-full inline-block"
+                style={{ backgroundColor: TOTAL_COLOR }}
+              />
+              <span className="text-[10px] text-label-muted">
+                Total Streams
+              </span>
+            </div>
+            {selectedTracks.map((track, i) => (
+              <div key={track} className="flex items-center gap-1.5">
+                <span
+                  className="w-3 h-0.5 rounded-full inline-block"
+                  style={{
+                    backgroundColor:
+                      TRACK_COLORS[i % TRACK_COLORS.length],
+                  }}
+                />
+                <span className="text-[10px] text-label-muted">
+                  {track}
+                </span>
+              </div>
+            ))}
+          </>
+        )}
         {hasPhysical && (
           <div className="flex items-center gap-1.5">
-            <span className="w-3 h-[1px] border-t border-dashed inline-block" style={{ borderColor: PHYSICAL_COLOR }} />
-            <span className="text-[10px] text-label-muted">Physical</span>
+            <span
+              className="w-3 h-3 rounded-sm inline-block"
+              style={{ backgroundColor: `${PHYSICAL_COLOR}40`, border: `1px solid ${PHYSICAL_COLOR}` }}
+            />
+            <span className="text-[10px] text-label-muted">
+              Physical
+            </span>
           </div>
         )}
       </div>
