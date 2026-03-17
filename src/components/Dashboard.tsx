@@ -4,12 +4,15 @@ import { useMemo, useState, useCallback, useEffect } from "react";
 import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
 import {
   buildChartData,
+  buildTrackChartData,
   getTrackList,
+  getTrackListForChart,
   getDefaultTracks,
   getPeakWeekStats,
   getAllMoments,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
+import CampaignInsights from "./CampaignInsights";
 import TimelineChart from "./TimelineChart";
 
 // ——— Number formatting ——————————————————————————————————————
@@ -56,6 +59,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [highlightedDate, setHighlightedDate] = useState<string | null>(
     null
   );
+  const [streamView, setStreamView] = useState<"total" | "by_track">(
+    "total"
+  );
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(
+    null
+  );
 
   // Current campaign
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
@@ -80,12 +89,51 @@ export default function Dashboard({ initialData }: DashboardProps) {
     return getDefaultTracks(trackList);
   }, [selectedTracks, trackList]);
 
-  // Chart data
+  // Chart data (Total Campaign mode)
   const chartData = useMemo(
-    () =>
-      sheet ? buildChartData(sheet, territory, activeTracks) : [],
+    () => (sheet ? buildChartData(sheet, territory, activeTracks) : []),
     [sheet, territory, activeTracks]
   );
+
+  // Track list for By Track selector
+  const trackListForChart = useMemo(
+    () =>
+      campaign
+        ? getTrackListForChart(campaign.trackWeeklyMetrics, territory)
+        : [],
+    [campaign, territory]
+  );
+
+  // Auto-select first track when entering by_track mode
+  useEffect(() => {
+    if (
+      streamView === "by_track" &&
+      !selectedTrackId &&
+      trackListForChart.length > 0
+    ) {
+      setSelectedTrackId(trackListForChart[0].track_id);
+    }
+  }, [streamView, selectedTrackId, trackListForChart]);
+
+  // Track chart data (By Track mode)
+  const trackChartData = useMemo(() => {
+    if (!sheet || !campaign || !selectedTrackId) return null;
+    return buildTrackChartData(
+      sheet,
+      territory,
+      campaign.trackWeeklyMetrics,
+      selectedTrackId
+    );
+  }, [sheet, campaign, territory, selectedTrackId]);
+
+  // Selected track name for display
+  const selectedTrackName = useMemo(() => {
+    if (!selectedTrackId) return "";
+    const found = trackListForChart.find(
+      (t) => t.track_id === selectedTrackId
+    );
+    return found?.track_name ?? "";
+  }, [selectedTrackId, trackListForChart]);
 
   // KPI stats
   const stats = useMemo(
@@ -98,10 +146,15 @@ export default function Dashboard({ initialData }: DashboardProps) {
     () => (sheet ? getAllMoments(sheet) : []),
     [sheet]
   );
+
   const keyMomentDates = useMemo(
     () => new Set(moments.filter((m) => m.is_key).map((m) => m.date)),
     [moments]
   );
+
+  // Has track weekly data?
+  const hasTrackWeeklyData =
+    campaign && campaign.trackWeeklyMetrics.length > 0;
 
   // Track toggle handler
   const toggleTrack = useCallback(
@@ -122,6 +175,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
     setCampaignIdx(idx);
     setSelectedTracks(null);
     setHighlightedDate(null);
+    setStreamView("total");
+    setSelectedTrackId(null);
   }, []);
 
   if (!campaign || !sheet) {
@@ -188,37 +243,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-6">
-        {/* KPI Cards */}
-        {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <KPICard
-              label="Total Streams"
-              value={fmt(stats.totalStreams)}
-            />
-            <KPICard
-              label="Peak Week"
-              value={fmt(stats.peakWeekStreams)}
-              sub={
-                stats.peakWeekDate
-                  ? formatDate(stats.peakWeekDate)
-                  : undefined
-              }
-            />
-            <KPICard
-              label="Top Track"
-              value={stats.topTrackName}
-              sub={
-                stats.topTrackStreams > 0
-                  ? fmt(stats.topTrackStreams)
-                  : undefined
-              }
-            />
-            <KPICard
-              label="Physical Units"
-              value={fmt(stats.totalPhysical)}
-            />
-          </div>
-        )}
+        {/* 4 Primary Stat Cards */}
+        <CampaignInsights sheet={sheet} territory={territory} />
 
         {/* Track Toggles */}
         {trackList.length > 0 && (
@@ -247,9 +273,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
                     }}
                   />
                   {track.track_name}
-                  <span className="text-[10px] text-label-muted">
-                    {track.track_role.replace(/_/g, " ")}
-                  </span>
                 </button>
               );
             })}
@@ -258,11 +281,74 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
         {/* Chart */}
         <div className="bg-surface-raised rounded-2xl border border-border p-5">
+          {/* Chart header with stream view toggle */}
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-sm font-semibold text-label-primary">
+              Weekly Performance
+            </h2>
+            <div className="flex items-center gap-3">
+              {/* Stream view toggle — only show if track data exists */}
+              {hasTrackWeeklyData && (
+                <div className="flex items-center gap-1 bg-surface-base rounded-lg p-0.5 border border-border">
+                  <button
+                    onClick={() => setStreamView("total")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      streamView === "total"
+                        ? "bg-surface-raised text-label-primary"
+                        : "text-label-muted hover:text-label-secondary"
+                    }`}
+                  >
+                    Total Campaign
+                  </button>
+                  <button
+                    onClick={() => setStreamView("by_track")}
+                    className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                      streamView === "by_track"
+                        ? "bg-surface-raised text-label-primary"
+                        : "text-label-muted hover:text-label-secondary"
+                    }`}
+                  >
+                    By Track
+                  </button>
+                </div>
+              )}
+
+              {/* Track selector — only in by_track mode */}
+              {streamView === "by_track" && trackListForChart.length > 0 && (
+                <select
+                  className="bg-surface-base border border-border rounded-lg px-2 py-1 text-xs font-medium text-label-primary"
+                  value={selectedTrackId || ""}
+                  onChange={(e) => setSelectedTrackId(e.target.value)}
+                >
+                  {trackListForChart.map((t) => (
+                    <option key={t.track_id} value={t.track_id}>
+                      {t.track_name}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          </div>
+
           <TimelineChart
-            data={chartData}
-            selectedTracks={activeTracks}
+            data={
+              streamView === "by_track" && trackChartData
+                ? trackChartData
+                : chartData
+            }
+            selectedTracks={
+              streamView === "by_track" ? [] : activeTracks
+            }
             visibleEventDates={keyMomentDates}
             highlightedDate={highlightedDate}
+            streamView={streamView}
+            trackData={
+              streamView === "by_track" ? trackChartData : undefined
+            }
+            trackName={selectedTrackName}
+            totalCampaignData={
+              streamView === "by_track" ? chartData : undefined
+            }
           />
         </div>
 
@@ -317,31 +403,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
           </div>
         )}
       </main>
-    </div>
-  );
-}
-
-// ——— KPI Card ——————————————————————————————————————————————
-function KPICard({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <div className="bg-surface-raised rounded-xl border border-border p-4">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-label-muted mb-1">
-        {label}
-      </p>
-      <p className="text-xl font-bold text-label-primary tabular-nums truncate">
-        {value}
-      </p>
-      {sub && (
-        <p className="text-[11px] text-label-muted mt-0.5">{sub}</p>
-      )}
     </div>
   );
 }
