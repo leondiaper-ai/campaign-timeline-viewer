@@ -4,6 +4,8 @@ import {
   WeeklyMetric,
   CampaignEvent,
   TrackWeeklyMetric,
+  TrackLookupEntry,
+  TrackRole,
   SingleCampaignData,
   Territory,
   EventCategory,
@@ -13,7 +15,7 @@ import {
 } from "@/types";
 import { inferIsMajor } from "./event-categories";
 
-// ─── Google Sheets Client ───────────────────────────────────────
+// ——— Google Sheets Client ————————————————————————————————
 
 function getSheetsClient() {
   const auth = new google.auth.GoogleAuth({
@@ -23,29 +25,26 @@ function getSheetsClient() {
     },
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
   });
-
   return google.sheets({ version: "v4", auth });
 }
 
-// ─── Fetch Helpers ──────────────────────────────────────────────
+// ——— Fetch Helpers —————————————————————————————————————————
 
 async function fetchRows(
   spreadsheetId: string,
   tabName: string
 ): Promise<string[][]> {
   const sheets = getSheetsClient();
-
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId,
     range: `${tabName}!A2:Z`,
   });
-
   return (response.data.values as string[][]) || [];
 }
 
 /**
  * Safe fetch that returns empty array if the tab doesn't exist.
- * Used for optional tabs like track_metrics.
+ * Used for optional tabs like track_metrics, tracks_lookup.
  */
 async function fetchRowsSafe(
   spreadsheetId: string,
@@ -64,10 +63,22 @@ async function fetchRowsSafe(
   }
 }
 
-// ─── Validation Helpers ─────────────────────────────────────────
+// ——— Validation Helpers ——————————————————————————————————————
 
 const VALID_TERRITORIES = new Set(["global", "UK"]);
-const VALID_EVENT_TYPES = new Set(["music", "marketing", "editorial", "product", "live"]);
+const VALID_EVENT_TYPES = new Set([
+  "music",
+  "marketing",
+  "editorial",
+  "product",
+  "live",
+]);
+const VALID_TRACK_ROLES = new Set([
+  "lead_single",
+  "second_single",
+  "focus_track",
+  "album_track",
+]);
 
 function cleanTerritory(raw: string | undefined): Territory | "global" {
   const val = (raw || "global").trim().toLowerCase();
@@ -81,11 +92,30 @@ function cleanEventType(raw: string | undefined): EventCategory {
   // Map common aliases
   if (val === "release" || val === "single" || val === "album") return "music";
   if (val === "press" || val === "pr" || val === "review") return "editorial";
-  if (val === "merch" || val === "vinyl" || val === "physical") return "product";
-  if (val === "tour" || val === "gig" || val === "concert" || val === "festival") return "live";
-  if (val === "ad" || val === "paid" || val === "social" || val === "promo") return "marketing";
+  if (val === "merch" || val === "vinyl" || val === "physical")
+    return "product";
+  if (
+    val === "tour" ||
+    val === "gig" ||
+    val === "concert" ||
+    val === "festival"
+  )
+    return "live";
+  if (
+    val === "ad" ||
+    val === "paid" ||
+    val === "social" ||
+    val === "promo"
+  )
+    return "marketing";
   if (VALID_EVENT_TYPES.has(val)) return val as EventCategory;
   return "music"; // safe fallback
+}
+
+function cleanTrackRole(raw: string | undefined): TrackRole {
+  const val = (raw || "album_track").trim().toLowerCase().replace(/\s+/g, "_");
+  if (VALID_TRACK_ROLES.has(val)) return val as TrackRole;
+  return "album_track";
 }
 
 function safeNumber(val: string | undefined): number {
@@ -100,13 +130,20 @@ function isValidDate(val: string | undefined): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(val.trim());
 }
 
-// ─── Registry ───────────────────────────────────────────────────
+function parseBool(val: string | undefined, fallback: boolean): boolean {
+  if (!val) return fallback;
+  const v = val.trim().toLowerCase();
+  if (v === "true" || v === "yes" || v === "1") return true;
+  if (v === "false" || v === "no" || v === "0") return false;
+  return fallback;
+}
+
+// ——— Registry ———————————————————————————————————————————————
 
 const REGISTRY_SPREADSHEET_ID = process.env.REGISTRY_SPREADSHEET_ID!;
 
 export async function fetchRegistry(): Promise<RegistryEntry[]> {
   const rows = await fetchRows(REGISTRY_SPREADSHEET_ID, "campaign_registry");
-
   return rows.map((row) => ({
     campaign_id: row[0],
     artist_name: row[1],
@@ -123,25 +160,26 @@ export async function fetchActiveCampaigns(): Promise<RegistryEntry[]> {
   return all.filter((e) => e.status === "active");
 }
 
-// ─── Campaign Sheet Parsers ─────────────────────────────────────
-// Each campaign lives in its own spreadsheet with 3 required tabs:
+// ——— Campaign Sheet Parsers ——————————————————————————————————
+// Each campaign lives in its own spreadsheet with required tabs:
 //   campaign_setup · campaign_moments · weekly_metrics
-// And 1 optional tab:
-//   track_metrics
+// And optional tabs:
+//   track_metrics · tracks_lookup
 
 export async function fetchCampaignSetup(
   sheetId: string
 ): Promise<Campaign> {
   const rows = await fetchRows(sheetId, "campaign_setup");
   const row = rows[0] || [];
-
   return {
     campaign_id: row[0] || "unknown",
     artist: row[1] || "Unknown Artist",
     campaign_name: row[2] || "Untitled Campaign",
     start_date: isValidDate(row[3]) ? row[3].trim() : undefined,
     release_date: isValidDate(row[4]) ? row[4].trim() : undefined,
-    default_territory: row[5] ? cleanTerritory(row[5]) as Territory : undefined,
+    default_territory: row[5]
+      ? (cleanTerritory(row[5]) as Territory)
+      : undefined,
   };
 }
 
@@ -150,7 +188,6 @@ export async function fetchCampaignMoments(
   campaignId: string
 ): Promise<CampaignEvent[]> {
   const rows = await fetchRows(sheetId, "campaign_moments");
-
   return rows
     .filter((row) => row[0] && isValidDate(row[0])) // skip rows without a valid date
     .map((row) => {
@@ -159,19 +196,28 @@ export async function fetchCampaignMoments(
       // is_core_moment (col G, index 6)
       const rawCoreMoment = row[6]?.toLowerCase().trim();
       const isCoreMoment =
-        rawCoreMoment === "true" ? true : rawCoreMoment === "false" ? false : undefined;
+        rawCoreMoment === "true"
+          ? true
+          : rawCoreMoment === "false"
+            ? false
+            : undefined;
 
       // show_on_chart (col H, index 7)
       const rawShowOnChart = row[7]?.toLowerCase().trim();
       const showOnChart =
-        rawShowOnChart === "true" ? true : rawShowOnChart === "false" ? false : undefined;
+        rawShowOnChart === "true"
+          ? true
+          : rawShowOnChart === "false"
+            ? false
+            : undefined;
 
       const observedImpact = row[8]?.trim() || undefined;
       const whatWeLearned = row[9]?.trim() || undefined;
-
       const rawConfidence = row[10]?.toLowerCase().trim();
       const confidence: Confidence | undefined =
-        rawConfidence === "high" || rawConfidence === "medium" || rawConfidence === "low"
+        rawConfidence === "high" ||
+        rawConfidence === "medium" ||
+        rawConfidence === "low"
           ? rawConfidence
           : undefined;
 
@@ -201,7 +247,6 @@ export async function fetchCampaignMetrics(
   campaignId: string
 ): Promise<WeeklyMetric[]> {
   const rows = await fetchRows(sheetId, "weekly_metrics");
-
   return rows
     .filter((row) => row[0] && isValidDate(row[0])) // skip rows without a valid date
     .map((row) => ({
@@ -232,18 +277,40 @@ export async function fetchTrackMetrics(
     }));
 }
 
-// ─── Full Campaign Loader ───────────────────────────────────────
+// ——— Tracks Lookup (new) ————————————————————————————————————
+// Optional tab: tracks_lookup
+// Columns: track_name | release_week | track_role | default_on | sort_order
+
+export async function fetchTracksLookup(
+  sheetId: string
+): Promise<TrackLookupEntry[]> {
+  const rows = await fetchRowsSafe(sheetId, "tracks_lookup");
+  if (rows.length === 0) return [];
+
+  return rows
+    .filter((row) => row[0]?.trim()) // need at least a track name
+    .map((row, index) => ({
+      track_name: row[0].trim(),
+      release_week: isValidDate(row[1]) ? row[1].trim() : "",
+      track_role: cleanTrackRole(row[2]),
+      default_on: parseBool(row[3], false),
+      sort_order: safeNumber(row[4]) || index + 1,
+    }));
+}
+
+// ——— Full Campaign Loader ——————————————————————————————————
 
 export async function fetchCampaignSheetData(
   sheetId: string,
   campaignId: string
 ): Promise<SingleCampaignData> {
-  const [campaign, events, metrics, trackMetrics] = await Promise.all([
-    fetchCampaignSetup(sheetId),
-    fetchCampaignMoments(sheetId, campaignId),
-    fetchCampaignMetrics(sheetId, campaignId),
-    fetchTrackMetrics(sheetId, campaignId),
-  ]);
-
-  return { campaign, events, metrics, trackMetrics };
+  const [campaign, events, metrics, trackMetrics, tracksLookup] =
+    await Promise.all([
+      fetchCampaignSetup(sheetId),
+      fetchCampaignMoments(sheetId, campaignId),
+      fetchCampaignMetrics(sheetId, campaignId),
+      fetchTrackMetrics(sheetId, campaignId),
+      fetchTracksLookup(sheetId),
+    ]);
+  return { campaign, events, metrics, trackMetrics, tracksLookup };
 }
