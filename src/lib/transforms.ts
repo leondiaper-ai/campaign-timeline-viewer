@@ -10,7 +10,6 @@ import {
 } from "@/types";
 
 // ——— Unified Chart Data Point ——————————————————————————————
-
 export interface UnifiedChartDataPoint {
   date: string;
   total_streams: number;
@@ -20,11 +19,10 @@ export interface UnifiedChartDataPoint {
   [key: string]: number | string | null | CampaignEvent[];
 }
 
-// ——— Build Unified Timeline ————————————————————————————————
+// ——— Build Unified Timeline ———————————————————————————————
 // Single preprocessing step that creates a continuous weekly dataset
 // with campaign totals AND per-track streams layered in.
 // Uses tracks_lookup release_week for strict line suppression.
-
 export function buildUnifiedChartData(
   data: CampaignData,
   campaignId: string,
@@ -51,10 +49,12 @@ export function buildUnifiedChartData(
       selectedTracks.includes(m.track_name)
   );
 
-  // 4. Build tracks_lookup index for release_week
+  // 4. Build tracks_lookup index for release_week — filtered by campaign_id
   const tracksLookupMap = new Map<string, TrackLookupEntry>();
   (data.tracksLookup || []).forEach((entry) => {
-    tracksLookupMap.set(entry.track_name, entry);
+    if (entry.campaign_id === campaignId) {
+      tracksLookupMap.set(entry.track_name, entry);
+    }
   });
 
   // 5. Build a continuous week timeline from campaign metrics
@@ -158,7 +158,6 @@ export function buildUnifiedChartData(
 }
 
 // ——— Legacy buildChartData (kept for compatibility) ——————————
-
 export function buildChartData(
   data: CampaignData,
   campaignId: string,
@@ -173,8 +172,7 @@ export function buildChartData(
   }));
 }
 
-// ——— Filter events for event list ———————————————————————————
-
+// ——— Filter events for event list ————————————————————————————
 export function getFilteredEvents(
   data: CampaignData,
   campaignId: string,
@@ -190,7 +188,6 @@ export function getFilteredEvents(
 }
 
 // ——— Track List (enriched with tracks_lookup) ————————————————
-
 export function getTrackList(
   data: CampaignData,
   campaignId: string,
@@ -202,10 +199,12 @@ export function getTrackList(
 
   if (trackMetrics.length === 0) return [];
 
-  // Build tracks_lookup index
+  // Build tracks_lookup index — filtered by campaign_id
   const lookupMap = new Map<string, TrackLookupEntry>();
   (data.tracksLookup || []).forEach((entry) => {
-    lookupMap.set(entry.track_name, entry);
+    if (entry.campaign_id === campaignId) {
+      lookupMap.set(entry.track_name, entry);
+    }
   });
 
   const trackMap = new Map<string, TrackWeeklyMetric[]>();
@@ -231,8 +230,7 @@ export function getTrackList(
 
     tracks.push({
       track_name: trackName,
-      first_active_week:
-        firstActive?.week_ending || sorted[0].week_ending,
+      first_active_week: firstActive?.week_ending || sorted[0].week_ending,
       total_streams: totalStreams,
       peak_week: peakWeek.week_ending,
       peak_streams: peakWeek.total_streams,
@@ -255,9 +253,8 @@ export function getTrackList(
   return tracks;
 }
 
-// ——— Default track selection ————————————————————————————————
+// ——— Default track selection ——————————————————————————————————
 // Uses tracks_lookup.default_on if available, else top 2 by streams
-
 export function getDefaultTracks(trackList: TrackInfo[]): string[] {
   // If any tracks have default_on set, use those
   const withDefault = trackList.filter((t) => t.default_on === true);
@@ -268,8 +265,7 @@ export function getDefaultTracks(trackList: TrackInfo[]): string[] {
   return trackList.slice(0, 2).map((t) => t.track_name);
 }
 
-// ——— Peak Week stats (for KPI cards) ————————————————————————
-
+// ——— Peak Week stats (for KPI cards) ——————————————————————————
 export interface PeakWeekStats {
   peakWeekStreams: number;
   peakWeekDate: string;
@@ -323,8 +319,7 @@ export function getPeakWeekStats(
   return { peakWeekStreams, peakWeekDate, topTrackName, topTrackStreams };
 }
 
-// ——— Extract top learnings from major events —————————————————
-
+// ——— Extract top learnings from major events ————————————————
 export interface CampaignLearning {
   event_title: string;
   event_type: CampaignEvent["event_type"];
@@ -345,7 +340,6 @@ export function getTopLearnings(
   const withManual = events.filter(
     (e) => e.what_we_learned && e.observed_impact
   );
-
   for (const e of withManual) {
     let score = 20;
     if (e.is_major) score += 10;
@@ -371,7 +365,6 @@ export function getTopLearnings(
   const majorWithoutManual = events.filter(
     (e) => e.is_major && !manualDates.has(e.date)
   );
-
   for (const e of majorWithoutManual) {
     const obs = observations.get(e.date);
     if (!obs || obs.summary.startsWith("Not enough")) continue;
