@@ -1,6 +1,6 @@
-import { Campaign, WeeklyMetric, CampaignEvent, TrackWeeklyMetric } from "@/types";
+import { Campaign, WeeklyMetric, CampaignEvent, TrackWeeklyMetric, TrackLookupEntry } from "@/types";
 
-// ─── Campaigns ──────────────────────────────────────────────────
+// âââ Campaigns ââââââââââââââââââââââââââââââââââââââââââââââââââ
 
 export const mockCampaigns: Campaign[] = [
   {
@@ -23,7 +23,7 @@ export const mockCampaigns: Campaign[] = [
   },
 ];
 
-// ─── Helper to generate weekly dates ────────────────────────────
+// âââ Helper to generate weekly dates ââââââââââââââââââââââââââââ
 
 function weeklyDates(start: string, count: number): string[] {
   const dates: string[] = [];
@@ -35,7 +35,7 @@ function weeklyDates(start: string, count: number): string[] {
   return dates;
 }
 
-// ─── Weekly Metrics ─────────────────────────────────────────────
+// âââ Weekly Metrics âââââââââââââââââââââââââââââââââââââââââââââ
 
 function generateMetrics(
   campaignId: string,
@@ -95,7 +95,7 @@ export const mockMetrics: WeeklyMetric[] = [
   ...generateMetrics("billie_marten_album", "2026-01-19", 13, 900000, 1400, 800),
 ];
 
-// ─── Track Weekly Metrics ───────────────────────────────────────
+// âââ Track Weekly Metrics âââââââââââââââââââââââââââââââââââââââ
 
 function generateTrackMetrics(
   campaignId: string,
@@ -173,10 +173,10 @@ export const mockTrackMetrics: TrackWeeklyMetric[] = [
   ]),
 ];
 
-// ─── Campaign Events ────────────────────────────────────────────
+// âââ Campaign Events ââââââââââââââââââââââââââââââââââââââââââââ
 
 export const mockEvents: CampaignEvent[] = [
-  // ── Arlo Parks ────────────────────────────────
+  // ââ Arlo Parks ââââââââââââââââââââââââââââââââ
   {
     campaign_id: "arlo_parks_deluxe",
     date: "2026-01-12",
@@ -321,7 +321,7 @@ export const mockEvents: CampaignEvent[] = [
     source_platform: "meta",
   },
 
-  // ── James Blake ───────────────────────────────
+  // ââ James Blake âââââââââââââââââââââââââââââââ
   {
     campaign_id: "james_blake_album",
     date: "2026-02-09",
@@ -406,7 +406,7 @@ export const mockEvents: CampaignEvent[] = [
     source_platform: "tiktok",
   },
 
-  // ── Billie Marten ─────────────────────────────
+  // ââ Billie Marten âââââââââââââââââââââââââââââ
   {
     campaign_id: "billie_marten_album",
     date: "2026-01-26",
@@ -496,4 +496,23 @@ export const mockEvents: CampaignEvent[] = [
     notes: "10-date headline tour begins",
     is_major: false,
   },
+];
+
+// ——— Tracks Lookup (metadata for track toggles) ————————————————
+
+export const mockTracksLookup: TrackLookupEntry[] = [
+  // K Trap tracks
+  { track_name: "Impurities", release_week: "2025-01-17", track_role: "lead_single", default_on: true, sort_order: 1 },
+  { track_name: "Different Cloth", release_week: "2025-02-14", track_role: "second_single", default_on: true, sort_order: 2 },
+  { track_name: "Warm", release_week: "2025-03-07", track_role: "focus_track", default_on: false, sort_order: 3 },
+  { track_name: "Glorious", release_week: "2025-03-07", track_role: "album_track", default_on: false, sort_order: 4 },
+  { track_name: "Paper Plans", release_week: "2025-03-07", track_role: "album_track", default_on: false, sort_order: 5 },
+  // Keshi tracks
+  { track_name: "blue", release_week: "2024-11-01", track_role: "lead_single", default_on: true, sort_order: 1 },
+  { track_name: "limbo", release_week: "2024-11-15", track_role: "second_single", default_on: true, sort_order: 2 },
+  { track_name: "mango", release_week: "2024-12-06", track_role: "album_track", default_on: false, sort_order: 3 },
+  // Central Cee tracks
+  { track_name: "Band4Band", release_week: "2025-02-07", track_role: "lead_single", default_on: true, sort_order: 1 },
+  { track_name: "Limitless", release_week: "2025-02-21", track_role: "second_single", default_on: true, sort_order: 2 },
+  { track_name: "One By One", release_week: "2025-03-14", track_role: "focus_track", default_on: false, sort_order: 3 },
 ];
