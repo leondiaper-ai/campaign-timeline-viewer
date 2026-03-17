@@ -6,9 +6,10 @@ import {
   Territory,
   TrackWeeklyMetric,
   TrackInfo,
+  TrackLookupEntry,
 } from "@/types";
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Unified Chart Data Point Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Unified Chart Data Point ——————————————————————————————
 
 export interface UnifiedChartDataPoint {
   date: string;
@@ -19,9 +20,10 @@ export interface UnifiedChartDataPoint {
   [key: string]: number | string | null | CampaignEvent[];
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Build Unified Timeline Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Build Unified Timeline ————————————————————————————————
 // Single preprocessing step that creates a continuous weekly dataset
 // with campaign totals AND per-track streams layered in.
+// Uses tracks_lookup release_week for strict line suppression.
 
 export function buildUnifiedChartData(
   data: CampaignData,
@@ -49,14 +51,19 @@ export function buildUnifiedChartData(
       selectedTracks.includes(m.track_name)
   );
 
-  // 4. Build a continuous week timeline from campaign metrics
+  // 4. Build tracks_lookup index for release_week
+  const tracksLookupMap = new Map<string, TrackLookupEntry>();
+  (data.tracksLookup || []).forEach((entry) => {
+    tracksLookupMap.set(entry.track_name, entry);
+  });
+
+  // 5. Build a continuous week timeline from campaign metrics
   const allDates = new Set<string>();
   campaignMetrics.forEach((m) => allDates.add(m.week_ending));
   trackMetrics.forEach((m) => allDates.add(m.week_ending));
-
   const sortedDates = [...allDates].sort();
 
-  // 5. Build event lookup
+  // 6. Build event lookup
   const eventsByDate = new Map<string, CampaignEvent[]>();
   campaignEvents.forEach((e) => {
     const existing = eventsByDate.get(e.date) || [];
@@ -64,8 +71,11 @@ export function buildUnifiedChartData(
     eventsByDate.set(e.date, existing);
   });
 
-  // 6. Build campaign metrics lookup
-  const metricsLookup = new Map<string, { streams: number; physical: number }>();
+  // 7. Build campaign metrics lookup
+  const metricsLookup = new Map<
+    string,
+    { streams: number; physical: number }
+  >();
   campaignMetrics.forEach((m) => {
     metricsLookup.set(m.week_ending, {
       streams: m.total_streams,
@@ -73,28 +83,36 @@ export function buildUnifiedChartData(
     });
   });
 
-  // 7. Build track lookup: track -> date -> streams
+  // 8. Build track lookup: track -> date -> streams
   const trackLookup = new Map<string, Map<string, number>>();
   trackMetrics.forEach((m) => {
-    if (!trackLookup.has(m.track_name)) trackLookup.set(m.track_name, new Map());
+    if (!trackLookup.has(m.track_name))
+      trackLookup.set(m.track_name, new Map());
     trackLookup.get(m.track_name)!.set(m.week_ending, m.total_streams);
   });
 
-  // 8. Determine each track's first active week (first week with streams > 0)
-  const trackFirstWeek = new Map<string, string>();
+  // 9. Determine each track's release week:
+  //    Priority: tracks_lookup.release_week > first week with streams > 0
+  const trackReleaseWeek = new Map<string, string>();
   selectedTracks.forEach((track) => {
+    const lookup = tracksLookupMap.get(track);
+    if (lookup?.release_week) {
+      trackReleaseWeek.set(track, lookup.release_week);
+      return;
+    }
+    // Fallback: first week with streams > 0
     const dates = trackLookup.get(track);
     if (!dates) return;
     for (const date of sortedDates) {
       const val = dates.get(date);
       if (val && val > 0) {
-        trackFirstWeek.set(track, date);
+        trackReleaseWeek.set(track, date);
         break;
       }
     }
   });
 
-  // 9. Build unified data points
+  // 10. Build unified data points
   const result: UnifiedChartDataPoint[] = sortedDates.map((date) => {
     const metric = metricsLookup.get(date);
     const point: UnifiedChartDataPoint = {
@@ -104,10 +122,10 @@ export function buildUnifiedChartData(
       events: eventsByDate.get(date) || [],
     };
 
-    // Add track data Ã¢ÂÂ NULL before release week, actual value after
+    // Add track data — NULL before release week, actual value after
     selectedTracks.forEach((track) => {
-      const firstWeek = trackFirstWeek.get(track);
-      if (!firstWeek || date < firstWeek) {
+      const releaseWeek = trackReleaseWeek.get(track);
+      if (!releaseWeek || date < releaseWeek) {
         // Before release: null (not zero) so line doesn't render
         point[track] = null;
       } else {
@@ -119,7 +137,7 @@ export function buildUnifiedChartData(
     return point;
   });
 
-  // 10. Add orphan event dates as ghost points
+  // 11. Add orphan event dates as ghost points
   const metricDates = new Set(sortedDates);
   campaignEvents.forEach((e) => {
     if (!metricDates.has(e.date)) {
@@ -139,7 +157,7 @@ export function buildUnifiedChartData(
   return result.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Legacy buildChartData (kept for compatibility) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Legacy buildChartData (kept for compatibility) ——————————
 
 export function buildChartData(
   data: CampaignData,
@@ -155,7 +173,7 @@ export function buildChartData(
   }));
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Filter events for event list Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Filter events for event list ———————————————————————————
 
 export function getFilteredEvents(
   data: CampaignData,
@@ -171,7 +189,7 @@ export function getFilteredEvents(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Track List Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Track List (enriched with tracks_lookup) ————————————————
 
 export function getTrackList(
   data: CampaignData,
@@ -183,6 +201,12 @@ export function getTrackList(
   );
 
   if (trackMetrics.length === 0) return [];
+
+  // Build tracks_lookup index
+  const lookupMap = new Map<string, TrackLookupEntry>();
+  (data.tracksLookup || []).forEach((entry) => {
+    lookupMap.set(entry.track_name, entry);
+  });
 
   const trackMap = new Map<string, TrackWeeklyMetric[]>();
   trackMetrics.forEach((m) => {
@@ -196,7 +220,6 @@ export function getTrackList(
     const sorted = [...metrics].sort((a, b) =>
       a.week_ending.localeCompare(b.week_ending)
     );
-
     const firstActive = sorted.find((m) => m.total_streams > 0);
     const totalStreams = sorted.reduce((s, m) => s + m.total_streams, 0);
     const peakWeek = sorted.reduce(
@@ -204,28 +227,103 @@ export function getTrackList(
       sorted[0]
     );
 
+    const lookup = lookupMap.get(trackName);
+
     tracks.push({
       track_name: trackName,
-      first_active_week: firstActive?.week_ending || sorted[0].week_ending,
+      first_active_week:
+        firstActive?.week_ending || sorted[0].week_ending,
       total_streams: totalStreams,
       peak_week: peakWeek.week_ending,
       peak_streams: peakWeek.total_streams,
+      // Enriched from tracks_lookup
+      release_week: lookup?.release_week,
+      track_role: lookup?.track_role,
+      default_on: lookup?.default_on,
+      sort_order: lookup?.sort_order,
     });
   });
 
-  // Sort by total streams descending
-  tracks.sort((a, b) => b.total_streams - a.total_streams);
+  // Sort: if tracks_lookup provides sort_order, use it; else by total streams
+  const hasLookup = tracks.some((t) => t.sort_order !== undefined);
+  if (hasLookup) {
+    tracks.sort((a, b) => (a.sort_order ?? 999) - (b.sort_order ?? 999));
+  } else {
+    tracks.sort((a, b) => b.total_streams - a.total_streams);
+  }
+
   return tracks;
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Default track selection Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
-// Auto-select the top 2 tracks (lead single + second single)
+// ——— Default track selection ————————————————————————————————
+// Uses tracks_lookup.default_on if available, else top 2 by streams
 
 export function getDefaultTracks(trackList: TrackInfo[]): string[] {
+  // If any tracks have default_on set, use those
+  const withDefault = trackList.filter((t) => t.default_on === true);
+  if (withDefault.length > 0) {
+    return withDefault.map((t) => t.track_name);
+  }
+  // Fallback: top 2 by total streams
   return trackList.slice(0, 2).map((t) => t.track_name);
 }
 
-// Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂ Extract top learnings from major events Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+// ——— Peak Week stats (for KPI cards) ————————————————————————
+
+export interface PeakWeekStats {
+  peakWeekStreams: number;
+  peakWeekDate: string;
+  topTrackName: string;
+  topTrackStreams: number;
+}
+
+export function getPeakWeekStats(
+  data: CampaignData,
+  campaignId: string,
+  territory: Territory
+): PeakWeekStats {
+  const metrics = data.metrics.filter(
+    (m) => m.campaign_id === campaignId && m.territory === territory
+  );
+  const sorted = [...metrics].sort((a, b) =>
+    a.week_ending.localeCompare(b.week_ending)
+  );
+
+  // Peak week streams
+  let peakWeekStreams = 0;
+  let peakWeekDate = "";
+  for (const m of sorted) {
+    if (m.total_streams > peakWeekStreams) {
+      peakWeekStreams = m.total_streams;
+      peakWeekDate = m.week_ending;
+    }
+  }
+
+  // Top track by total streams
+  const trackMetrics = data.trackMetrics.filter(
+    (m) => m.campaign_id === campaignId && m.territory === territory
+  );
+  const trackTotals = new Map<string, number>();
+  trackMetrics.forEach((m) => {
+    trackTotals.set(
+      m.track_name,
+      (trackTotals.get(m.track_name) || 0) + m.total_streams
+    );
+  });
+
+  let topTrackName = "";
+  let topTrackStreams = 0;
+  trackTotals.forEach((total, name) => {
+    if (total > topTrackStreams) {
+      topTrackStreams = total;
+      topTrackName = name;
+    }
+  });
+
+  return { peakWeekStreams, peakWeekDate, topTrackName, topTrackStreams };
+}
+
+// ——— Extract top learnings from major events —————————————————
 
 export interface CampaignLearning {
   event_title: string;
