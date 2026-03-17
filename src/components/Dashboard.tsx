@@ -3,8 +3,8 @@
 import { useMemo, useState, useCallback, useEffect } from "react";
 import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
 import {
-  buildChartData, buildTrackChartData, getTrackList, getTrackListForChart,
-  getDefaultTracks, getAllMoments,
+  buildChartData, getTrackList, getDefaultTracks, getAllTrackNames,
+  getAllMoments, inferTrackRoles, detectHandoverMoment, getChartInsight,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -12,19 +12,10 @@ import CampaignStatusRow from "./CampaignStatusRow";
 import CampaignLearnings from "./CampaignLearnings";
 import TimelineChart from "./TimelineChart";
 
-function fmt(value: number): string {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-  if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
-  return value.toLocaleString();
-}
-
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
-
-const TRACK_COLORS = ["#FBBF24", "#F472B6", "#22D3EE", "#A78BFA", "#FB7185", "#F97316"];
 
 interface DashboardProps { initialData: AppData; }
 
@@ -32,11 +23,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const campaigns = initialData.campaigns;
   const [campaignIdx, setCampaignIdx] = useState(0);
   const [territory, setTerritory] = useState<Territory>("global");
-  const [selectedTracks, setSelectedTracks] = useState<string[] | null>(null);
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
-  const [streamView, setStreamView] = useState<"total" | "by_track">("total");
-  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
-  const [focusTrack, setFocusTrack] = useState<string | null>(null);
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -45,67 +32,40 @@ export default function Dashboard({ initialData }: DashboardProps) {
     if (sheet?.setup.default_territory) setTerritory(sheet.setup.default_territory);
   }, [sheet]);
 
-  const trackList = useMemo(() => (sheet ? getTrackList(sheet) : []), [sheet]);
-  const activeTracks = useMemo(() => {
-    if (selectedTracks !== null) return selectedTracks;
-    return getDefaultTracks(trackList);
-  }, [selectedTracks, trackList]);
+  // ALL tracks from weekly data (not just tracks tab) — ensures DJH shows
+  const allTrackNames = useMemo(() => sheet ? getAllTrackNames(sheet) : [], [sheet]);
 
+  // Narrative roles — computed from data patterns
+  const trackRoles = useMemo(() => sheet ? inferTrackRoles(sheet, territory) : [], [sheet, territory]);
+
+  // Chart data with ALL tracks
   const chartData = useMemo(
-    () => (sheet ? buildChartData(sheet, territory, activeTracks) : []),
-    [sheet, territory, activeTracks]
+    () => sheet ? buildChartData(sheet, territory, allTrackNames) : [],
+    [sheet, territory, allTrackNames]
   );
 
-  const trackListForChart = useMemo(
-    () => campaign ? getTrackListForChart(campaign.trackWeeklyMetrics, territory) : [],
-    [campaign, territory]
+  // Handover moment detection
+  const handoverMoment = useMemo(
+    () => sheet ? detectHandoverMoment(sheet, territory) : null,
+    [sheet, territory]
   );
 
-  useEffect(() => {
-    if (streamView === "by_track" && !selectedTrackId && trackListForChart.length > 0)
-      setSelectedTrackId(trackListForChart[0].track_id);
-  }, [streamView, selectedTrackId, trackListForChart]);
+  // Chart insight
+  const chartInsight = useMemo(
+    () => sheet ? getChartInsight(sheet, territory) : null,
+    [sheet, territory]
+  );
 
-  const trackChartData = useMemo(() => {
-    if (!sheet || !campaign || !selectedTrackId) return null;
-    return buildTrackChartData(sheet, territory, campaign.trackWeeklyMetrics, selectedTrackId);
-  }, [sheet, campaign, territory, selectedTrackId]);
-
-  const selectedTrackName = useMemo(() => {
-    if (!selectedTrackId) return "";
-    return trackListForChart.find((t) => t.track_id === selectedTrackId)?.track_name ?? "";
-  }, [selectedTrackId, trackListForChart]);
-
-  const moments = useMemo(() => (sheet ? getAllMoments(sheet) : []), [sheet]);
+  // Moments
+  const moments = useMemo(() => sheet ? getAllMoments(sheet) : [], [sheet]);
   const keyMomentDates = useMemo(
     () => new Set(moments.filter((m) => m.is_key).map((m) => m.date)),
     [moments]
   );
 
-  const hasTrackWeeklyData = campaign && campaign.trackWeeklyMetrics.length > 0;
-
-  // Toggle track on/off
-  const toggleTrack = useCallback((trackName: string) => {
-    setSelectedTracks((prev) => {
-      const current = prev ?? getDefaultTracks(trackList);
-      return current.includes(trackName)
-        ? current.filter((t) => t !== trackName)
-        : [...current, trackName];
-    });
-  }, [trackList]);
-
-  // Click track to focus (click again to unfocus)
-  const handleTrackFocus = useCallback((trackName: string) => {
-    setFocusTrack((prev) => prev === trackName ? null : trackName);
-  }, []);
-
   const handleCampaignChange = useCallback((idx: number) => {
     setCampaignIdx(idx);
-    setSelectedTracks(null);
     setHighlightedDate(null);
-    setStreamView("total");
-    setSelectedTrackId(null);
-    setFocusTrack(null);
   }, []);
 
   if (!campaign || !sheet) {
@@ -123,15 +83,10 @@ export default function Dashboard({ initialData }: DashboardProps) {
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             {campaigns.length > 1 ? (
-              <select
-                className="bg-[#161922] border border-[#2A2D3E] rounded-lg px-3 py-1.5 text-sm font-medium text-white"
-                value={campaignIdx}
-                onChange={(e) => handleCampaignChange(Number(e.target.value))}
-              >
+              <select className="bg-[#161922] border border-[#2A2D3E] rounded-lg px-3 py-1.5 text-sm font-medium text-white"
+                value={campaignIdx} onChange={(e) => handleCampaignChange(Number(e.target.value))}>
                 {campaigns.map((c, i) => (
-                  <option key={c.campaign_id} value={i}>
-                    {c.sheet.setup.artist_name} — {c.sheet.setup.campaign_name}
-                  </option>
+                  <option key={c.campaign_id} value={i}>{c.sheet.setup.artist_name} — {c.sheet.setup.campaign_name}</option>
                 ))}
               </select>
             ) : (
@@ -144,9 +99,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
               {sheet.setup.campaign_type}
             </span>
             {sheet.setup.release_date && (
-              <span className="text-[10px] text-[#4B5563]">
-                Release: {formatDate(sheet.setup.release_date)}
-              </span>
+              <span className="text-[10px] text-[#4B5563]">Release: {formatDate(sheet.setup.release_date)}</span>
             )}
           </div>
           <div className="flex items-center gap-1 bg-[#161922] rounded-lg p-0.5 border border-[#2A2D3E]">
@@ -163,124 +116,63 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Status Row */}
+        {/* 1. Status Row — Verdict, Top Moment, Momentum */}
         <CampaignStatusRow sheet={sheet} territory={territory} />
 
-        {/* Two stat cards + track toggles in one row */}
-        <div className="flex items-start gap-5">
-          <div className="flex-shrink-0">
-            <CampaignInsights sheet={sheet} territory={territory} />
-          </div>
-          {/* Track toggles — click to focus, shift-click to toggle */}
-          {trackList.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 pt-2">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-[#4B5563] mr-1">Tracks</span>
-              {trackList.map((track, i) => {
-                const isOn = activeTracks.includes(track.track_name);
-                const isFocused = focusTrack === track.track_name;
-                const color = TRACK_COLORS[i % TRACK_COLORS.length];
-                return (
-                  <button key={track.track_name}
-                    onClick={(e) => {
-                      if (e.shiftKey) { toggleTrack(track.track_name); }
-                      else { handleTrackFocus(track.track_name); }
-                    }}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
-                      isFocused
-                        ? "border-white/30 bg-white/10 text-white ring-1 ring-white/20"
-                        : isOn
-                        ? "border-white/15 bg-white/5 text-white"
-                        : "border-[#2A2D3E] bg-transparent text-[#6B7280] hover:text-[#9CA3AF]"
-                    }`}>
-                    <span className="w-2 h-2 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: isOn ? color : "#3A3D4E", opacity: isOn ? 1 : 0.3 }} />
-                    {track.track_name}
-                    {isFocused && <span className="text-[8px] text-[#9CA3AF] ml-0.5">FOCUS</span>}
-                  </button>
-                );
-              })}
-              {focusTrack && (
-                <button onClick={() => setFocusTrack(null)}
-                  className="text-[10px] text-[#6B7280] hover:text-white ml-1 underline underline-offset-2">
-                  Clear focus
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+        {/* 2. Two stat cards only */}
+        <CampaignInsights sheet={sheet} territory={territory} />
 
-        {/* Chart */}
+        {/* 3. Chart (primary storytelling layer) */}
         <div className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-white">Weekly Performance</h2>
-            {hasTrackWeeklyData && (
-              <div className="flex items-center gap-1 bg-[#0D1117] rounded-lg p-0.5 border border-[#1E2130]">
-                <button onClick={() => setStreamView("total")}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    streamView === "total" ? "bg-[#161922] text-white" : "text-[#6B7280]"
-                  }`}>Total Campaign</button>
-                <button onClick={() => setStreamView("by_track")}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    streamView === "by_track" ? "bg-[#161922] text-white" : "text-[#6B7280]"
-                  }`}>By Track</button>
-              </div>
-            )}
-          </div>
+          <h2 className="text-sm font-semibold text-white mb-3">Weekly Performance</h2>
           <TimelineChart
-            data={streamView === "by_track" && trackChartData ? trackChartData : chartData}
-            selectedTracks={streamView === "by_track" ? [] : activeTracks}
+            data={chartData}
+            selectedTracks={allTrackNames}
+            trackRoles={trackRoles}
             visibleEventDates={keyMomentDates}
             highlightedDate={highlightedDate}
-            streamView={streamView}
-            trackData={streamView === "by_track" ? trackChartData : undefined}
-            trackName={selectedTrackName}
-            totalCampaignData={streamView === "by_track" ? chartData : undefined}
-            focusTrack={focusTrack}
+            handoverMoment={handoverMoment}
+            chartInsight={chartInsight}
           />
         </div>
 
-        {/* Moments FIRST (primary narrative), then Learnings */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          {/* Campaign Moments — primary layer */}
-          {moments.length > 0 && (
-            <div className="lg:col-span-3 bg-[#131620] rounded-xl border border-[#1E2130] p-4">
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
-                Campaign Moments
-                <span className="text-[#4B5563] font-normal ml-2">({moments.length})</span>
-              </h3>
-              <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
-                {moments.map((moment: Moment, i: number) => {
-                  const cat = getCategoryConfig(moment.moment_type);
-                  return (
-                    <div key={i}
-                      className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg transition-colors cursor-pointer ${
-                        highlightedDate === moment.date ? "bg-white/5" : "hover:bg-white/[0.02]"
-                      }`}
-                      onMouseEnter={() => setHighlightedDate(moment.date)}
-                      onMouseLeave={() => setHighlightedDate(null)}>
-                      <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
-                        style={{ backgroundColor: cat.color }} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[11px] font-semibold text-white">{moment.moment_title}</span>
-                          {moment.is_key && (
-                            <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Key</span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-[#4B5563]">{formatDate(moment.date)} · {cat.label}</span>
+        {/* 4. Campaign Moments (primary narrative) */}
+        {moments.length > 0 && (
+          <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-4">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
+              Campaign Moments
+              <span className="text-[#4B5563] font-normal ml-2">({moments.length})</span>
+            </h3>
+            <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
+              {moments.map((moment: Moment, i: number) => {
+                const cat = getCategoryConfig(moment.moment_type);
+                return (
+                  <div key={i}
+                    className={`flex items-start gap-2.5 px-2.5 py-2 rounded-lg transition-colors cursor-pointer ${
+                      highlightedDate === moment.date ? "bg-white/5" : "hover:bg-white/[0.02]"
+                    }`}
+                    onMouseEnter={() => setHighlightedDate(moment.date)}
+                    onMouseLeave={() => setHighlightedDate(null)}>
+                    <span className="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0"
+                      style={{ backgroundColor: cat.color }} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-white">{moment.moment_title}</span>
+                        {moment.is_key && (
+                          <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Key</span>
+                        )}
                       </div>
+                      <span className="text-[10px] text-[#4B5563]">{formatDate(moment.date)} · {cat.label}</span>
                     </div>
-                  );
-                })}
-              </div>
+                  </div>
+                );
+              })}
             </div>
-          )}
-
-          {/* Campaign Learnings — supporting layer */}
-          <div className="lg:col-span-2">
-            <CampaignLearnings sheet={sheet} territory={territory} />
           </div>
-        </div>
+        )}
+
+        {/* 5. Campaign Learnings (supporting) */}
+        <CampaignLearnings sheet={sheet} territory={territory} />
       </main>
     </div>
   );
