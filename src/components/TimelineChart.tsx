@@ -48,6 +48,7 @@ interface TimelineChartProps {
   trackData?: ChartDataPoint[] | null;
   trackName?: string;
   totalCampaignData?: ChartDataPoint[];
+  focusTrack?: string | null;
 }
 
 interface TooltipPayloadEntry {
@@ -187,7 +188,7 @@ function layoutMomentMarkers(data: ChartDataPoint[], visibleDates: Set<string>):
 
 export default function TimelineChart({
   data, selectedTracks, visibleEventDates, highlightedDate,
-  streamView = "total", trackData, trackName,
+  streamView = "total", trackData, trackName, focusTrack,
 }: TimelineChartProps) {
   const isByTrack = streamView === "by_track" && trackData;
   const chartSource = isByTrack ? trackData! : data;
@@ -294,12 +295,19 @@ export default function TimelineChart({
                 activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }}
                 name="Total Streams" />
             )}
-            {!isByTrack && selectedTracks.map((track, i) => (
-              <Line key={track} yAxisId="streams" type="monotone" dataKey={track}
-                stroke={TRACK_COLORS[i % TRACK_COLORS.length]} strokeWidth={1.5} dot={false}
-                activeDot={{ r: 3, fill: TRACK_COLORS[i % TRACK_COLORS.length] }}
-                connectNulls={false} name={track} />
-            ))}
+            {!isByTrack && selectedTracks.map((track, i) => {
+              const isFocused = focusTrack === track;
+              const isDimmed = focusTrack && focusTrack !== track;
+              return (
+                <Line key={track} yAxisId="streams" type="monotone" dataKey={track}
+                  stroke={TRACK_COLORS[i % TRACK_COLORS.length]}
+                  strokeWidth={isFocused ? 3 : isDimmed ? 1 : 1.5}
+                  strokeOpacity={isDimmed ? 0.2 : 1}
+                  dot={false}
+                  activeDot={isDimmed ? false : { r: isFocused ? 5 : 3, fill: TRACK_COLORS[i % TRACK_COLORS.length] }}
+                  connectNulls={false} name={track} />
+              );
+            })}
 
             {/* By Track mode */}
             {isByTrack && (
