@@ -7,103 +7,76 @@ import {
 } from "recharts";
 import { ChartDataPoint, Moment } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
+import { TrackWithRole, HandoverMoment } from "@/lib/transforms";
 
 const TOTAL_COLOR = "#6C9EFF";
 const PHYSICAL_COLOR = "#4ADE80";
-const TRACK_COLORS = ["#FBBF24", "#F472B6", "#22D3EE", "#A78BFA", "#FB7185", "#F97316"];
 
 function fmt(value: number): string {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
   if (value >= 1_000) return `${(value / 1_000).toFixed(0)}K`;
   return value.toLocaleString();
 }
-
 function formatDate(dateStr: string): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
-
 function formatFullDate(dateStr: string): string {
   if (!dateStr) return "";
-  const date = new Date(dateStr + "T00:00:00");
-  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 }
-
-// Aggressive label truncation for chart markers
 function truncLabel(title: string, max: number = 16): string {
   if (title.length <= max) return title;
-  // Try to cut at a word boundary
   const cut = title.slice(0, max - 1);
-  const lastSpace = cut.lastIndexOf(" ");
-  return (lastSpace > max * 0.4 ? cut.slice(0, lastSpace) : cut) + "\u2026";
+  const sp = cut.lastIndexOf(" ");
+  return (sp > max * 0.4 ? cut.slice(0, sp) : cut) + "\u2026";
 }
 
 interface TimelineChartProps {
   data: ChartDataPoint[];
   selectedTracks: string[];
+  trackRoles: TrackWithRole[];
   visibleEventDates: Set<string>;
   highlightedDate: string | null;
-  streamView?: "total" | "by_track";
-  trackData?: ChartDataPoint[] | null;
-  trackName?: string;
-  totalCampaignData?: ChartDataPoint[];
-  focusTrack?: string | null;
+  handoverMoment?: HandoverMoment | null;
+  chartInsight?: string | null;
 }
 
-interface TooltipPayloadEntry {
-  name: string; value: number | null; color: string; dataKey: string; payload: ChartDataPoint;
-}
-
-function CustomTooltip({ active, payload, label, streamView, trackName }: {
-  active?: boolean; payload?: TooltipPayloadEntry[]; label?: string;
-  streamView?: "total" | "by_track"; trackName?: string;
+// ——— Tooltip ————————————————————————————————————————————————
+function CustomTooltip({ active, payload, label, trackRoles }: {
+  active?: boolean; payload?: any[]; label?: string; trackRoles: TrackWithRole[];
 }) {
   if (!active || !payload || !payload.length) return null;
   const dp = payload[0]?.payload;
   if (!dp) return null;
-
   const events = dp.events || [];
-  const isByTrack = streamView === "by_track";
-  const mainStreams = isByTrack ? ((dp.track_streams as number) || 0) : dp.total_streams;
-  const prevStreams = dp.prev_week_streams;
-  const wowChange = prevStreams !== null && prevStreams > 0
-    ? ((mainStreams - prevStreams) / prevStreams) * 100 : null;
 
   return (
     <div className="bg-[#1A1D2E] rounded-xl border border-[#2A2D3E] p-4 max-w-xs shadow-2xl">
       <p className="text-[11px] font-semibold text-[#6B7280] mb-2">{label ? formatFullDate(label) : ""}</p>
-      {mainStreams > 0 && (
+      {dp.total_streams > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: TOTAL_COLOR }} />
-            <span className="text-xs text-[#9CA3AF]">{isByTrack ? trackName || "Track" : "Weekly Streams"}</span>
+            <span className="text-xs text-[#9CA3AF]">Total Streams</span>
           </div>
-          <span className="text-xs font-semibold text-white tabular-nums">{fmt(mainStreams)}</span>
+          <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.total_streams)}</span>
         </div>
       )}
-      {wowChange !== null && (
-        <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-[#6B7280] ml-4">vs Last Week</span>
-          <span className={`text-xs font-semibold tabular-nums ${wowChange >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-            {wowChange >= 0 ? "+" : ""}{wowChange.toFixed(1)}%
-          </span>
-        </div>
-      )}
-      {dp.cumulative_streams > 0 && !isByTrack && (
-        <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-[#6B7280] ml-4">Campaign Total</span>
-          <span className="text-xs font-medium text-[#9CA3AF] tabular-nums">{fmt(dp.cumulative_streams)}</span>
-        </div>
-      )}
-      {!isByTrack && payload.filter((e) => e.dataKey !== "total_streams" && e.dataKey !== "physical_units" && e.value != null)
-        .map((entry, i) => (
+      {/* Track values — ordered by role */}
+      {trackRoles
+        .filter(tr => dp[tr.track_name] != null && dp[tr.track_name] > 0)
+        .sort((a,b) => b.strokeWidth - a.strokeWidth)
+        .map((tr, i) => (
           <div key={i} className="flex items-center justify-between gap-4 mb-1">
             <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: entry.color }} />
-              <span className="text-xs text-[#9CA3AF] truncate max-w-[120px]">{entry.dataKey}</span>
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tr.color }} />
+              <span className="text-xs text-[#9CA3AF] truncate max-w-[120px]">{tr.track_name}</span>
+              {tr.role === "POST_RELEASE_BREAKOUT" && (
+                <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded bg-amber-500/15 text-amber-400">BREAKOUT</span>
+              )}
             </div>
-            <span className="text-xs font-semibold text-white tabular-nums">{fmt(entry.value as number)}</span>
+            <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp[tr.track_name] as number)}</span>
           </div>
         ))}
       {dp.physical_units > 0 && (
@@ -123,7 +96,6 @@ function CustomTooltip({ active, payload, label, streamView, trackName }: {
               <div key={i} className="mb-1.5 last:mb-0 flex items-center gap-1.5">
                 <span style={{ color: cat.color }} className="text-xs">{cat.icon}</span>
                 <span className="text-xs font-medium text-white">{m.moment_title}</span>
-                {m.is_key && <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded bg-amber-500/15 text-amber-400">KEY</span>}
               </div>
             );
           })}
@@ -134,108 +106,66 @@ function CustomTooltip({ active, payload, label, streamView, trackName }: {
 }
 
 
-// ——— Moment marker layout: stagger to avoid collision, max 7 ———
-interface MomentMarker {
-  date: string;
-  label: string;
-  color: string;
-  row: number; // 0 = top row, 1 = staggered row
-}
+// ——— Moment label layout ————————————————————————————————————
+interface MomentMarker { date: string; label: string; color: string; row: number; }
 
 function layoutMomentMarkers(data: ChartDataPoint[], visibleDates: Set<string>): MomentMarker[] {
-  // Collect key moments — dedupe by date (pick highest priority per date)
   const byDate = new Map<string, { date: string; label: string; color: string; priority: number }>();
   const priorityMap: Record<string, number> = { music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
-
   data.forEach((d) => {
     if (d.events.length > 0) {
       const keyEvents = d.events.filter((e) => e.is_key && visibleDates.has(e.date));
       if (keyEvents.length > 0) {
-        // Pick the highest-priority event for this date
-        let bestEvent = keyEvents[0];
-        let bestPriority = 0;
+        let bestEvent = keyEvents[0], bestP = 0;
         for (const e of keyEvents) {
           const cat = getCategoryConfig(e.moment_type);
           const p = priorityMap[cat.label.toLowerCase()] || 1;
-          if (p > bestPriority) { bestPriority = p; bestEvent = e; }
+          if (p > bestP) { bestP = p; bestEvent = e; }
         }
         const cat = getCategoryConfig(bestEvent.moment_type);
         const existing = byDate.get(d.date);
-        if (!existing || bestPriority > existing.priority) {
-          byDate.set(d.date, {
-            date: d.date,
-            label: truncLabel(bestEvent.moment_title, 18),
-            color: cat.color,
-            priority: bestPriority,
-          });
+        if (!existing || bestP > existing.priority) {
+          byDate.set(d.date, { date: d.date, label: truncLabel(bestEvent.moment_title, 18), color: cat.color, priority: bestP });
         }
       }
     }
   });
-
-  // Sort by date, cap at 7
-  const deduped = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
-  const capped = deduped.slice(0, 7);
-
-  // Stagger: alternate row 0 and 1 for adjacent markers
-  return capped.map((m, i) => ({
-    date: m.date,
-    label: m.label,
-    color: m.color,
-    row: i % 2,
-  }));
+  const deduped = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 7);
+  return deduped.map((m, i) => ({ date: m.date, label: m.label, color: m.color, row: i % 2 }));
 }
 
+// ——— Main Chart ————————————————————————————————————————————
 export default function TimelineChart({
-  data, selectedTracks, visibleEventDates, highlightedDate,
-  streamView = "total", trackData, trackName, focusTrack,
+  data, selectedTracks, trackRoles, visibleEventDates,
+  highlightedDate, handoverMoment, chartInsight,
 }: TimelineChartProps) {
-  const isByTrack = streamView === "by_track" && trackData;
-  const chartSource = isByTrack ? trackData! : data;
 
-  // Build moment markers with stagger layout
-  const momentMarkers = useMemo(
-    () => layoutMomentMarkers(chartSource, visibleEventDates),
-    [chartSource, visibleEventDates]
-  );
+  const momentMarkers = useMemo(() => layoutMomentMarkers(data, visibleEventDates), [data, visibleEventDates]);
+  const hasPhysical = useMemo(() => data.some((d) => d.physical_units > 0), [data]);
 
-  const hasPhysical = useMemo(
-    () => chartSource.some((d) => d.physical_units > 0),
-    [chartSource]
-  );
+  // Build role lookup for selected tracks
+  const roleMap = useMemo(() => {
+    const map = new Map<string, TrackWithRole>();
+    trackRoles.forEach(r => map.set(r.track_name, r));
+    return map;
+  }, [trackRoles]);
 
   return (
     <div className="w-full">
-      {/* ——— K Trap-style moment labels above chart ——— */}
+      {/* Moment labels above chart */}
       {momentMarkers.length > 0 && (
         <div className="relative w-full mb-1" style={{ height: 44 }}>
-          {/* We position labels using approximate % across chart width */}
-          {/* Chart left margin ~55px, right ~60px on ~full width */}
           <div className="absolute inset-0 flex items-end">
             {momentMarkers.map((m, i) => {
-              // Calculate approximate horizontal position
-              const dates = chartSource.map((d) => d.date).sort();
+              const dates = data.map((d) => d.date).sort();
               const dateIdx = dates.indexOf(m.date);
               const pct = dates.length > 1 ? (dateIdx / (dates.length - 1)) * 100 : 50;
-              // Offset to account for chart margins
-              const leftPct = 4 + pct * 0.88; // ~4% left margin, ~88% chart area
-
+              const leftPct = 4 + pct * 0.88;
               return (
-                <div
-                  key={i}
-                  className="absolute flex flex-col items-center"
-                  style={{
-                    left: `${leftPct}%`,
-                    bottom: m.row === 0 ? 20 : 2,
-                    transform: "translateX(-50%)",
-                  }}
-                >
-                  <span
-                    className="text-[9px] font-bold uppercase tracking-wider whitespace-nowrap px-1"
-                    style={{ color: m.color }}
-                  >
-                    {m.label}
-                  </span>
+                <div key={i} className="absolute flex flex-col items-center"
+                  style={{ left: `${leftPct}%`, bottom: m.row === 0 ? 20 : 2, transform: "translateX(-50%)" }}>
+                  <span className="text-[9px] font-bold uppercase tracking-wider whitespace-nowrap px-1"
+                    style={{ color: m.color }}>{m.label}</span>
                   <div className="w-px h-1.5 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.4 }} />
                 </div>
               );
@@ -244,124 +174,107 @@ export default function TimelineChart({
         </div>
       )}
 
-      {/* ——— Main Chart ——— */}
+      {/* Chart */}
       <div className="w-full h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart
-            data={chartSource}
-            margin={{ top: 8, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}
-          >
+          <ComposedChart data={data} margin={{ top: 8, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#1E2130" vertical={false} />
-            <XAxis
-              dataKey="date" tickFormatter={formatDate}
-              tick={{ fontSize: 10, fill: "#4B5563" }}
-              axisLine={{ stroke: "#1E2130" }} tickLine={false} dy={8}
-              interval="preserveStartEnd"
-            />
+            <XAxis dataKey="date" tickFormatter={formatDate}
+              tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#1E2130" }}
+              tickLine={false} dy={8} interval="preserveStartEnd" />
             <YAxis yAxisId="streams" tickFormatter={fmt}
-              tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
-            />
+              tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
             {hasPhysical && (
               <YAxis yAxisId="physical" orientation="right" tickFormatter={fmt}
-                tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
-              />
+                tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
             )}
-            <Tooltip
-              content={<CustomTooltip streamView={streamView} trackName={trackName} />}
-              cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }}
-            />
+            <Tooltip content={<CustomTooltip trackRoles={trackRoles} />}
+              cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
 
-            {/* Highlighted date from moments list hover */}
+            {/* Highlighted date */}
             {highlightedDate && (
               <ReferenceLine x={highlightedDate} yAxisId="streams" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />
             )}
 
-            {/* Key moment vertical dotted lines — visible, colored */}
+            {/* Key moment vertical lines */}
             {momentMarkers.map((m, i) => (
-              <ReferenceLine
-                key={`mk-${i}`} x={m.date} yAxisId="streams"
-                stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.6}
-              />
+              <ReferenceLine key={`mk-${i}`} x={m.date} yAxisId="streams"
+                stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.5} />
             ))}
 
-            {/* Total Campaign mode */}
-            {!isByTrack && (
-              <Area yAxisId="streams" type="monotone" dataKey="total_streams"
-                fill={`${TOTAL_COLOR}12`} stroke="none" />
+            {/* HANDOVER MARKER — "Post-release single" */}
+            {handoverMoment && (
+              <ReferenceLine x={handoverMoment.date} yAxisId="streams"
+                stroke="#FBBF24" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.8}
+                label={{ value: handoverMoment.label, position: "insideTopRight",
+                  fill: "#FBBF24", fontSize: 10, fontWeight: 700, offset: 8 }} />
             )}
-            {!isByTrack && (
-              <Line yAxisId="streams" type="monotone" dataKey="total_streams"
-                stroke={TOTAL_COLOR} strokeWidth={2.5} dot={false}
-                activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }}
-                name="Total Streams" />
-            )}
-            {!isByTrack && selectedTracks.map((track, i) => {
-              const isFocused = focusTrack === track;
-              const isDimmed = focusTrack && focusTrack !== track;
+
+            {/* Total streams area + line */}
+            <Area yAxisId="streams" type="monotone" dataKey="total_streams"
+              fill={`${TOTAL_COLOR}08`} stroke="none" />
+            <Line yAxisId="streams" type="monotone" dataKey="total_streams"
+              stroke={TOTAL_COLOR} strokeWidth={2} dot={false}
+              activeDot={{ r: 4, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }}
+              name="Total Streams" />
+
+            {/* Track lines — rendered with narrative role hierarchy */}
+            {selectedTracks.map((track) => {
+              const role = roleMap.get(track);
+              const sw = role?.strokeWidth ?? 1.5;
+              const op = role?.opacity ?? 0.5;
+              const col = role?.color ?? "#6B7280";
               return (
                 <Line key={track} yAxisId="streams" type="monotone" dataKey={track}
-                  stroke={TRACK_COLORS[i % TRACK_COLORS.length]}
-                  strokeWidth={isFocused ? 3 : isDimmed ? 1 : 1.5}
-                  strokeOpacity={isDimmed ? 0.2 : 1}
+                  stroke={col} strokeWidth={sw} strokeOpacity={op}
                   dot={false}
-                  activeDot={isDimmed ? false : { r: isFocused ? 5 : 3, fill: TRACK_COLORS[i % TRACK_COLORS.length] }}
+                  activeDot={op > 0.5 ? { r: sw > 2 ? 5 : 3, fill: col, stroke: "#0D1117", strokeWidth: 2 } : false}
                   connectNulls={false} name={track} />
               );
             })}
-
-            {/* By Track mode */}
-            {isByTrack && (
-              <Line yAxisId="streams" type="monotone" dataKey="total_streams"
-                stroke={TOTAL_COLOR} strokeWidth={1.5} strokeOpacity={0.2}
-                dot={false} activeDot={false} name="Total Campaign" />
-            )}
-            {isByTrack && (
-              <Line yAxisId="streams" type="monotone" dataKey="track_streams"
-                stroke={TOTAL_COLOR} strokeWidth={2.5} dot={false}
-                activeDot={{ r: 4, fill: TOTAL_COLOR }} name={trackName || "Track"} />
-            )}
 
             {/* Physical bars */}
             {hasPhysical && (
               <Bar yAxisId="physical" dataKey="physical_units"
                 fill={`${PHYSICAL_COLOR}35`} stroke={PHYSICAL_COLOR} strokeWidth={1}
-                radius={[3, 3, 0, 0]} name="Physical Units" barSize={18} />
+                radius={[3, 3, 0, 0]} name="Physical" barSize={18} />
             )}
           </ComposedChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Legend */}
+      {/* Inline insight */}
+      {chartInsight && (
+        <p className="text-[11px] text-[#9CA3AF] italic text-center mt-2">{chartInsight}</p>
+      )}
+
+      {/* Legend with role indicators */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-2">
-        {!isByTrack && (
-          <>
-            <LegendItem color={TOTAL_COLOR} label="Total Streams" type="line" />
-            {selectedTracks.map((track, i) => (
-              <LegendItem key={track} color={TRACK_COLORS[i % TRACK_COLORS.length]} label={track} type="line" />
-            ))}
-          </>
-        )}
-        {isByTrack && (
-          <>
-            <LegendItem color={TOTAL_COLOR} label={trackName || "Track"} type="line" />
-            <LegendItem color={TOTAL_COLOR} label="Total Campaign" type="line" opacity={0.2} />
-          </>
-        )}
+        <LegendItem color={TOTAL_COLOR} label="Total Streams" type="line" />
+        {trackRoles
+          .filter(tr => selectedTracks.includes(tr.track_name))
+          .sort((a, b) => b.strokeWidth - a.strokeWidth)
+          .map((tr) => (
+            <LegendItem key={tr.track_name} color={tr.color} label={tr.track_name} type="line"
+              opacity={tr.opacity} bold={tr.role === "POST_RELEASE_BREAKOUT"} />
+          ))}
         {hasPhysical && <LegendItem color={PHYSICAL_COLOR} label="Physical" type="bar" />}
       </div>
     </div>
   );
 }
 
-function LegendItem({ color, label, type, opacity = 1 }: { color: string; label: string; type: "line" | "bar"; opacity?: number }) {
+function LegendItem({ color, label, type, opacity = 1, bold = false }: {
+  color: string; label: string; type: "line" | "bar"; opacity?: number; bold?: boolean;
+}) {
   return (
     <div className="flex items-center gap-1.5" style={{ opacity }}>
       {type === "line" ? (
-        <span className="w-3 h-0.5 rounded-full inline-block" style={{ backgroundColor: color }} />
+        <span className={`inline-block rounded-full ${bold ? "w-4 h-1" : "w-3 h-0.5"}`} style={{ backgroundColor: color }} />
       ) : (
         <span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: `${color}40`, border: `1px solid ${color}` }} />
       )}
-      <span className="text-[10px] text-[#6B7280]">{label}</span>
+      <span className={`text-[10px] ${bold ? "text-white font-semibold" : "text-[#6B7280]"}`}>{label}</span>
     </div>
   );
 }
