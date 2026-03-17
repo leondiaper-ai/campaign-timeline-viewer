@@ -4,7 +4,7 @@ import { useMemo, useState, useCallback, useEffect } from "react";
 import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
 import {
   buildChartData, buildTrackChartData, getTrackList, getTrackListForChart,
-  getDefaultTracks, getPeakWeekStats, getAllMoments,
+  getDefaultTracks, getAllMoments,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -36,6 +36,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
   const [streamView, setStreamView] = useState<"total" | "by_track">("total");
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [focusTrack, setFocusTrack] = useState<string | null>(null);
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -83,6 +84,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
   const hasTrackWeeklyData = campaign && campaign.trackWeeklyMetrics.length > 0;
 
+  // Toggle track on/off
   const toggleTrack = useCallback((trackName: string) => {
     setSelectedTracks((prev) => {
       const current = prev ?? getDefaultTracks(trackList);
@@ -92,12 +94,18 @@ export default function Dashboard({ initialData }: DashboardProps) {
     });
   }, [trackList]);
 
+  // Click track to focus (click again to unfocus)
+  const handleTrackFocus = useCallback((trackName: string) => {
+    setFocusTrack((prev) => prev === trackName ? null : trackName);
+  }, []);
+
   const handleCampaignChange = useCallback((idx: number) => {
     setCampaignIdx(idx);
     setSelectedTracks(null);
     setHighlightedDate(null);
     setStreamView("total");
     setSelectedTrackId(null);
+    setFocusTrack(null);
   }, []);
 
   if (!campaign || !sheet) {
@@ -155,32 +163,51 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Status Row — Verdict, Top Moment, Momentum */}
+        {/* Status Row */}
         <CampaignStatusRow sheet={sheet} territory={territory} />
 
-        {/* Stat Cards */}
-        <CampaignInsights sheet={sheet} territory={territory} />
-
-        {/* Track Toggles */}
-        {trackList.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#4B5563] mr-1">Tracks</span>
-            {trackList.map((track, i) => {
-              const isOn = activeTracks.includes(track.track_name);
-              const color = TRACK_COLORS[i % TRACK_COLORS.length];
-              return (
-                <button key={track.track_name} onClick={() => toggleTrack(track.track_name)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
-                    isOn ? "border-white/20 bg-white/5 text-white" : "border-[#2A2D3E] bg-transparent text-[#6B7280] hover:text-[#9CA3AF]"
-                  }`}>
-                  <span className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: isOn ? color : "#3A3D4E", opacity: isOn ? 1 : 0.4 }} />
-                  {track.track_name}
-                </button>
-              );
-            })}
+        {/* Two stat cards + track toggles in one row */}
+        <div className="flex items-start gap-5">
+          <div className="flex-shrink-0">
+            <CampaignInsights sheet={sheet} territory={territory} />
           </div>
-        )}
+          {/* Track toggles — click to focus, shift-click to toggle */}
+          {trackList.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-[#4B5563] mr-1">Tracks</span>
+              {trackList.map((track, i) => {
+                const isOn = activeTracks.includes(track.track_name);
+                const isFocused = focusTrack === track.track_name;
+                const color = TRACK_COLORS[i % TRACK_COLORS.length];
+                return (
+                  <button key={track.track_name}
+                    onClick={(e) => {
+                      if (e.shiftKey) { toggleTrack(track.track_name); }
+                      else { handleTrackFocus(track.track_name); }
+                    }}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all border ${
+                      isFocused
+                        ? "border-white/30 bg-white/10 text-white ring-1 ring-white/20"
+                        : isOn
+                        ? "border-white/15 bg-white/5 text-white"
+                        : "border-[#2A2D3E] bg-transparent text-[#6B7280] hover:text-[#9CA3AF]"
+                    }`}>
+                    <span className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: isOn ? color : "#3A3D4E", opacity: isOn ? 1 : 0.3 }} />
+                    {track.track_name}
+                    {isFocused && <span className="text-[8px] text-[#9CA3AF] ml-0.5">FOCUS</span>}
+                  </button>
+                );
+              })}
+              {focusTrack && (
+                <button onClick={() => setFocusTrack(null)}
+                  className="text-[10px] text-[#6B7280] hover:text-white ml-1 underline underline-offset-2">
+                  Clear focus
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Chart */}
         <div className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
@@ -190,11 +217,11 @@ export default function Dashboard({ initialData }: DashboardProps) {
               <div className="flex items-center gap-1 bg-[#0D1117] rounded-lg p-0.5 border border-[#1E2130]">
                 <button onClick={() => setStreamView("total")}
                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    streamView === "total" ? "bg-[#161922] text-white" : "text-[#6B7280] hover:text-[#9CA3AF]"
+                    streamView === "total" ? "bg-[#161922] text-white" : "text-[#6B7280]"
                   }`}>Total Campaign</button>
                 <button onClick={() => setStreamView("by_track")}
                   className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
-                    streamView === "by_track" ? "bg-[#161922] text-white" : "text-[#6B7280] hover:text-[#9CA3AF]"
+                    streamView === "by_track" ? "bg-[#161922] text-white" : "text-[#6B7280]"
                   }`}>By Track</button>
               </div>
             )}
@@ -208,24 +235,20 @@ export default function Dashboard({ initialData }: DashboardProps) {
             trackData={streamView === "by_track" ? trackChartData : undefined}
             trackName={selectedTrackName}
             totalCampaignData={streamView === "by_track" ? chartData : undefined}
+            focusTrack={focusTrack}
           />
         </div>
 
-        {/* Bottom row: Learnings + Moments side by side */}
+        {/* Moments FIRST (primary narrative), then Learnings */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-          {/* Learnings */}
-          <div className="lg:col-span-2">
-            <CampaignLearnings sheet={sheet} territory={territory} />
-          </div>
-
-          {/* Moments */}
+          {/* Campaign Moments — primary layer */}
           {moments.length > 0 && (
             <div className="lg:col-span-3 bg-[#131620] rounded-xl border border-[#1E2130] p-4">
               <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
                 Campaign Moments
                 <span className="text-[#4B5563] font-normal ml-2">({moments.length})</span>
               </h3>
-              <div className="space-y-1.5 max-h-[280px] overflow-y-auto pr-1">
+              <div className="space-y-1 max-h-[280px] overflow-y-auto pr-1">
                 {moments.map((moment: Moment, i: number) => {
                   const cat = getCategoryConfig(moment.moment_type);
                   return (
@@ -241,14 +264,10 @@ export default function Dashboard({ initialData }: DashboardProps) {
                         <div className="flex items-center gap-2">
                           <span className="text-[11px] font-semibold text-white">{moment.moment_title}</span>
                           {moment.is_key && (
-                            <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">
-                              Key
-                            </span>
+                            <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">Key</span>
                           )}
                         </div>
-                        <span className="text-[10px] text-[#4B5563]">
-                          {formatDate(moment.date)} · {cat.label}
-                        </span>
+                        <span className="text-[10px] text-[#4B5563]">{formatDate(moment.date)} · {cat.label}</span>
                       </div>
                     </div>
                   );
@@ -256,6 +275,11 @@ export default function Dashboard({ initialData }: DashboardProps) {
               </div>
             </div>
           )}
+
+          {/* Campaign Learnings — supporting layer */}
+          <div className="lg:col-span-2">
+            <CampaignLearnings sheet={sheet} territory={territory} />
+          </div>
         </div>
       </main>
     </div>
