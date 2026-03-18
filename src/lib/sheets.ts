@@ -163,7 +163,7 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
 }
 
 async function fetchTracks(sheetId: string): Promise<Track[]> {
-  const rows = await fetchRows(sheetId, "tracks");
+  const rows = await fetchRowsSafe(sheetId, "tracks");
   if (rows.length === 0) {
     console.warn("[CTV] tracks tab is empty — no track data.");
     return [];
@@ -180,7 +180,7 @@ async function fetchTracks(sheetId: string): Promise<Track[]> {
 }
 
 async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
-  const rows = await fetchRows(sheetId, "weekly_data");
+  const rows = await fetchRowsSafe(sheetId, "weekly_data");
   if (rows.length === 0) {
     console.warn("[CTV] weekly_data tab is empty — no streaming data.");
     return [];
@@ -214,7 +214,8 @@ async function fetchPhysicalData(sheetId: string): Promise<PhysicalRow[]> {
 }
 
 async function fetchMoments(sheetId: string): Promise<Moment[]> {
-  const rows = await fetchRows(sheetId, "moments");
+  let rows = await fetchRowsSafe(sheetId, "campaign_moments");
+  if (rows.length === 0) rows = await fetchRowsSafe(sheetId, "moments");
   if (rows.length === 0) {
     console.warn("[CTV] moments tab is empty — no campaign moments.");
     return [];
