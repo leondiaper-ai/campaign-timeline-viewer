@@ -6,6 +6,7 @@ import {
   buildChartData, getAllTrackNames, getAllMoments,
   inferTrackRoles, detectHandoverMoment, getChartInsight,
   getCampaignSummary, getTrackModeContext,
+  buildUKTrackContext, buildUKMilestones, UKTrackContext,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -42,6 +43,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const handoverMoment = useMemo(() => sheet ? detectHandoverMoment(sheet, territory) : null, [sheet, territory]);
   const chartInsight = useMemo(() => sheet ? getChartInsight(sheet, territory) : null, [sheet, territory]);
   const trackModeContext = useMemo(() => sheet ? getTrackModeContext(sheet, territory) : null, [sheet, territory]);
+  const ukTrackContext = useMemo(() => sheet ? buildUKTrackContext(sheet) : [], [sheet]);
+  const ukMilestones = useMemo(() => sheet ? buildUKMilestones(sheet) : [], [sheet]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
   const moments = useMemo(() => sheet ? getAllMoments(sheet) : [], [sheet]);
   const keyMomentDates = useMemo(() => new Set(moments.filter(m => m.is_key).map(m => m.date)), [moments]);
@@ -107,7 +110,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
           <TimelineChart data={chartData} selectedTracks={allTrackNames} trackRoles={trackRoles}
             visibleEventDates={keyMomentDates} highlightedDate={effectiveHighlight}
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
-            chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate} />
+            chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
+            ukMilestones={ukMilestones} />
         </div>
 
         {/* Phase-grouped moments */}
@@ -152,6 +156,42 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
         {/* Learnings */}
         <CampaignLearnings sheet={sheet} territory={territory} />
+        {/* UK Track Context (supporting layer — visible in global mode) */}
+        {territory === "global" && ukTrackContext.length > 0 && (
+          <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
+              UK Context
+              <span className="text-[#4B5563] font-normal ml-2">Supporting data — not rendered as daily lines</span>
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr className="border-b border-[#1E2130]">
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4">Track</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4 text-right">UK Streams</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4 text-right">Global</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4 text-right">UK Share</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2">Note</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ukTrackContext.map((row: UKTrackContext, i: number) => (
+                    <tr key={i} className="border-b border-[#1E2130]/50">
+                      <td className="text-[11px] text-white font-medium py-2 pr-4">{row.track_name}</td>
+                      <td className="text-[11px] text-[#D1D5DB] tabular-nums py-2 pr-4 text-right">{row.uk_streams >= 1_000_000 ? `${(row.uk_streams/1_000_000).toFixed(1)}M` : row.uk_streams >= 1_000 ? `${(row.uk_streams/1_000).toFixed(0)}K` : row.uk_streams}</td>
+                      <td className="text-[11px] text-[#9CA3AF] tabular-nums py-2 pr-4 text-right">{row.global_streams >= 1_000_000 ? `${(row.global_streams/1_000_000).toFixed(1)}M` : row.global_streams >= 1_000 ? `${(row.global_streams/1_000).toFixed(0)}K` : row.global_streams}</td>
+                      <td className="text-[11px] tabular-nums py-2 pr-4 text-right">
+                        <span className={`${row.uk_share_pct >= 15 ? "text-emerald-400 font-semibold" : "text-[#6B7280]"}`}>{row.uk_share_pct}%</span>
+                      </td>
+                      <td className="text-[10px] text-[#6B7280] py-2">{row.note}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
       </main>
     </div>
   );
