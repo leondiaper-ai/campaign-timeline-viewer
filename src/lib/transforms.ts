@@ -346,6 +346,28 @@ export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory)
 }
 
 // ——— Momentum Status ————————————————————————————————————————
+export type VerdictLevel = "strong" | "building" | "early";
+export interface CampaignVerdict { level: VerdictLevel; label: string; summary: string; }
+
+export function getCampaignVerdict(sheet: CampaignSheetData, territory: Territory): CampaignVerdict {
+  const totals = getTotalStreamRows(sheet, territory);
+  if (totals.length < 2) return { level: "early", label: "Early Days", summary: "Not enough data to assess." };
+  const totalStreams = totals.reduce((sum, r) => sum + r.streams, 0);
+  const keyMoments = sheet.moments.filter((m) => m.is_key).length;
+  const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
+  const hasPhysical = sheet.physicalData.some((r) => r.units > 0);
+  let score = 0;
+  if (totalStreams > 500_000) score += 2;
+  if (totalStreams > 1_000_000) score += 1;
+  if (keyMoments >= 5) score += 1;
+  if (hasPhysical) score += 1;
+  const roles = inferTrackRoles(sheet, territory);
+  if (roles.some(r => r.role === "POST_RELEASE_BREAKOUT")) score += 1;
+  if (score >= 5) return { level: "strong", label: "Strong Campaign", summary: `${fmtNum(totalStreams)} total streams \u2014 album peaked with post-release single holding.` };
+  if (score >= 3) return { level: "building", label: "Building", summary: `${fmtNum(totalStreams)} streams across ${totals.length} data points \u2014 campaign developing.` };
+  return { level: "early", label: "Early Phase", summary: `Campaign at ${fmtNum(totalStreams)} streams.` };
+}
+
 export type MomentumDirection = "rising" | "stable" | "declining";
 export interface MomentumStatus { direction: MomentumDirection; label: string; detail: string; }
 
