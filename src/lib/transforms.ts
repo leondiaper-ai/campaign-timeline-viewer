@@ -320,22 +320,11 @@ export interface PeakWeekStats { totalStreams: number; totalPhysical: number; pe
 
 export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory): PeakWeekStats {
   const totalRows = getTotalStreamRows(sheet, territory);
-  if (totalRows.length < 2) return { level: "early", label: "Early Days", summary: "Not enough data to assess." };
   const totalStreams = totalRows.reduce((sum, r) => sum + r.streams, 0);
-  const keyMoments = sheet.moments.filter((m) => m.is_key).length;
-  const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
-  const hasPhysical = sheet.physicalData.some((r) => r.units > 0);
-  let score = 0;
-  if (totalStreams > 500_000) score += 2;
-  if (totalStreams > 1_000_000) score += 1;
-  if (keyMoments >= 5) score += 1;
-  if (hasPhysical) score += 1;
-  // Check post-release breakout
-  const roles = inferTrackRoles(sheet, territory);
-  if (roles.some(r => r.role === "POST_RELEASE_BREAKOUT")) score += 1;
-  if (score >= 5) return { level: "strong", label: "Strong Campaign", summary: `${fmtNum(totalStreams)} total streams — album peaked with post-release single holding.` };
-  if (score >= 3) return { level: "building", label: "Building", summary: `${fmtNum(totalStreams)} streams across ${totalRows.length} weeks — campaign still developing.` };
-  return { level: "early", label: "Early Phase", summary: `Campaign at ${fmtNum(totalStreams)} streams — building toward key activations.` };
+  let peakWeekStreams = 0, peakWeekDate = "";
+  for (const r of totalRows) { if (r.streams > peakWeekStreams) { peakWeekStreams = r.streams; peakWeekDate = r.week_start_date; } }
+  const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
+  return { totalStreams, totalPhysical, peakWeekStreams, peakWeekDate };
 }
 
 // ——— Momentum Status ————————————————————————————————————————
