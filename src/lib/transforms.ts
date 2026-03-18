@@ -98,18 +98,24 @@ export function detectHandoverMoment(sheet: CampaignSheetData, territory: Territ
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (!breakout) return null;
 
-  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
-  const breakoutRows = sheet.weeklyData
-    .filter(r => r.track_name === breakout.track_name && r.streams > 0)
-    .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
+  const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
+  let firstDate = "";
 
-  if (breakoutRows.length === 0) return null;
+  if (hasDailyData) {
+    const rows = sheet.dailyTrackData
+      .filter(r => r.track_name === breakout.track_name && r.global_streams > 0)
+      .sort((a, b) => a.date.localeCompare(b.date));
+    firstDate = rows[0]?.date || "";
+  } else {
+    const sk = territory === "UK" ? "streams_uk" : "streams_global";
+    const rows = sheet.weeklyData
+      .filter(r => r.track_name === breakout.track_name && r[sk] > 0)
+      .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+    firstDate = rows[0]?.week_start_date || "";
+  }
 
-  return {
-    date: breakoutRows[0].week_start_date,
-    trackName: breakout.track_name,
-    label: `Post-release single — ${breakout.track_name}`,
-  };
+  if (!firstDate) return null;
+  return { date: firstDate, trackName: breakout.track_name, label: `Post-release single \u2014 ${breakout.track_name}` };
 }
 
 
@@ -566,7 +572,7 @@ export function getCampaignSummary(sheet: CampaignSheetData, territory: Territor
 
   if (breakout) {
     const bRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r.streams > 0);
+      .filter(r => r.track_name === breakout.track_name && r.streams_global > 0);
     const avgPost = bRows.length > 0
       ? bRows.reduce((s,r) => s + r.streams, 0) / bRows.length : 0;
     return `Album peaked at ~${fmtNum(peakRow.streams_global)} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
