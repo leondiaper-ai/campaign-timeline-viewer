@@ -496,3 +496,95 @@ export function getCampaignSummary(sheet: CampaignSheetData, territory: Territor
 
   return `Album peaked at ~${fmtNum(peakRow[streamKey])} streams (w/c ${peakDateFmt}).`;
 }
+
+
+// ——— UK Context Layer (supporting, not primary) —————————————
+export interface UKTrackContext {
+  track_name: string;
+  uk_streams: number;
+  global_streams: number;
+  uk_share_pct: number;
+  period_start: string;
+  period_end: string;
+  note: string;
+}
+
+export interface UKMilestone {
+  date: string;
+  track_name: string;
+  uk_streams: number;
+  label: string;
+}
+
+export function buildUKTrackContext(sheet: CampaignSheetData): UKTrackContext[] {
+  const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
+  const albumDate = sheet.setup.release_date;
+  const roles = inferTrackRoles(sheet, "global");
+  const roleMap = new Map(roles.map(r => [r.track_name, r.role]));
+
+  return trackNames.map(tn => {
+    const rows = sheet.weeklyData.filter(r => r.track_name === tn).sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
+    const ukTotal = rows.reduce((s, r) => s + r.streams_uk, 0);
+    const glTotal = rows.reduce((s, r) => s + r.streams_global, 0);
+    const share = glTotal > 0 ? Math.round((ukTotal / glTotal) * 100) : 0;
+    const first = rows[0]?.week_start_date || "";
+    const last = rows[rows.length - 1]?.week_start_date || "";
+    const role = roleMap.get(tn) || "SUPPORTING";
+
+    let note = "";
+    if (role === "POST_RELEASE_BREAKOUT") {
+      note = share > 15 ? `Strong UK share (${share}%) — above avg for this campaign` : `UK share ${share}%`;
+    } else if (role === "ALBUM_DRIVER") {
+      note = `Album track — ${share}% UK share`;
+    } else {
+      note = `Pre-release — ${share}% UK share`;
+    }
+
+    return { track_name: tn, uk_streams: ukTotal, global_streams: glTotal, uk_share_pct: share, period_start: first, period_end: last, note };
+  }).sort((a, b) => b.uk_streams - a.uk_streams);
+}
+
+export function buildUKMilestones(sheet: CampaignSheetData): UKMilestone[] {
+  const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
+  const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
+  const milestones: UKMilestone[] = [];
+
+  for (const tn of trackNames) {
+    const rows = sheet.weeklyData.filter(r => r.track_name === tn && r.streams_uk > 0)
+      .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+    if (rows.length === 0) continue;
+
+    // Launch week (first non-zero)
+    const launch = rows[0];
+    milestones.push({
+      date: launch.week_start_date,
+      track_name: tn,
+      uk_streams: launch.streams_uk,
+      label: `UK launch: ${fmtNum(launch.streams_uk)}`,
+    });
+
+    // Peak week (if different from launch)
+    const peak = rows.reduce((best, r) => r.streams_uk > best.streams_uk ? r : best, rows[0]);
+    if (peak.week_start_date !== launch.week_start_date) {
+      milestones.push({
+        date: peak.week_start_date,
+        track_name: tn,
+        uk_streams: peak.streams_uk,
+        label: `UK peak: ${fmtNum(peak.streams_uk)}`,
+      });
+    }
+  }
+
+  return milestones.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+// UK totals for KPI cards
+export function getUKTotals(sheet: CampaignSheetData): { ukStreams: number; ukPhysical: number; ukShare: number } {
+  const totalRows = sheet.weeklyData.filter(r => r.track_name === "TOTAL");
+  const ukStreams = totalRows.reduce((s, r) => s + r.streams_uk, 0);
+  const glStreams = totalRows.reduce((s, r) => s + r.streams_global, 0);
+  const ukShare = glStreams > 0 ? Math.round((ukStreams / glStreams) * 100) : 0;
+  // Physical doesn't have UK split in schema, so use total
+  const ukPhysical = sheet.physicalData.reduce((s, r) => s + r.units, 0);
+  return { ukStreams, ukPhysical, ukShare };
+}
