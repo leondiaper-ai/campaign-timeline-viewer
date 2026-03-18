@@ -47,8 +47,8 @@ export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory):
     const preRows = rows.filter(r => r.week_start_date < albumDate);
     const postRows = rows.filter(r => r.week_start_date >= albumDate);
     analysis.set(tn, {
-      preTotal: preRows.reduce((s,r) => s + r.streams, 0),
-      postTotal: postRows.reduce((s,r) => s + r.streams, 0),
+      preTotal: preRows.reduce((s,r) => s + r.streams_global, 0),
+      postTotal: postRows.reduce((s,r) => s + r.streams_global, 0),
       firstWeek: rows[0]?.week_start_date || "",
       postWeeks: postRows.length,
     });
