@@ -12,6 +12,8 @@ import {
   RegistryEntry,
   CampaignStatus,
   ValidationWarning,
+  DailyTrackRow,
+  UKContextRow,
 } from "@/types";
 
 // ——— Google Sheets Client ——————————————————————————————————
@@ -227,6 +229,37 @@ async function fetchMoments(sheetId: string): Promise<Moment[]> {
     }));
 }
 
+/** Tab: track_daily_import — daily track streams (CSV import) */
+async function fetchTrackDailyImport(sheetId: string): Promise<DailyTrackRow[]> {
+  const rows = await fetchRowsSafe(sheetId, "track_daily_import");
+  if (rows.length === 0) return [];
+  return rows
+    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+    .map((r) => ({
+      date: r[0].trim(),
+      track_name: normalizeQuotes(r[1].trim()),
+      global_streams: safeNumber(r[2]),
+    }))
+    .filter((r) => r.global_streams > 0);
+}
+
+/** Tab: track_uk_context — manual UK context */
+async function fetchTrackUKContext(sheetId: string): Promise<UKContextRow[]> {
+  const rows = await fetchRowsSafe(sheetId, "track_uk_context");
+  if (rows.length === 0) return [];
+  return rows
+    .filter((r) => r[0]?.trim() && !isMetadataRow(r[0]))
+    .map((r) => ({
+      track_name: normalizeQuotes(r[0].trim()),
+      period_start: isValidDate(r[1]) ? r[1].trim() : "",
+      period_end: isValidDate(r[2]) ? r[2].trim() : "",
+      uk_streams: safeNumber(r[3]),
+      uk_share: (r[4] || "").trim(),
+      note: (r[5] || "").trim(),
+    }));
+}
+
+
 // ——— Validation ————————————————————————————————————————————
 function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
   const warnings: ValidationWarning[] = [];
@@ -306,16 +339,18 @@ function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
 export async function fetchCampaignSheetData(
   sheetId: string
 ): Promise<CampaignSheetData> {
-  const [setup, tracks, weeklyData, physicalData, moments] =
+  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, ukContext] =
     await Promise.all([
       fetchCampaignSetup(sheetId),
       fetchTracks(sheetId),
       fetchWeeklyData(sheetId),
       fetchPhysicalData(sheetId),
       fetchMoments(sheetId),
+      fetchTrackDailyImport(sheetId),
+      fetchTrackUKContext(sheetId),
     ]);
 
-  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, ukContext };
 
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {
