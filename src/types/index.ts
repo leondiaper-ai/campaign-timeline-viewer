@@ -74,6 +74,23 @@ export interface TrackWeeklyMetric {
   total_streams: number;
 }
 
+// ——— Tab: track_daily_import (daily track-level streams) ——
+export interface DailyTrackRow {
+  date: string;           // YYYY-MM-DD
+  track_name: string;
+  global_streams: number;
+}
+
+// ——— Tab: track_uk_context (manual UK context) ——————————
+export interface UKContextRow {
+  track_name: string;
+  period_start: string;
+  period_end: string;
+  uk_streams: number;
+  uk_share: string;
+  note: string;
+}
+
 // ——— Parsed Campaign Sheet ————————————————————————————————
 export interface CampaignSheetData {
   setup: CampaignSetup;
@@ -81,6 +98,8 @@ export interface CampaignSheetData {
   weeklyData: WeeklyRow[];
   physicalData: PhysicalRow[];
   moments: Moment[];
+  dailyTrackData: DailyTrackRow[];
+  ukContext: UKContextRow[];
 }
 
 // ——— Registry ————————————————————————————————————————————
