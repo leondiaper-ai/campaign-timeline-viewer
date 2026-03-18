@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import { ChartDataPoint, Moment } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
-import { TrackWithRole, HandoverMoment, getTrackRoleLabel } from "@/lib/transforms";
+import { TrackWithRole, HandoverMoment, getTrackRoleLabel, UKMilestone } from "@/lib/transforms";
 
 const TOTAL_COLOR = "#6C9EFF";
 const PHYSICAL_COLOR = "#4ADE80";
@@ -45,6 +45,7 @@ interface Props {
   chartMode: ChartMode;
   onChartModeChange: (mode: ChartMode) => void;
   albumDate?: string;
+  ukMilestones?: UKMilestone[];
 }
 
 // ——— Campaign tooltip ———
@@ -86,7 +87,7 @@ function CampTip({ active, payload, label }: any) {
 }
 
 // ——— Tracks tooltip ———
-function TrackTip({ active, payload, label, trackRoles }: any) {
+function TrackTip({ active, payload, label, trackRoles, ukMilestones }: any) {
   if (!active || !payload?.length) return null;
   const dp = payload[0]?.payload;
   if (!dp) return null;
@@ -96,15 +97,26 @@ function TrackTip({ active, payload, label, trackRoles }: any) {
       {(trackRoles as TrackWithRole[])
         .filter(tr => dp[tr.track_name] != null && (dp[tr.track_name] as number) > 0)
         .sort((a: TrackWithRole, b: TrackWithRole) => (dp[b.track_name] as number) - (dp[a.track_name] as number))
-        .map((tr: TrackWithRole, i: number) => (
-          <div key={i} className="flex items-center justify-between gap-4 mb-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tr.color }} />
-              <span className="text-xs text-[#9CA3AF]">{tr.track_name}</span>
+        .map((tr: TrackWithRole, i: number) => {
+          const ukm = (ukMilestones as UKMilestone[] || []).find((m: UKMilestone) => m.date === label && m.track_name === tr.track_name);
+          return (
+            <div key={i} className="mb-1">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tr.color }} />
+                  <span className="text-xs text-[#9CA3AF]">{tr.track_name}</span>
+                </div>
+                <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp[tr.track_name] as number)}</span>
+              </div>
+              {ukm && (
+                <div className="flex items-center justify-between gap-4 ml-4">
+                  <span className="text-[10px] text-[#6B7280]">UK</span>
+                  <span className="text-[10px] text-[#6B7280] tabular-nums">{fmt(ukm.uk_streams)}</span>
+                </div>
+              )}
             </div>
-            <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp[tr.track_name] as number)}</span>
-          </div>
-        ))}
+          );
+        })}
     </div>
   );
 }
@@ -143,7 +155,7 @@ function getPhases(data: ChartDataPoint[], albumDate?: string) {
 export default function TimelineChart({
   data, selectedTracks, trackRoles, visibleEventDates,
   highlightedDate, handoverMoment, chartInsight, trackModeContext,
-  chartMode, onChartModeChange, albumDate,
+  chartMode, onChartModeChange, albumDate, ukMilestones,
 }: Props) {
   const moments = useMemo(() => layoutMoments(data, visibleEventDates), [data, visibleEventDates]);
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
@@ -218,7 +230,7 @@ export default function TimelineChart({
               <CartesianGrid strokeDasharray="3 3" stroke="#151825" vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#151825" }} tickLine={false} dy={8} interval="preserveStartEnd" />
               <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
-              <Tooltip content={<TrackTip trackRoles={trackRoles} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
+              <Tooltip content={<TrackTip trackRoles={trackRoles} ukMilestones={ukMilestones} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
               {highlightedDate && <ReferenceLine x={highlightedDate} stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
 
               {/* Phase background shading */}
