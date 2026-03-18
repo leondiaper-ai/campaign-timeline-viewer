@@ -127,6 +127,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
             trackModeContext={trackModeContext}
             chartMode={chartMode}
             onChartModeChange={setChartMode}
+            albumDate={sheet.setup.release_date}
           />
         </div>
 
