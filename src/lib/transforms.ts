@@ -130,26 +130,116 @@ export function detectHandoverMoment(sheet: CampaignSheetData, territory: Territ
 export function buildChartData(
   sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
 ): ChartDataPoint[] {
+  const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
+
+  if (hasDailyData) {
+    return buildChartFromDailyData(sheet, selectedTracks);
+  }
+
+  // Fallback: old weekly data path
+  return buildChartFromWeeklyData(sheet, territory, selectedTracks);
+}
+
+// ——— Daily data chart builder (preferred) ————————————————
+function buildChartFromDailyData(
+  sheet: CampaignSheetData, selectedTracks: string[]
+): ChartDataPoint[] {
+  const daily = sheet.dailyTrackData;
+
+  // Build track data: track -> date -> streams
+  const trackByDate = new Map<string, Map<string, number>>();
+  daily.forEach(r => {
+    if (!selectedTracks.includes(r.track_name)) return;
+    if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
+    trackByDate.get(r.track_name)!.set(r.date, r.global_streams);
+  });
+
+  // Build moments lookup
+  const momentsByDate = new Map<string, Moment[]>();
+  sheet.moments.forEach(m => {
+    const existing = momentsByDate.get(m.date) || [];
+    existing.push(m);
+    momentsByDate.set(m.date, existing);
+  });
+
+  // Physical data
+  const physicalByDate = new Map<string, number>();
+  sheet.physicalData.forEach(r => physicalByDate.set(r.week_start_date, r.units));
+
+  // All dates across all tracks
+  const allDates = new Set<string>();
+  trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
+  // Add moment dates as ghost points
+  sheet.moments.forEach(m => allDates.add(m.date));
+
+  const sorted = [...allDates].sort();
+
+  const result: ChartDataPoint[] = sorted.map(date => {
+    // Total = sum of all track streams on this date
+    let total = 0;
+    selectedTracks.forEach(tn => {
+      const val = trackByDate.get(tn)?.get(date);
+      if (val) total += val;
+    });
+
+    const point: ChartDataPoint = {
+      date,
+      total_streams: total,
+      physical_units: physicalByDate.get(date) ?? 0,
+      cumulative_streams: 0,
+      prev_week_streams: null,
+      events: momentsByDate.get(date) || [],
+    };
+
+    // Track values: null if no data for that date
+    selectedTracks.forEach(tn => {
+      const val = trackByDate.get(tn)?.get(date);
+      point[tn] = val ?? null;
+    });
+
+    return point;
+  });
+
+  // Cumulative + prev day
+  let runningTotal = 0;
+  for (let i = 0; i < result.length; i++) {
+    runningTotal += result[i].total_streams;
+    result[i].cumulative_streams = runningTotal;
+    if (i > 0 && result[i].total_streams > 0) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (result[j].total_streams > 0) {
+          result[i].prev_week_streams = result[j].total_streams;
+          break;
+        }
+      }
+    }
+  }
+
+  return result;
+}
+
+// ——— Weekly data chart builder (fallback) ————————————————
+function buildChartFromWeeklyData(
+  sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
+): ChartDataPoint[] {
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+
   const totalByDate = new Map<string, number>();
-  sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
-    .forEach((r) => totalByDate.set(r.week_start_date, r[streamKey]));
+  sheet.weeklyData.filter(r => r.track_name === "TOTAL")
+    .forEach(r => totalByDate.set(r.week_start_date, r[streamKey]));
 
   const trackByDate = new Map<string, Map<string, number>>();
-  sheet.weeklyData.filter((r) => r.track_name !== "TOTAL" && selectedTracks.includes(r.track_name))
-    .forEach((r) => {
+  sheet.weeklyData.filter(r => r.track_name !== "TOTAL" && selectedTracks.includes(r.track_name))
+    .forEach(r => {
       if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
       trackByDate.get(r.track_name)!.set(r.week_start_date, r[streamKey]);
     });
 
   const physicalByDate = new Map<string, number>();
-  sheet.physicalData.forEach((r) => physicalByDate.set(r.week_start_date, r.units));
-
-  const trackReleaseDates = new Map<string, string>();
-  sheet.tracks.forEach((t) => { if (t.release_date) trackReleaseDates.set(t.track_name, t.release_date); });
+  sheet.physicalData.forEach(r => physicalByDate.set(r.week_start_date, r.units));
 
   const momentsByDate = new Map<string, Moment[]>();
-  sheet.moments.forEach((m) => {
+  sheet.moments.forEach(m => {
     const existing = momentsByDate.get(m.date) || [];
     existing.push(m);
     momentsByDate.set(m.date, existing);
@@ -157,38 +247,25 @@ export function buildChartData(
 
   const allDates = new Set<string>();
   totalByDate.forEach((_, d) => allDates.add(d));
-  trackByDate.forEach((dates) => dates.forEach((_, d) => allDates.add(d)));
+  trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
   physicalByDate.forEach((_, d) => allDates.add(d));
-  const sortedDates = [...allDates].sort();
+  sheet.moments.forEach(m => allDates.add(m.date));
+  const sorted = [...allDates].sort();
 
-  const result: ChartDataPoint[] = sortedDates.map((date) => {
+  const result: ChartDataPoint[] = sorted.map(date => {
     const point: ChartDataPoint = {
-      date, total_streams: totalByDate.get(date) ?? 0, physical_units: physicalByDate.get(date) ?? 0,
-      cumulative_streams: 0, prev_week_streams: null, events: momentsByDate.get(date) || [],
+      date,
+      total_streams: totalByDate.get(date) ?? 0,
+      physical_units: physicalByDate.get(date) ?? 0,
+      cumulative_streams: 0,
+      prev_week_streams: null,
+      events: momentsByDate.get(date) || [],
     };
-    selectedTracks.forEach((track) => {
-      const trackDates = trackByDate.get(track);
-      if (!trackDates || !trackDates.has(date)) {
-        // Track has no data for this week — null (skip, don't plot)
-        point[track] = null;
-      } else {
-        point[track] = trackDates.get(date)!;
-      }
+    selectedTracks.forEach(tn => {
+      const trackDates = trackByDate.get(tn);
+      point[tn] = trackDates?.has(date) ? trackDates.get(date)! : null;
     });
     return point;
-  });
-
-  // Ghost dates for moments without data
-  const dataDates = new Set(sortedDates);
-  sheet.moments.forEach((m) => {
-    if (!dataDates.has(m.date)) {
-      const point: ChartDataPoint = {
-        date: m.date, total_streams: 0, physical_units: 0,
-        cumulative_streams: 0, prev_week_streams: null, events: momentsByDate.get(m.date) || [],
-      };
-      selectedTracks.forEach((track) => { point[track] = null; });
-      result.push(point);
-    }
   });
 
   result.sort((a, b) => a.date.localeCompare(b.date));
@@ -196,13 +273,14 @@ export function buildChartData(
   for (let i = 0; i < result.length; i++) {
     runningTotal += result[i].total_streams;
     result[i].cumulative_streams = runningTotal;
-    result[i].prev_week_streams = (i > 0 && result[i].total_streams > 0)
-      ? (() => { for (let j = i - 1; j >= 0; j--) { if (result[j].total_streams > 0) return result[j].total_streams; } return null; })()
-      : null;
+    if (i > 0 && result[i].total_streams > 0) {
+      for (let j = i - 1; j >= 0; j--) {
+        if (result[j].total_streams > 0) { result[i].prev_week_streams = result[j].total_streams; break; }
+      }
+    }
   }
   return result;
 }
-
 // ——— Stub for By Track (kept for compatibility) ————————————
 export function buildTrackChartData(
   sheet: CampaignSheetData, territory: Territory, trackWeeklyMetrics: TrackWeeklyMetric[], trackId: string
@@ -218,9 +296,12 @@ export function getTrackList(sheet: CampaignSheetData): Track[] {
 }
 
 export function getAllTrackNames(sheet: CampaignSheetData): string[] {
+  // Prefer daily data track names if available
+  if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+    return [...new Set(sheet.dailyTrackData.map(r => r.track_name))];
+  }
   return [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
 }
-
 export function getDefaultTracks(tracks: Track[]): string[] {
   const withDefault = tracks.filter((t) => t.default_on);
   if (withDefault.length > 0) return withDefault.map((t) => t.track_name);
