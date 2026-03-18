@@ -400,6 +400,76 @@ export function getChartInsight(sheet: CampaignSheetData, territory: Territory):
   return `Post-album, "\u200B${breakout.track_name}" is the only track holding meaningful volume`;
 }
 
+// ——— Normalized Track Data (each track 0–100% of its peak) ——
+export interface NormalizedPoint {
+  date: string;
+  [key: string]: number | string | null;
+}
+
+export function buildNormalizedTrackData(
+  sheet: CampaignSheetData, territory: Territory, trackNames: string[]
+): NormalizedPoint[] {
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+
+  // Build raw track data by date
+  const trackByDate = new Map<string, Map<string, number>>();
+  sheet.weeklyData.filter(r => r.track_name !== "TOTAL" && trackNames.includes(r.track_name))
+    .forEach(r => {
+      if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
+      trackByDate.get(r.track_name)!.set(r.week_start_date, r[streamKey]);
+    });
+
+  // Find peak per track
+  const peaks = new Map<string, number>();
+  trackByDate.forEach((dates, tn) => {
+    let peak = 0;
+    dates.forEach(v => { if (v > peak) peak = v; });
+    peaks.set(tn, peak || 1); // avoid /0
+  });
+
+  // Collect all dates
+  const allDates = new Set<string>();
+  trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
+  const sorted = [...allDates].sort();
+
+  return sorted.map(date => {
+    const point: NormalizedPoint = { date };
+    trackNames.forEach(tn => {
+      const raw = trackByDate.get(tn)?.get(date);
+      if (raw == null) {
+        point[tn] = null;
+      } else {
+        point[tn] = Math.round((raw / peaks.get(tn)!) * 100);
+      }
+    });
+    return point;
+  });
+}
+
+// ——— Track Role Labels ——————————————————————————————————————
+const ROLE_LABELS: Record<string, string> = {
+  PRE_RELEASE: "Pre-release",
+  ALBUM_DRIVER: "Album",
+  POST_RELEASE_BREAKOUT: "Post-release",
+  SUPPORTING: "Supporting",
+};
+
+export function getTrackRoleLabel(role: string): string {
+  return ROLE_LABELS[role] || role;
+}
+
+// ——— Tracks Mode Context Line ———————————————————————————————
+export function getTrackModeContext(sheet: CampaignSheetData, territory: Territory): string {
+  const roles = inferTrackRoles(sheet, territory);
+  const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
+  const preCount = roles.filter(r => r.role === "PRE_RELEASE").length;
+  if (breakout) {
+    return `Track view: ${preCount} pre-release single${preCount !== 1 ? "s" : ""} build lightly, album peaks, "\u200B${breakout.track_name}" sustains post-release`;
+  }
+  return "Track view: Individual track performance across campaign timeline";
+}
+
+
 
 // ——— Single Campaign Summary (replaces 3 vague cards) ————————
 export function getCampaignSummary(sheet: CampaignSheetData, territory: Territory): string {
