@@ -306,7 +306,7 @@ export function getDefaultTracks(tracks: Track[]): string[] {
 
 
 // ——— Peak Week Stats ————————————————————————————————————————
-function getTotalStreamRows(sheet: CampaignSheetData, territory: Territory): Array<{ week_start_date: string; streams: number }> {
+function getTotalStreamRows(sheet: CampaignSheetData, territory: Territory): Array<{ week_start_date: string; streams_global: number }> {
   if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
     const byDate = new Map<string, number>();
     sheet.dailyTrackData.forEach(r => byDate.set(r.date, (byDate.get(r.date) || 0) + r.global_streams));
