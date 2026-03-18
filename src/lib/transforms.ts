@@ -219,13 +219,13 @@ function buildChartFromWeeklyData(
 
   const totalByDate = new Map<string, number>();
   sheet.weeklyData.filter(r => r.track_name === "TOTAL")
-    .forEach(r => totalByDate.set(r.week_start_date, r.streams));
+    .forEach(r => totalByDate.set(r.week_start_date, r[streamKey]));
 
   const trackByDate = new Map<string, Map<string, number>>();
   sheet.weeklyData.filter(r => r.track_name !== "TOTAL" && selectedTracks.includes(r.track_name))
     .forEach(r => {
       if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
-      trackByDate.get(r.track_name)!.set(r.week_start_date, r.streams);
+      trackByDate.get(r.track_name)!.set(r.week_start_date, r[streamKey]);
     });
 
   const physicalByDate = new Map<string, number>();
@@ -393,7 +393,7 @@ export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territor
   const keyMoments = sheet.moments.filter((m) => m.is_key).sort((a, b) => a.date.localeCompare(b.date));
   if (keyMoments.length === 0) return { title: "No key moments", date: "", impact: "No key moments logged." };
   const totalByDate = new Map<string, number>();
-  sheet.weeklyData.filter((r) => r.track_name === "TOTAL").forEach((r) => totalByDate.set(r.week_start_date, r.streams));
+  sheet.weeklyData.filter((r) => r.track_name === "TOTAL").forEach((r) => totalByDate.set(r.week_start_date, r.streams_global));
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   let bestMoment = keyMoments[0], bestStreams = 0;
   for (const m of keyMoments) {
@@ -462,7 +462,7 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (breakout) {
     const bRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r.streams > 0)
+      .filter(r => r.track_name === breakout.track_name && r.streams_global > 0)
       .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
     const avgPost = bRows.length > 0
       ? bRows.reduce((s,r) => s + r.streams, 0) / bRows.length : 0;
@@ -572,7 +572,7 @@ export function getCampaignSummary(sheet: CampaignSheetData, territory: Territor
 
   if (breakout) {
     const bRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r.streams > 0);
+      .filter(r => r.track_name === breakout.track_name && r.streams_global > 0);
     const avgPost = bRows.length > 0
       ? bRows.reduce((s,r) => s + r.streams, 0) / bRows.length : 0;
     return `Album peaked at ~${fmtNum(peakRow.streams)} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
