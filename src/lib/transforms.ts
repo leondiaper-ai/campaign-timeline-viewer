@@ -30,72 +30,59 @@ const ROLE_COLORS: Record<TrackNarrativeRole, string> = {
 
 export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory): TrackWithRole[] {
   const albumDate = sheet.setup.release_date;
-  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
-  if (!albumDate) {
-    // No album date — all tracks equal
-    return sheet.tracks.map((t) => ({
-      track_name: t.track_name, role: "SUPPORTING" as TrackNarrativeRole,
-      color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING,
-    }));
+  const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
+
+  // Get track names from whichever data source is available
+  const trackNames = hasDailyData
+    ? [...new Set(sheet.dailyTrackData.map(r => r.track_name))]
+    : [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
+
+  if (!albumDate || trackNames.length === 0) {
+    return trackNames.map(tn => ({ track_name: tn, role: "SUPPORTING" as TrackNarrativeRole, color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING }));
   }
 
-  const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
-  const analysis = new Map<string, { preTotal: number; postTotal: number; firstWeek: string; postWeeks: number }>();
-
+  // Build analysis per track
+  const analysis = new Map<string, { preTotal: number; postTotal: number; firstDate: string }>();
   for (const tn of trackNames) {
-    const rows = sheet.weeklyData.filter(r => r.track_name === tn).sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
-    const preRows = rows.filter(r => r.week_start_date < albumDate);
-    const postRows = rows.filter(r => r.week_start_date >= albumDate);
-    analysis.set(tn, {
-      preTotal: preRows.reduce((s,r) => s + r.streams_global, 0),
-      postTotal: postRows.reduce((s,r) => s + r.streams_global, 0),
-      firstWeek: rows[0]?.week_start_date || "",
-      postWeeks: postRows.length,
-    });
-  }
-
-  // Find album driver: track with highest post-release total that was active at album date
-  let albumDriver = "";
-  let albumDriverPost = 0;
-  // Find post-release breakout: track that FIRST appears at or after album date
-  let breakout = "";
-  let breakoutPost = 0;
-
-  for (const [tn, a] of analysis) {
-    if (a.firstWeek >= albumDate && a.postTotal > breakoutPost) {
-      // Track that only appears post-release
-      breakoutPost = a.postTotal;
-      breakout = tn;
-    } else if (a.postTotal > albumDriverPost && a.firstWeek < albumDate) {
-      // Has pre-release data but strongest post-release
-      albumDriverPost = a.postTotal;
-      albumDriver = tn;
+    if (hasDailyData) {
+      const rows = sheet.dailyTrackData.filter(r => r.track_name === tn);
+      const preTotal = rows.filter(r => r.date < albumDate).reduce((s, r) => s + r.global_streams, 0);
+      const postTotal = rows.filter(r => r.date >= albumDate).reduce((s, r) => s + r.global_streams, 0);
+      const firstRow = rows.sort((a, b) => a.date.localeCompare(b.date))[0];
+      analysis.set(tn, { preTotal, postTotal, firstDate: firstRow?.date || "" });
+    } else {
+      const rows = sheet.weeklyData.filter(r => r.track_name === tn);
+      const sk = territory === "UK" ? "streams_uk" : "streams_global";
+      const preTotal = rows.filter(r => r.week_start_date < albumDate).reduce((s, r) => s + r[sk], 0);
+      const postTotal = rows.filter(r => r.week_start_date >= albumDate).reduce((s, r) => s + r[sk], 0);
+      const firstRow = rows.sort((a, b) => a.week_start_date.localeCompare(b.week_start_date))[0];
+      analysis.set(tn, { preTotal, postTotal, firstDate: firstRow?.week_start_date || "" });
     }
   }
 
-  // If no breakout found from timing, find track with best post-peak retention
+  let albumDriver = "", albumDriverPost = 0, breakout = "", breakoutPost = 0;
+  for (const [tn, a] of analysis) {
+    if (a.firstDate >= albumDate && a.postTotal > breakoutPost) {
+      breakoutPost = a.postTotal; breakout = tn;
+    } else if (a.postTotal > albumDriverPost && a.firstDate < albumDate) {
+      albumDriverPost = a.postTotal; albumDriver = tn;
+    }
+  }
   if (!breakout) {
-    // Fallback: track with highest post/pre ratio
     for (const [tn, a] of analysis) {
-      if (tn !== albumDriver && a.postTotal > 0 && a.firstWeek >= albumDate) {
-        if (a.postTotal > breakoutPost) { breakoutPost = a.postTotal; breakout = tn; }
+      if (tn !== albumDriver && a.postTotal > 0 && a.firstDate >= albumDate && a.postTotal > breakoutPost) {
+        breakoutPost = a.postTotal; breakout = tn;
       }
     }
   }
 
-  return trackNames.map((tn) => {
+  return trackNames.map(tn => {
     let role: TrackNarrativeRole;
     if (tn === breakout) role = "POST_RELEASE_BREAKOUT";
     else if (tn === albumDriver) role = "ALBUM_DRIVER";
-    else if (analysis.get(tn)!.preTotal > 0) role = "PRE_RELEASE";
+    else if ((analysis.get(tn)?.preTotal || 0) > 0) role = "PRE_RELEASE";
     else role = "SUPPORTING";
-
-    return {
-      track_name: tn,
-      role,
-      color: ROLE_COLORS[role],
-      ...ROLE_STYLES[role],
-    };
+    return { track_name: tn, role, color: ROLE_COLORS[role], ...ROLE_STYLES[role] };
   });
 }
 
