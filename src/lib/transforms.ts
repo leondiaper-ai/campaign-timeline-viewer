@@ -438,7 +438,7 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
   learnings.push({
     dateLabel: fmtDate(peakDate),
     eventType: "ALBUM RELEASE",
-    text: `Peak week (~${fmtNum(peakRow.streams)} streams), primary campaign driver`,
+    text: `Peak week (~${fmtNum(peakRow.streams_global)} streams), primary campaign driver`,
     phase: "peak",
   });
 
@@ -465,7 +465,7 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
       .filter(r => r.track_name === breakout.track_name && r.streams_global > 0)
       .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
     const avgPost = bRows.length > 0
-      ? bRows.reduce((s,r) => s + r.streams, 0) / bRows.length : 0;
+      ? bRows.reduce((s,r) => s + r.streams_global, 0) / bRows.length : 0;
     const firstDate = bRows[0]?.week_start_date || peakDate;
     learnings.push({
       dateLabel: fmtDate(firstDate) + "+",
@@ -502,7 +502,7 @@ export function buildNormalizedTrackData(
   sheet.weeklyData.filter(r => r.track_name !== "TOTAL" && trackNames.includes(r.track_name))
     .forEach(r => {
       if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
-      trackByDate.get(r.track_name)!.set(r.week_start_date, r.streams);
+      trackByDate.get(r.track_name)!.set(r.week_start_date, r.streams_global);
     });
 
   // Find peak per track
@@ -574,11 +574,11 @@ export function getCampaignSummary(sheet: CampaignSheetData, territory: Territor
     const bRows = sheet.weeklyData
       .filter(r => r.track_name === breakout.track_name && r.streams_global > 0);
     const avgPost = bRows.length > 0
-      ? bRows.reduce((s,r) => s + r.streams, 0) / bRows.length : 0;
-    return `Album peaked at ~${fmtNum(peakRow.streams)} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
+      ? bRows.reduce((s,r) => s + r.streams_global, 0) / bRows.length : 0;
+    return `Album peaked at ~${fmtNum(peakRow.streams_global)} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
   }
 
-  return `Album peaked at ~${fmtNum(peakRow.streams)} streams (w/c ${peakDateFmt}).`;
+  return `Album peaked at ~${fmtNum(peakRow.streams_global)} streams (w/c ${peakDateFmt}).`;
 }
 
 
@@ -609,7 +609,7 @@ export function buildUKTrackContext(sheet: CampaignSheetData): UKTrackContext[] 
   return trackNames.map(tn => {
     const rows = sheet.weeklyData.filter(r => r.track_name === tn).sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
     const ukTotal = rows.reduce((s, r) => s + r.streams_uk, 0);
-    const glTotal = rows.reduce((s, r) => s + r.streams, 0);
+    const glTotal = rows.reduce((s, r) => s + r.streams_global, 0);
     const share = glTotal > 0 ? Math.round((ukTotal / glTotal) * 100) : 0;
     const first = rows[0]?.week_start_date || "";
     const last = rows[rows.length - 1]?.week_start_date || "";
@@ -666,7 +666,7 @@ export function buildUKMilestones(sheet: CampaignSheetData): UKMilestone[] {
 export function getUKTotals(sheet: CampaignSheetData): { ukStreams: number; ukPhysical: number; ukShare: number } {
   const totalRows = sheet.weeklyData.filter(r => r.track_name === "TOTAL");
   const ukStreams = totalRows.reduce((s, r) => s + r.streams_uk, 0);
-  const glStreams = totalRows.reduce((s, r) => s + r.streams, 0);
+  const glStreams = totalRows.reduce((s, r) => s + r.streams_global, 0);
   const ukShare = glStreams > 0 ? Math.round((ukStreams / glStreams) * 100) : 0;
   // Physical doesn't have UK split in schema, so use total
   const ukPhysical = sheet.physicalData.reduce((s, r) => s + r.units, 0);
