@@ -15,3 +15,5 @@ export async function getCampaignData(): Promise<AppData> {
   );
   return { campaigns };
 }
+
+// Daily data pipeline v2
