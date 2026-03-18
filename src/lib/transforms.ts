@@ -346,6 +346,14 @@ export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory)
 }
 
 // ——— Momentum Status ————————————————————————————————————————
+export function getKeyMoments(sheet: CampaignSheetData): Moment[] {
+  return sheet.moments.filter((m) => m.is_key).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+export function getAllMoments(sheet: CampaignSheetData): Moment[] {
+  return [...sheet.moments].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export type VerdictLevel = "strong" | "building" | "early";
 export interface CampaignVerdict { level: VerdictLevel; label: string; summary: string; }
 
