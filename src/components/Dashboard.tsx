@@ -5,7 +5,7 @@ import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
 import {
   buildChartData, getAllTrackNames, getAllMoments,
   inferTrackRoles, detectHandoverMoment, getChartInsight,
-  getCampaignSummary,
+  getCampaignSummary, buildNormalizedTrackData, getTrackModeContext,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -37,6 +37,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const allTrackNames = useMemo(() => sheet ? getAllTrackNames(sheet) : [], [sheet]);
   const trackRoles = useMemo(() => sheet ? inferTrackRoles(sheet, territory) : [], [sheet, territory]);
   const chartData = useMemo(() => sheet ? buildChartData(sheet, territory, allTrackNames) : [], [sheet, territory, allTrackNames]);
+  const normalizedData = useMemo(() => sheet ? buildNormalizedTrackData(sheet, territory, allTrackNames) : [], [sheet, territory, allTrackNames]);
+  const trackModeContext = useMemo(() => sheet ? getTrackModeContext(sheet, territory) : null, [sheet, territory]);
   const handoverMoment = useMemo(() => sheet ? detectHandoverMoment(sheet, territory) : null, [sheet, territory]);
   const chartInsight = useMemo(() => sheet ? getChartInsight(sheet, territory) : null, [sheet, territory]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
@@ -115,12 +117,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
         <div className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
           <TimelineChart
             data={chartData}
+            normalizedData={normalizedData}
             selectedTracks={allTrackNames}
             trackRoles={trackRoles}
             visibleEventDates={keyMomentDates}
             highlightedDate={effectiveHighlight}
             handoverMoment={handoverMoment}
             chartInsight={chartInsight}
+            trackModeContext={trackModeContext}
             chartMode={chartMode}
             onChartModeChange={setChartMode}
           />
