@@ -346,7 +346,7 @@ export interface PeakWeekStats { totalStreams: number; totalPhysical: number; pe
 
 export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory): PeakWeekStats {
   if (!sheet.weeklyData || sheet.weeklyData.length === 0) {
-    return { totalStreams: 0, totalPhysical: 0, peakWeekStreams: 0, peakWeekDate: "", topTrackName: "No data", topTrackStreams: 0 };
+    return { totalStreams: 0, totalPhysical: 0, peakWeekStreams: 0, peakWeekDate: "" };
   }
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
