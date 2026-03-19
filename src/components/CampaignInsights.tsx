@@ -17,7 +17,10 @@ export default function CampaignInsights({ sheet, territory }: Props) {
 
   const stats = useMemo(() => {
     const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
-    const totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
+    let totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
+    if (totalStreams === 0 && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+      totalStreams = sheet.dailyTrackData.reduce((sum: number, r: any) => sum + r.global_streams, 0);
+    }
     const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
     const uk = getUKTotals(sheet);
     return { totalStreams, totalPhysical, uk };
