@@ -352,6 +352,15 @@ export interface PeakWeekStats { totalStreams: number; totalPhysical: number; pe
 
 export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory): PeakWeekStats {
   if (!sheet.weeklyData || sheet.weeklyData.length === 0) {
+    if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+      const ts = sheet.dailyTrackData.reduce((s: number, r: any) => s + r.global_streams, 0);
+      const tp = sheet.physicalData.reduce((s: number, r: any) => s + r.units, 0);
+      const bd = new Map<string, number>();
+      sheet.dailyTrackData.forEach((r: any) => bd.set(r.date, (bd.get(r.date) || 0) + r.global_streams));
+      let ps = 0, pd = "";
+      bd.forEach((v, k) => { if (v > ps) { ps = v; pd = k; } });
+      return { totalStreams: ts, totalPhysical: tp, peakWeekStreams: ps, peakWeekDate: pd };
+    }
     return { totalStreams: 0, totalPhysical: 0, peakWeekStreams: 0, peakWeekDate: "" };
   }
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
@@ -604,6 +613,16 @@ export function getTrackModeContext(sheet: CampaignSheetData, territory: Territo
 // ——— Single Campaign Summary (replaces 3 vague cards) ————————
 export function getCampaignSummary(sheet: CampaignSheetData, territory: Territory): string {
   const _wd = sheet.weeklyData || [];
+  if (_wd.length === 0 && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+    const fn = (n: number) => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? (n/1e3).toFixed(0)+"K" : String(n);
+    const t = sheet.dailyTrackData.reduce((s: number, r: any) => s + r.global_streams, 0);
+    const bd = new Map<string, number>();
+    sheet.dailyTrackData.forEach((r: any) => bd.set(r.date, (bd.get(r.date) || 0) + r.global_streams));
+    let ps = 0, pd = "";
+    bd.forEach((v, k) => { if (v > ps) { ps = v; pd = k; } });
+    const pf = pd ? new Date(pd+"T00:00:00").toLocaleDateString("en-GB",{day:"numeric",month:"short"}) : "";
+    return fn(t) + " total streams. Peak: ~" + fn(ps) + " (" + pf + ").";
+  }
   if (_wd.length === 0) return "Awaiting campaign data.";
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
