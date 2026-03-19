@@ -251,9 +251,9 @@ function buildChartFromDailyData(
 
 // ——— Weekly data chart builder (fallback) ————————————————
 function buildChartFromWeeklyData(
-  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
 ): ChartDataPoint[] {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
 
   const totalByDate = new Map<string, number>();
@@ -536,9 +536,9 @@ export interface NormalizedPoint {
 }
 
 export function buildNormalizedTrackData(
-  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   sheet: CampaignSheetData, territory: Territory, trackNames: string[]
 ): NormalizedPoint[] {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
 
   // Build raw track data by date
