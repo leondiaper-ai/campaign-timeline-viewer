@@ -136,6 +136,8 @@ export interface HandoverMoment {
 }
 
 export function detectHandoverMoment(sheet: CampaignSheetData, territory: Territory): HandoverMoment | null {
+  const _wd = sheet.weeklyData || [];
+  if (_wd.length === 0 && (!sheet.dailyTrackData || sheet.dailyTrackData.length === 0)) return null;
   const roles = inferTrackRoles(sheet, territory);
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (!breakout) return null;
@@ -249,6 +251,7 @@ function buildChartFromDailyData(
 
 // ——— Weekly data chart builder (fallback) ————————————————
 function buildChartFromWeeklyData(
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
 ): ChartDataPoint[] {
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
@@ -325,6 +328,9 @@ export function getTrackList(sheet: CampaignSheetData): Track[] {
 }
 
 export function getAllTrackNames(sheet: CampaignSheetData): string[] {
+  if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0)
+    return [...new Set(sheet.dailyTrackData.map(r => r.track_name))];
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   // Prefer daily data track names if available
   if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
     return [...new Set(sheet.dailyTrackData.map(r => r.track_name))];
@@ -420,6 +426,8 @@ export function getMomentumStatus(sheet: CampaignSheetData, territory: Territory
 export interface TopMoment { title: string; date: string; impact: string; }
 
 export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territory): TopMoment {
+  const _wd = sheet.weeklyData || [];
+  if (_wd.length === 0) return { title: "No data", date: "", impact: "Awaiting data." };
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const keyMoments = sheet.moments.filter((m) => m.is_key).sort((a, b) => a.date.localeCompare(b.date));
   if (keyMoments.length === 0) return { title: "No key moments", date: "", impact: "No key moments logged." };
@@ -449,6 +457,8 @@ export interface CampaignLearning {
 }
 
 export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territory): CampaignLearning[] {
+  const _wd = sheet.weeklyData || [];
+  if (_wd.length === 0) return [];
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const learnings: CampaignLearning[] = [];
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
@@ -526,6 +536,7 @@ export interface NormalizedPoint {
 }
 
 export function buildNormalizedTrackData(
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   sheet: CampaignSheetData, territory: Territory, trackNames: string[]
 ): NormalizedPoint[] {
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
@@ -592,6 +603,8 @@ export function getTrackModeContext(sheet: CampaignSheetData, territory: Territo
 
 // ——— Single Campaign Summary (replaces 3 vague cards) ————————
 export function getCampaignSummary(sheet: CampaignSheetData, territory: Territory): string {
+  const _wd = sheet.weeklyData || [];
+  if (_wd.length === 0) return "Awaiting campaign data.";
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
 
@@ -636,6 +649,7 @@ export interface UKMilestone {
 }
 
 export function buildUKTrackContext(sheet: CampaignSheetData): UKTrackContext[] {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
   const albumDate = sheet.setup.release_date;
   const roles = inferTrackRoles(sheet, "global");
@@ -664,6 +678,7 @@ export function buildUKTrackContext(sheet: CampaignSheetData): UKTrackContext[] 
 }
 
 export function buildUKMilestones(sheet: CampaignSheetData): UKMilestone[] {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
   const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   const milestones: UKMilestone[] = [];
@@ -699,6 +714,7 @@ export function buildUKMilestones(sheet: CampaignSheetData): UKMilestone[] {
 
 // UK totals for KPI cards
 export function getUKTotals(sheet: CampaignSheetData): { ukStreams: number; ukPhysical: number; ukShare: number } {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return { ukStreams: 0, ukPhysical: 0, ukShare: 0 };
   const totalRows = sheet.weeklyData.filter(r => r.track_name === "TOTAL");
   const ukStreams = totalRows.reduce((s, r) => s + r.streams_uk, 0);
   const glStreams = totalRows.reduce((s, r) => s + r.streams_global, 0);
