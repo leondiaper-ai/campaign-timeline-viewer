@@ -180,7 +180,8 @@ async function fetchTracks(sheetId: string): Promise<Track[]> {
 }
 
 async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
-  const rows = await fetchRowsSafe(sheetId, "weekly_data");
+  let rows = await fetchRowsSafe(sheetId, "weekly_data_compat");
+  if (rows.length === 0) rows = await fetchRowsSafe(sheetId, "weekly_data");
   if (rows.length === 0) {
     console.warn("[CTV] weekly_data tab is empty — no streaming data.");
     return [];
