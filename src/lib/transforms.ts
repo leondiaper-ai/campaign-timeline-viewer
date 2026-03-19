@@ -30,59 +30,72 @@ const ROLE_COLORS: Record<TrackNarrativeRole, string> = {
 
 export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory): TrackWithRole[] {
   const albumDate = sheet.setup.release_date;
-  const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
-
-  // Get track names from whichever data source is available
-  const trackNames = hasDailyData
-    ? [...new Set(sheet.dailyTrackData.map(r => r.track_name))]
-    : [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
-
-  if (!albumDate || trackNames.length === 0) {
-    return trackNames.map(tn => ({ track_name: tn, role: "SUPPORTING" as TrackNarrativeRole, color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING }));
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  if (!albumDate) {
+    // No album date — all tracks equal
+    return sheet.tracks.map((t) => ({
+      track_name: t.track_name, role: "SUPPORTING" as TrackNarrativeRole,
+      color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING,
+    }));
   }
 
-  // Build analysis per track
-  const analysis = new Map<string, { preTotal: number; postTotal: number; firstDate: string }>();
+  const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
+  const analysis = new Map<string, { preTotal: number; postTotal: number; firstWeek: string; postWeeks: number }>();
+
   for (const tn of trackNames) {
-    if (hasDailyData) {
-      const rows = sheet.dailyTrackData.filter(r => r.track_name === tn);
-      const preTotal = rows.filter(r => r.date < albumDate).reduce((s, r) => s + r.global_streams, 0);
-      const postTotal = rows.filter(r => r.date >= albumDate).reduce((s, r) => s + r.global_streams, 0);
-      const firstRow = rows.sort((a, b) => a.date.localeCompare(b.date))[0];
-      analysis.set(tn, { preTotal, postTotal, firstDate: firstRow?.date || "" });
-    } else {
-      const rows = sheet.weeklyData.filter(r => r.track_name === tn);
-      const sk = territory === "UK" ? "streams_uk" : "streams_global";
-      const preTotal = rows.filter(r => r.week_start_date < albumDate).reduce((s, r) => s + r[sk], 0);
-      const postTotal = rows.filter(r => r.week_start_date >= albumDate).reduce((s, r) => s + r[sk], 0);
-      const firstRow = rows.sort((a, b) => a.week_start_date.localeCompare(b.week_start_date))[0];
-      analysis.set(tn, { preTotal, postTotal, firstDate: firstRow?.week_start_date || "" });
+    const rows = sheet.weeklyData.filter(r => r.track_name === tn).sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
+    const preRows = rows.filter(r => r.week_start_date < albumDate);
+    const postRows = rows.filter(r => r.week_start_date >= albumDate);
+    analysis.set(tn, {
+      preTotal: preRows.reduce((s,r) => s + r[streamKey], 0),
+      postTotal: postRows.reduce((s,r) => s + r[streamKey], 0),
+      firstWeek: rows[0]?.week_start_date || "",
+      postWeeks: postRows.length,
+    });
+  }
+
+  // Find album driver: track with highest post-release total that was active at album date
+  let albumDriver = "";
+  let albumDriverPost = 0;
+  // Find post-release breakout: track that FIRST appears at or after album date
+  let breakout = "";
+  let breakoutPost = 0;
+
+  for (const [tn, a] of analysis) {
+    if (a.firstWeek >= albumDate && a.postTotal > breakoutPost) {
+      // Track that only appears post-release
+      breakoutPost = a.postTotal;
+      breakout = tn;
+    } else if (a.postTotal > albumDriverPost && a.firstWeek < albumDate) {
+      // Has pre-release data but strongest post-release
+      albumDriverPost = a.postTotal;
+      albumDriver = tn;
     }
   }
 
-  let albumDriver = "", albumDriverPost = 0, breakout = "", breakoutPost = 0;
-  for (const [tn, a] of analysis) {
-    if (a.firstDate >= albumDate && a.postTotal > breakoutPost) {
-      breakoutPost = a.postTotal; breakout = tn;
-    } else if (a.postTotal > albumDriverPost && a.firstDate < albumDate) {
-      albumDriverPost = a.postTotal; albumDriver = tn;
-    }
-  }
+  // If no breakout found from timing, find track with best post-peak retention
   if (!breakout) {
+    // Fallback: track with highest post/pre ratio
     for (const [tn, a] of analysis) {
-      if (tn !== albumDriver && a.postTotal > 0 && a.firstDate >= albumDate && a.postTotal > breakoutPost) {
-        breakoutPost = a.postTotal; breakout = tn;
+      if (tn !== albumDriver && a.postTotal > 0 && a.firstWeek >= albumDate) {
+        if (a.postTotal > breakoutPost) { breakoutPost = a.postTotal; breakout = tn; }
       }
     }
   }
 
-  return trackNames.map(tn => {
+  return trackNames.map((tn) => {
     let role: TrackNarrativeRole;
     if (tn === breakout) role = "POST_RELEASE_BREAKOUT";
     else if (tn === albumDriver) role = "ALBUM_DRIVER";
-    else if ((analysis.get(tn)?.preTotal || 0) > 0) role = "PRE_RELEASE";
+    else if (analysis.get(tn)!.preTotal > 0) role = "PRE_RELEASE";
     else role = "SUPPORTING";
-    return { track_name: tn, role, color: ROLE_COLORS[role], ...ROLE_STYLES[role] };
+
+    return {
+      track_name: tn,
+      role,
+      color: ROLE_COLORS[role],
+      ...ROLE_STYLES[role],
+    };
   });
 }
 
@@ -98,24 +111,18 @@ export function detectHandoverMoment(sheet: CampaignSheetData, territory: Territ
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (!breakout) return null;
 
-  const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
-  let firstDate = "";
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const breakoutRows = sheet.weeklyData
+    .filter(r => r.track_name === breakout.track_name && r[streamKey] > 0)
+    .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
 
-  if (hasDailyData) {
-    const rows = sheet.dailyTrackData
-      .filter(r => r.track_name === breakout.track_name && r.global_streams > 0)
-      .sort((a, b) => a.date.localeCompare(b.date));
-    firstDate = rows[0]?.date || "";
-  } else {
-    const sk = territory === "UK" ? "streams_uk" : "streams_global";
-    const rows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r[sk] > 0)
-      .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
-    firstDate = rows[0]?.week_start_date || "";
-  }
+  if (breakoutRows.length === 0) return null;
 
-  if (!firstDate) return null;
-  return { date: firstDate, trackName: breakout.track_name, label: `Post-release single \u2014 ${breakout.track_name}` };
+  return {
+    date: breakoutRows[0].week_start_date,
+    trackName: breakout.track_name,
+    label: `Post-release single — ${breakout.track_name}`,
+  };
 }
 
 
@@ -306,43 +313,36 @@ export function getDefaultTracks(tracks: Track[]): string[] {
 
 
 // ——— Peak Week Stats ————————————————————————————————————————
-function getTotalStreamRows(sheet: CampaignSheetData, territory: Territory): Array<{ week_start_date: string; streams: number }> {
-  if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
-    const byDate = new Map<string, number>();
-    sheet.dailyTrackData.forEach(r => byDate.set(r.date, (byDate.get(r.date) || 0) + r.global_streams));
-    return [...byDate.entries()].map(([d, s]) => ({ week_start_date: d, streams: s })).sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
-  }
-  const sk = territory === "UK" ? "streams_uk" : "streams_global";
-  return sheet.weeklyData.filter(r => r.track_name === "TOTAL").map(r => ({ week_start_date: r.week_start_date, streams: r[sk] })).sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
-}
-
 export interface PeakWeekStats { totalStreams: number; totalPhysical: number; peakWeekStreams: number; peakWeekDate: string; }
 
 export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory): PeakWeekStats {
-  const totalRows = getTotalStreamRows(sheet, territory);
-  const totalStreams = totalRows.reduce((sum, r) => sum + r.streams, 0);
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
+  const totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
   let peakWeekStreams = 0, peakWeekDate = "";
-  for (const r of totalRows) { if (r.streams > peakWeekStreams) { peakWeekStreams = r.streams; peakWeekDate = r.week_start_date; } }
+  for (const r of totalRows) { if (r[streamKey] > peakWeekStreams) { peakWeekStreams = r[streamKey]; peakWeekDate = r.week_start_date; } }
   const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
   return { totalStreams, totalPhysical, peakWeekStreams, peakWeekDate };
 }
 
-// ——— Momentum Status ————————————————————————————————————————
+// ——— Moment Helpers ——————————————————————————————————————————
 export function getKeyMoments(sheet: CampaignSheetData): Moment[] {
   return sheet.moments.filter((m) => m.is_key).sort((a, b) => a.date.localeCompare(b.date));
 }
-
 export function getAllMoments(sheet: CampaignSheetData): Moment[] {
   return [...sheet.moments].sort((a, b) => a.date.localeCompare(b.date));
 }
 
+// ——— Campaign Verdict ————————————————————————————————————————
 export type VerdictLevel = "strong" | "building" | "early";
 export interface CampaignVerdict { level: VerdictLevel; label: string; summary: string; }
 
 export function getCampaignVerdict(sheet: CampaignSheetData, territory: Territory): CampaignVerdict {
-  const totals = getTotalStreamRows(sheet, territory);
-  if (totals.length < 2) return { level: "early", label: "Early Days", summary: "Not enough data to assess." };
-  const totalStreams = totals.reduce((sum, r) => sum + r.streams, 0);
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+  if (totalRows.length < 2) return { level: "early", label: "Early Days", summary: "Not enough data to assess." };
+  const totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
   const keyMoments = sheet.moments.filter((m) => m.is_key).length;
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   const hasPhysical = sheet.physicalData.some((r) => r.units > 0);
@@ -351,20 +351,24 @@ export function getCampaignVerdict(sheet: CampaignSheetData, territory: Territor
   if (totalStreams > 1_000_000) score += 1;
   if (keyMoments >= 5) score += 1;
   if (hasPhysical) score += 1;
+  // Check post-release breakout
   const roles = inferTrackRoles(sheet, territory);
   if (roles.some(r => r.role === "POST_RELEASE_BREAKOUT")) score += 1;
-  if (score >= 5) return { level: "strong", label: "Strong Campaign", summary: `${fmtNum(totalStreams)} total streams \u2014 album peaked with post-release single holding.` };
-  if (score >= 3) return { level: "building", label: "Building", summary: `${fmtNum(totalStreams)} streams across ${totals.length} data points \u2014 campaign developing.` };
-  return { level: "early", label: "Early Phase", summary: `Campaign at ${fmtNum(totalStreams)} streams.` };
+  if (score >= 5) return { level: "strong", label: "Strong Campaign", summary: `${fmtNum(totalStreams)} total streams — album peaked with post-release single holding.` };
+  if (score >= 3) return { level: "building", label: "Building", summary: `${fmtNum(totalStreams)} streams across ${totalRows.length} weeks — campaign still developing.` };
+  return { level: "early", label: "Early Phase", summary: `Campaign at ${fmtNum(totalStreams)} streams — building toward key activations.` };
 }
 
+// ——— Momentum Status ————————————————————————————————————————
 export type MomentumDirection = "rising" | "stable" | "declining";
 export interface MomentumStatus { direction: MomentumDirection; label: string; detail: string; }
 
 export function getMomentumStatus(sheet: CampaignSheetData, territory: Territory): MomentumStatus {
-  const totalRows = getTotalStreamRows(sheet, territory);
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
   if (totalRows.length < 3) return { direction: "stable", label: "Holding", detail: "Not enough data for trend." };
-  const recent = totalRows.slice(-3).map((r) => r.streams);
+  const recent = totalRows.slice(-3).map((r) => r[streamKey]);
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   if (recent[2] > recent[1] && recent[2] > recent[0]) {
     return { direction: "rising", label: "Rising", detail: `Last week ${fmtNum(recent[2])} — trending up.` };
@@ -382,7 +386,7 @@ export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territor
   const keyMoments = sheet.moments.filter((m) => m.is_key).sort((a, b) => a.date.localeCompare(b.date));
   if (keyMoments.length === 0) return { title: "No key moments", date: "", impact: "No key moments logged." };
   const totalByDate = new Map<string, number>();
-  sheet.weeklyData.filter((r) => r.track_name === "TOTAL").forEach((r) => totalByDate.set(r.week_start_date, r.streams_global));
+  sheet.weeklyData.filter((r) => r.track_name === "TOTAL").forEach((r) => totalByDate.set(r.week_start_date, r[streamKey]));
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   let bestMoment = keyMoments[0], bestStreams = 0;
   for (const m of keyMoments) {
@@ -407,6 +411,7 @@ export interface CampaignLearning {
 }
 
 export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territory): CampaignLearning[] {
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const learnings: CampaignLearning[] = [];
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   const fmtDate = (d: string) => {
@@ -416,18 +421,19 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return learnings;
 
-  const totalRows = getTotalStreamRows(sheet, territory);
+  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
   if (totalRows.length < 2) return learnings;
 
   // Peak week
-  const peakRow = totalRows.reduce((best, r) => r.streams > best.streams_global ? r : best, totalRows[0]);
+  const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
   const peakDate = peakRow.week_start_date;
 
   // 1. Album release peak
   learnings.push({
     dateLabel: fmtDate(peakDate),
     eventType: "ALBUM RELEASE",
-    text: `Peak week (~${fmtNum(peakRow.streams_global)} streams), primary campaign driver`,
+    text: `Peak week (~${fmtNum(peakRow[streamKey])} streams), primary campaign driver`,
     phase: "peak",
   });
 
@@ -435,7 +441,7 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
   const postPeakRows = totalRows.filter(r => r.week_start_date > peakDate);
   if (postPeakRows.length > 0) {
     const nextWeek = postPeakRows[0];
-    const dropPct = Math.round((1 - nextWeek.streams / peakRow.streams) * 100);
+    const dropPct = Math.round((1 - nextWeek[streamKey] / peakRow[streamKey]) * 100);
     if (dropPct > 5) {
       learnings.push({
         dateLabel: fmtDate(nextWeek.week_start_date),
@@ -451,10 +457,10 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (breakout) {
     const bRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r.streams_global > 0)
+      .filter(r => r.track_name === breakout.track_name && r[streamKey] > 0)
       .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
     const avgPost = bRows.length > 0
-      ? bRows.reduce((s,r) => s + r.streams_global, 0) / bRows.length : 0;
+      ? bRows.reduce((s,r) => s + r[streamKey], 0) / bRows.length : 0;
     const firstDate = bRows[0]?.week_start_date || peakDate;
     learnings.push({
       dateLabel: fmtDate(firstDate) + "+",
@@ -491,7 +497,7 @@ export function buildNormalizedTrackData(
   sheet.weeklyData.filter(r => r.track_name !== "TOTAL" && trackNames.includes(r.track_name))
     .forEach(r => {
       if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
-      trackByDate.get(r.track_name)!.set(r.week_start_date, r.streams_global);
+      trackByDate.get(r.track_name)!.set(r.week_start_date, r[streamKey]);
     });
 
   // Find peak per track
@@ -548,11 +554,13 @@ export function getTrackModeContext(sheet: CampaignSheetData, territory: Territo
 
 // ——— Single Campaign Summary (replaces 3 vague cards) ————————
 export function getCampaignSummary(sheet: CampaignSheetData, territory: Territory): string {
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
 
-  const totalRows = getTotalStreamRows(sheet, territory);
+  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
 
-  const peakRow = totalRows.reduce((best, r) => r.streams > best.streams_global ? r : best, totalRows[0]);
+  const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
   const peakDate = peakRow?.week_start_date || "";
   const peakDateFmt = peakDate ? new Date(peakDate + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" }) : "";
 
@@ -561,13 +569,13 @@ export function getCampaignSummary(sheet: CampaignSheetData, territory: Territor
 
   if (breakout) {
     const bRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r.streams_global > 0);
+      .filter(r => r.track_name === breakout.track_name && r[streamKey] > 0);
     const avgPost = bRows.length > 0
-      ? bRows.reduce((s,r) => s + r.streams_global, 0) / bRows.length : 0;
-    return `Album peaked at ~${fmtNum(peakRow.streams_global)} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
+      ? bRows.reduce((s,r) => s + r[streamKey], 0) / bRows.length : 0;
+    return `Album peaked at ~${fmtNum(peakRow[streamKey])} streams (w/c ${peakDateFmt}). Post-release, "\u200B${breakout.track_name}" holds ~${fmtNum(avgPost)} weekly while others decline.`;
   }
 
-  return `Album peaked at ~${fmtNum(peakRow.streams_global)} streams (w/c ${peakDateFmt}).`;
+  return `Album peaked at ~${fmtNum(peakRow[streamKey])} streams (w/c ${peakDateFmt}).`;
 }
 
 
