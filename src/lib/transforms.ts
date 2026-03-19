@@ -29,6 +29,35 @@ const ROLE_COLORS: Record<TrackNarrativeRole, string> = {
 };
 
 export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory): TrackWithRole[] {
+  // Use daily data if weekly data is unavailable
+  if ((!sheet.weeklyData || sheet.weeklyData.length === 0) && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+    const albumDate = sheet.setup.release_date;
+    const trackNames = [...new Set(sheet.dailyTrackData.map(r => r.track_name))];
+    if (!albumDate || trackNames.length === 0) {
+      return trackNames.map(tn => ({ track_name: tn, role: "SUPPORTING" as TrackNarrativeRole, color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING }));
+    }
+    const analysis = new Map<string, { preTotal: number; postTotal: number; firstDate: string }>();
+    for (const tn of trackNames) {
+      const rows = sheet.dailyTrackData.filter(r => r.track_name === tn);
+      const pre = rows.filter(r => r.date < albumDate).reduce((s, r) => s + r.global_streams, 0);
+      const post = rows.filter(r => r.date >= albumDate).reduce((s, r) => s + r.global_streams, 0);
+      const first = rows.sort((a, b) => a.date.localeCompare(b.date))[0];
+      analysis.set(tn, { preTotal: pre, postTotal: post, firstDate: first?.date || "" });
+    }
+    let albumDriver = "", adPost = 0, breakout = "", bPost = 0;
+    for (const [tn, a] of analysis) {
+      if (a.firstDate >= albumDate && a.postTotal > bPost) { bPost = a.postTotal; breakout = tn; }
+      else if (a.postTotal > adPost && a.firstDate < albumDate) { adPost = a.postTotal; albumDriver = tn; }
+    }
+    return trackNames.map(tn => {
+      let role: TrackNarrativeRole;
+      if (tn === breakout) role = "POST_RELEASE_BREAKOUT";
+      else if (tn === albumDriver) role = "ALBUM_DRIVER";
+      else if ((analysis.get(tn)?.preTotal || 0) > 0) role = "PRE_RELEASE";
+      else role = "SUPPORTING";
+      return { track_name: tn, role, color: ROLE_COLORS[role], ...ROLE_STYLES[role] };
+    });
+  }
   const albumDate = sheet.setup.release_date;
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   if (!albumDate) {
@@ -316,6 +345,9 @@ export function getDefaultTracks(tracks: Track[]): string[] {
 export interface PeakWeekStats { totalStreams: number; totalPhysical: number; peakWeekStreams: number; peakWeekDate: string; }
 
 export function getPeakWeekStats(sheet: CampaignSheetData, territory: Territory): PeakWeekStats {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) {
+    return { totalStreams: 0, totalPhysical: 0, peakWeekStreams: 0, peakWeekDate: "", topTrackName: "No data", topTrackStreams: 0 };
+  }
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
   const totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
@@ -338,6 +370,9 @@ export type VerdictLevel = "strong" | "building" | "early";
 export interface CampaignVerdict { level: VerdictLevel; label: string; summary: string; }
 
 export function getCampaignVerdict(sheet: CampaignSheetData, territory: Territory): CampaignVerdict {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) {
+    return { level: "early", label: "Early Phase", summary: "Awaiting weekly data." };
+  }
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
     .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
@@ -364,6 +399,9 @@ export type MomentumDirection = "rising" | "stable" | "declining";
 export interface MomentumStatus { direction: MomentumDirection; label: string; detail: string; }
 
 export function getMomentumStatus(sheet: CampaignSheetData, territory: Territory): MomentumStatus {
+  if (!sheet.weeklyData || sheet.weeklyData.length === 0) {
+    return { direction: "stable", label: "Holding", detail: "Awaiting weekly data." };
+  }
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
     .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
