@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, ComposedChart, Line, Bar, Area,
   XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, ReferenceArea,
 } from "recharts";
-import { ChartDataPoint, Moment } from "@/types";
+import { ChartDataPoint, Moment, Territory } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
 import { TrackWithRole, HandoverMoment, getTrackRoleLabel, UKMilestone } from "@/lib/transforms";
 
@@ -46,22 +46,24 @@ interface Props {
   onChartModeChange: (mode: ChartMode) => void;
   albumDate?: string;
   ukMilestones?: UKMilestone[];
+  territory?: Territory;
 }
 
 // ——— Campaign tooltip ———
-function CampTip({ active, payload, label }: any) {
+function CampTip({ active, payload, label, territory }: any) {
   if (!active || !payload?.length) return null;
   const dp = payload[0]?.payload;
   if (!dp) return null;
   const events = dp.events || [];
   const prev = dp.prev_week_streams;
   const wow = prev != null && prev > 0 && dp.total_streams > 0 ? ((dp.total_streams - prev) / prev) * 100 : null;
+  const isUK = territory === "UK";
   return (
     <div className="bg-[#1A1D2E] rounded-xl border border-[#2A2D3E] p-3 max-w-xs shadow-2xl">
       <p className="text-[11px] font-semibold text-[#6B7280] mb-2">{label ? fmtFull(label) : ""}</p>
       {dp.total_streams > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-[#9CA3AF]">Total Streams</span>
+          <span className="text-xs text-[#9CA3AF]">{isUK ? "UK Streams" : "Global Streams"}</span>
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.total_streams)}</span>
             {wow != null && <span className={`text-[10px] font-semibold ${wow >= 0 ? "text-emerald-400" : "text-red-400"}`}>{wow >= 0 ? "+" : ""}{wow.toFixed(0)}%</span>}
@@ -70,7 +72,7 @@ function CampTip({ active, payload, label }: any) {
       )}
       {dp.physical_units > 0 && (
         <div className="flex items-center justify-between gap-4 mb-1">
-          <span className="text-xs text-[#9CA3AF]">Physical</span>
+          <span className="text-xs text-[#9CA3AF]">{isUK ? "UK Physical" : "Physical"}</span>
           <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.physical_units)}</span>
         </div>
       )}
@@ -155,7 +157,7 @@ function getPhases(data: ChartDataPoint[], albumDate?: string) {
 export default function TimelineChart({
   data, selectedTracks, trackRoles, visibleEventDates,
   highlightedDate, handoverMoment, chartInsight, trackModeContext,
-  chartMode, onChartModeChange, albumDate, ukMilestones,
+  chartMode, onChartModeChange, albumDate, ukMilestones, territory,
 }: Props) {
   const moments = useMemo(() => layoutMoments(data, visibleEventDates), [data, visibleEventDates]);
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
@@ -208,7 +210,7 @@ export default function TimelineChart({
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#1E2130" }} tickLine={false} dy={8} interval="preserveStartEnd" />
               <YAxis yAxisId="s" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
               {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />}
-              <Tooltip content={<CampTip />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
+              <Tooltip content={<CampTip territory={territory} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
               {highlightedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
               {moments.map((m, i) => <ReferenceLine key={`m${i}`} x={m.date} yAxisId="s" stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.5} />)}
               <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={`${TOTAL_COLOR}15`} stroke="none" />

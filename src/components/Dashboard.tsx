@@ -111,7 +111,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
             visibleEventDates={keyMomentDates} highlightedDate={effectiveHighlight}
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
             chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
-            ukMilestones={ukMilestones} />
+            ukMilestones={ukMilestones} territory={territory} />
         </div>
 
         {/* Phase-grouped moments */}

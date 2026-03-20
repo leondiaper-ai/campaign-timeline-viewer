@@ -31,7 +31,9 @@ export default function CampaignInsights({ sheet, territory }: Props) {
   return (
     <div className="grid grid-cols-2 gap-3">
       <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
-        <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">Total Streams</p>
+        <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">
+          {isGlobal ? "Global Streams" : "UK Streams"}
+        </p>
         <p className="text-2xl font-bold text-[#6C9EFF] tabular-nums">{fmt(stats.totalStreams)}</p>
         {isGlobal && stats.uk.ukStreams > 0 && (
           <p className="text-[10px] text-[#4B5563] mt-1">
@@ -40,7 +42,9 @@ export default function CampaignInsights({ sheet, territory }: Props) {
         )}
       </div>
       <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
-        <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">Total Physical</p>
+        <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">
+          {isGlobal ? "Physical" : "UK Physical"}
+        </p>
         <p className="text-2xl font-bold text-[#4ADE80] tabular-nums">
           {stats.totalPhysical > 0 ? fmt(stats.totalPhysical) : "\u2014"}
         </p>
