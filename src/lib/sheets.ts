@@ -13,6 +13,7 @@ import {
   CampaignStatus,
   ValidationWarning,
   DailyTrackRow,
+  DailyTerritoryRow,
   UKContextRow,
 } from "@/types";
 
@@ -245,6 +246,21 @@ async function fetchTrackDailyImport(sheetId: string): Promise<DailyTrackRow[]> 
     .filter((r) => r.global_streams > 0);
 }
 
+/** Tab: track_daily_import_territory — daily territory streams (CSV import) */
+async function fetchTrackDailyImportTerritory(sheetId: string): Promise<DailyTerritoryRow[]> {
+  const rows = await fetchRowsSafe(sheetId, "track_daily_import_territory");
+  if (rows.length === 0) return [];
+  return rows
+    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+    .map((r) => ({
+      date: r[0].trim(),
+      track_name: normalizeQuotes(r[1].trim()),
+      territory: cleanTerritory(r[2]),
+      streams: safeNumber(r[3]),
+    }))
+    .filter((r) => r.streams > 0);
+}
+
 /** Tab: track_uk_context — manual UK context */
 async function fetchTrackUKContext(sheetId: string): Promise<UKContextRow[]> {
   const rows = await fetchRowsSafe(sheetId, "track_uk_context");
@@ -341,7 +357,7 @@ function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
 export async function fetchCampaignSheetData(
   sheetId: string
 ): Promise<CampaignSheetData> {
-  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, ukContext] =
+  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext] =
     await Promise.all([
       fetchCampaignSetup(sheetId),
       fetchTracks(sheetId),
@@ -349,10 +365,11 @@ export async function fetchCampaignSheetData(
       fetchPhysicalData(sheetId),
       fetchMoments(sheetId),
       fetchTrackDailyImport(sheetId),
+      fetchTrackDailyImportTerritory(sheetId),
       fetchTrackUKContext(sheetId),
     ]);
 
-  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, ukContext };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext };
 
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {

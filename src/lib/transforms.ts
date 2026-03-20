@@ -164,7 +164,7 @@ export function buildChartData(
   const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
 
   if (hasDailyData) {
-    return buildChartFromDailyData(sheet, selectedTracks);
+    return buildChartFromDailyData(sheet, territory, selectedTracks);
   }
 
   // Fallback: old weekly data path
@@ -173,17 +173,33 @@ export function buildChartData(
 
 // ——— Daily data chart builder (preferred) ————————————————
 function buildChartFromDailyData(
-  sheet: CampaignSheetData, selectedTracks: string[]
+  sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
 ): ChartDataPoint[] {
-  const daily = sheet.dailyTrackData;
+  // When territory is not global AND we have territory daily data, use that
+  const useTerritory = territory !== "global"
+    && sheet.dailyTerritoryData
+    && sheet.dailyTerritoryData.length > 0;
 
   // Build track data: track -> date -> streams
   const trackByDate = new Map<string, Map<string, number>>();
-  daily.forEach(r => {
-    if (!selectedTracks.includes(r.track_name)) return;
-    if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
-    trackByDate.get(r.track_name)!.set(r.date, r.global_streams);
-  });
+
+  if (useTerritory) {
+    // Use territory-specific daily data
+    sheet.dailyTerritoryData
+      .filter(r => r.territory === territory)
+      .forEach(r => {
+        if (!selectedTracks.includes(r.track_name)) return;
+        if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
+        trackByDate.get(r.track_name)!.set(r.date, r.streams);
+      });
+  } else {
+    // Use global daily data
+    sheet.dailyTrackData.forEach(r => {
+      if (!selectedTracks.includes(r.track_name)) return;
+      if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
+      trackByDate.get(r.track_name)!.set(r.date, r.global_streams);
+    });
+  }
 
   // Build moments lookup
   const momentsByDate = new Map<string, Moment[]>();

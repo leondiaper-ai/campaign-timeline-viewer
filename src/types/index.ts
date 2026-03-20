@@ -81,6 +81,14 @@ export interface DailyTrackRow {
   global_streams: number;
 }
 
+// ——— Tab: track_daily_import_territory (daily territory streams) ——
+export interface DailyTerritoryRow {
+  date: string;           // YYYY-MM-DD
+  track_name: string;
+  territory: Territory;
+  streams: number;
+}
+
 // ——— Tab: track_uk_context (manual UK context) ——————————
 export interface UKContextRow {
   track_name: string;
@@ -99,6 +107,7 @@ export interface CampaignSheetData {
   physicalData: PhysicalRow[];
   moments: Moment[];
   dailyTrackData: DailyTrackRow[];
+  dailyTerritoryData: DailyTerritoryRow[];
   ukContext: UKContextRow[];
 }
 
