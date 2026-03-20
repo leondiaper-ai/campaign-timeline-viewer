@@ -216,8 +216,11 @@ function buildChartFromDailyData(
   // All dates across all tracks
   const allDates = new Set<string>();
   trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
-  // Add moment dates as ghost points
-  sheet.moments.forEach(m => allDates.add(m.date));
+  // Add moment dates as ghost points — but only when we have enough real data
+  // to avoid drowning sparse territory data in null-filled dates
+  if (!useTerritory || allDates.size >= 3) {
+    sheet.moments.forEach(m => allDates.add(m.date));
+  }
 
   const sorted = [...allDates].sort();
 

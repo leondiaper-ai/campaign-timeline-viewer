@@ -161,6 +161,8 @@ export default function TimelineChart({
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
   const isCampaign = chartMode === "campaign";
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
+  // Detect sparse data (e.g. territory view with few dates) — show dots so single points are visible
+  const isSparse = useMemo(() => data.filter(d => d.total_streams > 0).length <= 3, [data]);
 
   return (
     <div className="w-full">
@@ -210,11 +212,14 @@ export default function TimelineChart({
               {highlightedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
               {moments.map((m, i) => <ReferenceLine key={`m${i}`} x={m.date} yAxisId="s" stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.5} />)}
               <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={`${TOTAL_COLOR}15`} stroke="none" />
-              <Line yAxisId="s" type="monotone" dataKey="total_streams" stroke={TOTAL_COLOR} strokeWidth={3} dot={false}
+              <Line yAxisId="s" type="monotone" dataKey="total_streams" stroke={TOTAL_COLOR} strokeWidth={3}
+                dot={isSparse ? { r: 4, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 } : false}
                 activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }} name="Total Streams" />
               {selectedTracks.map(t => {
                 const r = trackRoles.find(x => x.track_name === t);
-                return <Line key={t} yAxisId="s" type="monotone" dataKey={t} stroke={r?.color ?? "#4B5563"} strokeWidth={1} strokeOpacity={0.25} dot={false} activeDot={false} connectNulls={false} name={t} />;
+                return <Line key={t} yAxisId="s" type="monotone" dataKey={t} stroke={r?.color ?? "#4B5563"} strokeWidth={1} strokeOpacity={0.25}
+                  dot={isSparse ? { r: 3, fill: r?.color ?? "#4B5563", stroke: "#0D1117", strokeWidth: 1 } : false}
+                  activeDot={false} connectNulls={false} name={t} />;
               })}
               {hasPhysical && <Bar yAxisId="p" dataKey="physical_units" fill={`${PHYSICAL_COLOR}35`} stroke={PHYSICAL_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="Physical" barSize={18} />}
             </ComposedChart>
@@ -262,7 +267,7 @@ export default function TimelineChart({
                   stroke={role.color}
                   strokeWidth={isBreakout ? 4 : isAlbum ? 3 : 2}
                   strokeOpacity={isBreakout ? 1 : isAlbum ? 0.8 : 0.4}
-                  dot={false}
+                  dot={isSparse ? { r: isBreakout ? 6 : isAlbum ? 5 : 4, fill: role.color, stroke: "#0D1117", strokeWidth: 2 } : false}
                   activeDot={isPre ? false : { r: isBreakout ? 6 : 4, fill: role.color, stroke: "#0D1117", strokeWidth: 2 }}
                   connectNulls={false} name={track} />;
               })}
