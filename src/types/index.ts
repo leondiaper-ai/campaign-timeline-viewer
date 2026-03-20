@@ -21,7 +21,8 @@ export type EventCategory =
   | "marketing"
   | "editorial"
   | "product"
-  | "live";
+  | "live"
+  | "marquee";
 
 // ——— Tab 1: campaign_setup (single row) ———————————————————
 export interface CampaignSetup {

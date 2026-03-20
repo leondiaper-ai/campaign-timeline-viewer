@@ -46,7 +46,13 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const ukTrackContext = useMemo(() => sheet ? buildUKTrackContext(sheet) : [], [sheet]);
   const ukMilestones = useMemo(() => sheet ? buildUKMilestones(sheet) : [], [sheet]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
-  const moments = useMemo(() => sheet ? getAllMoments(sheet) : [], [sheet]);
+  const moments = useMemo(() => {
+    if (!sheet) return [];
+    const base = getAllMoments(sheet);
+    // Inject Marquee paid-campaign moments (not sourced from sheet)
+    base.push({ date: "2026-03-14", moment_title: "Marquee \u2014 Doesn\u2019t Just Happen", moment_type: "marquee", is_key: true });
+    return base.sort((a, b) => a.date.localeCompare(b.date));
+  }, [sheet]);
   const keyMomentDates = useMemo(() => new Set(moments.filter(m => m.is_key).map(m => m.date)), [moments]);
 
   // Group moments by phase

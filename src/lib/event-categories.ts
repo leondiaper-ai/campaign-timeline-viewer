@@ -38,6 +38,12 @@ const EVENT_CATEGORIES: Record<EventCategory, CategoryConfig> = {
     bgColor: "#EF444420",
     icon: "●",
   },
+  marquee: {
+    label: "Marquee",
+    color: "#10B981",
+    bgColor: "#10B98120",
+    icon: "◈",
+  },
 };
 
 /**
@@ -67,6 +73,9 @@ export function mapMomentType(momentType: string): EventCategory {
     val.includes("playlist")
   )
     return "editorial";
+
+  // Marquee (paid campaign)
+  if (val.includes("marquee")) return "marquee";
 
   // Marketing
   if (

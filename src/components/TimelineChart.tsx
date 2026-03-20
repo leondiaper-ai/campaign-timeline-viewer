@@ -124,35 +124,31 @@ function TrackTip({ active, payload, label, trackRoles, ukMilestones }: any) {
 }
 
 
-// ——— Marquee moment context (static enrichment) ———
-interface MarqueeContext { territory: string; spend: string; intent: string; intentGrade: string; driver: string; topTrack: string; }
-const MARQUEE_CONTEXT: Record<string, MarqueeContext> = {
-  "Single One - Death Of Love":       { territory: "Global", spend: "$12K", intent: "29.6%", intentGrade: "Strong", driver: "Indie/Alt listeners 25\u201334", topTrack: "Death Of Love" },
-  "Single Two - I Had a Dream":       { territory: "Global", spend: "$8K",  intent: "24.1%", intentGrade: "On Benchmark", driver: "R&B crossover 18\u201324", topTrack: "I Had a Dream" },
-  "'Trying' Times Album Release":     { territory: "UK + Global", spend: "$22K", intent: "31.2%", intentGrade: "Strong", driver: "Core fanbase 25\u201344", topTrack: "Doesn\u2019t Just Happen" },
-  "Announce UK In-Store signing":     { territory: "UK", spend: "$4K",  intent: "18.5%", intentGrade: "On Benchmark", driver: "UK fanbase 18\u201334", topTrack: "Walk Out Music" },
-  "Fallon Late Night TV Performance": { territory: "US", spend: "$6K",  intent: "22.3%", intentGrade: "On Benchmark", driver: "US discovery 25\u201344", topTrack: "Death Of Love" },
+// ——— Marquee paid-campaign context (only for marquee moments) ———
+interface MarqueeData { territory: string; spend: string; intent: string; intentGrade: string; driver: string; topTrack: string; }
+const MARQUEE_CAMPAIGNS: Record<string, MarqueeData> = {
+  "Marquee \u2014 Doesn\u2019t Just Happen": { territory: "UK", spend: "$8K", intent: "29.6%", intentGrade: "On Benchmark", driver: "Super audience", topTrack: "Doesn\u2019t Just Happen" },
 };
 
 // ——— Moment markers for campaign mode ———
-interface MM { date: string; label: string; fullTitle: string; color: string; row: number; }
+interface MM { date: string; label: string; fullTitle: string; type: string; color: string; row: number; }
 function layoutMoments(data: ChartDataPoint[], vis: Set<string>): MM[] {
-  const byDate = new Map<string, { date: string; label: string; fullTitle: string; color: string; p: number }>();
-  const pm: Record<string, number> = { music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
+  const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; p: number }>();
+  const pm: Record<string, number> = { music: 5, marquee: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
   data.forEach(d => {
     if (d.events.length > 0) {
       const ke = d.events.filter(e => e.is_key && vis.has(e.date));
       if (ke.length > 0) {
         let best = ke[0], bp = 0;
-        for (const e of ke) { const cat = getCategoryConfig(e.moment_type); const p = pm[cat.label.toLowerCase()] || 1; if (p > bp) { bp = p; best = e; } }
+        for (const e of ke) { const cat = getCategoryConfig(e.moment_type); const p = pm[e.moment_type] || pm[cat.label.toLowerCase()] || 1; if (p > bp) { bp = p; best = e; } }
         const cat = getCategoryConfig(best.moment_type);
         const ex = byDate.get(d.date);
-        if (!ex || bp > ex.p) byDate.set(d.date, { date: d.date, label: trunc(best.moment_title, 18), fullTitle: best.moment_title, color: cat.color, p: bp });
+        if (!ex || bp > ex.p) byDate.set(d.date, { date: d.date, label: trunc(best.moment_title, 18), fullTitle: best.moment_title, type: best.moment_type, color: cat.color, p: bp });
       }
     }
   });
   return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 7)
-    .map((m, i) => ({ date: m.date, label: m.label, fullTitle: m.fullTitle, color: m.color, row: i % 2 }));
+    .map((m, i) => ({ date: m.date, label: m.label, fullTitle: m.fullTitle, type: m.type, color: m.color, row: i % 2 }));
 }
 
 // ——— Phase boundaries ———
@@ -199,17 +195,17 @@ export default function TimelineChart({
               const dates = data.map(d => d.date).sort();
               const idx = dates.indexOf(m.date);
               const pct = dates.length > 1 ? (idx / (dates.length - 1)) * 100 : 50;
-              const mq = MARQUEE_CONTEXT[m.fullTitle];
+              const mq = m.type === "marquee" ? MARQUEE_CAMPAIGNS[m.fullTitle] : null;
               return (
-                <div key={i} className="absolute flex flex-col items-center group"
+                <div key={i} className={`absolute flex flex-col items-center ${mq ? "group" : ""}`}
                   style={{ left: `${4 + pct * 0.88}%`, bottom: m.row === 0 ? 20 : 2, transform: "translateX(-50%)" }}>
-                  <span className="text-[9px] font-bold uppercase tracking-wider whitespace-nowrap px-1 cursor-default" style={{ color: m.color }}>{m.label}</span>
+                  <span className={`text-[9px] font-bold uppercase tracking-wider whitespace-nowrap px-1 ${mq ? "cursor-pointer" : ""}`} style={{ color: m.color }}>{m.label}</span>
                   <div className="w-px h-1.5 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.4 }} />
                   {mq && (
                     <div className="hidden group-hover:block absolute bottom-full mb-2 z-50 bg-[#1A1D2E] rounded-lg border border-[#2A2D3E] p-2.5 shadow-2xl whitespace-nowrap">
-                      <p className="text-[10px] font-semibold text-white mb-1">{m.fullTitle} <span className="text-[#6B7280] font-normal">&mdash; {mq.territory}</span></p>
+                      <p className="text-[10px] font-semibold text-white mb-1">Marquee &mdash; <span className="text-[#6B7280] font-normal">{mq.territory}</span></p>
                       <p className="text-[10px] text-[#9CA3AF]">Spend: <span className="text-white font-medium">{mq.spend}</span></p>
-                      <p className="text-[10px] text-[#9CA3AF]">Intent: <span className="text-white font-medium">{mq.intent}</span> <span className={`${mq.intentGrade === "Strong" ? "text-emerald-400" : "text-[#6B7280]"}`}>({mq.intentGrade})</span></p>
+                      <p className="text-[10px] text-[#9CA3AF]">Intent: <span className="text-white font-medium">{mq.intent}</span> <span className="text-[#6B7280]">({mq.intentGrade})</span></p>
                       <p className="text-[10px] text-[#9CA3AF]">Driver: <span className="text-white font-medium">{mq.driver}</span></p>
                       <p className="text-[10px] text-[#9CA3AF]">Top Track: <span className="text-white font-medium">{mq.topTrack}</span></p>
                     </div>
