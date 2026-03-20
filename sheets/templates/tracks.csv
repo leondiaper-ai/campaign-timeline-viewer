@@ -1,0 +1,5 @@
+track_name,isrc,role,release_date,spotify_uri
+Weightless,GBUM72600001,lead_single,2026-01-19,spotify:track:abc123
+Softly,GBUM72600002,album_track,2026-02-23,spotify:track:def456
+Green Eyes,GBUM72600003,album_track,2026-02-23,spotify:track:ghi789
+Impurities,GBUM72600004,promo_single,2026-02-09,spotify:track:jkl012

@@ -49,8 +49,19 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const moments = useMemo(() => {
     if (!sheet) return [];
     const base = getAllMoments(sheet);
-    // Inject Marquee paid-campaign moments (not sourced from sheet)
-    base.push({ date: "2026-03-14", moment_title: "Marquee \u2014 Doesn\u2019t Just Happen", moment_type: "marquee", is_key: true });
+    // Generate paid-campaign moments from sheet data (paid_campaigns tab)
+    if (sheet.paidCampaigns) {
+      for (const pc of sheet.paidCampaigns) {
+        if (pc.start_date) {
+          base.push({
+            date: pc.start_date,
+            moment_title: `${pc.platform} \u2014 ${pc.campaign_name}`,
+            moment_type: "marquee",
+            is_key: true,
+          });
+        }
+      }
+    }
     return base.sort((a, b) => a.date.localeCompare(b.date));
   }, [sheet]);
   const keyMomentDates = useMemo(() => new Set(moments.filter(m => m.is_key).map(m => m.date)), [moments]);
@@ -120,7 +131,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
             visibleEventDates={keyMomentDates} highlightedDate={effectiveHighlight}
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
             chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
-            ukMilestones={ukMilestones} territory={territory} />
+            ukMilestones={ukMilestones} territory={territory}
+            paidCampaigns={sheet.paidCampaigns} />
         </div>
 
         {/* Phase-grouped moments */}

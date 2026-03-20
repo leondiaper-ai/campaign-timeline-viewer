@@ -15,6 +15,7 @@ import {
   DailyTrackRow,
   DailyTerritoryRow,
   UKContextRow,
+  PaidCampaignRow,
 } from "@/types";
 
 // ——— Google Sheets Client ——————————————————————————————————
@@ -277,6 +278,28 @@ async function fetchTrackUKContext(sheetId: string): Promise<UKContextRow[]> {
     }));
 }
 
+/** Tab: paid_campaigns — paid campaign performance (Marquee / Showcase) */
+async function fetchPaidCampaigns(sheetId: string): Promise<PaidCampaignRow[]> {
+  const rows = await fetchRowsSafe(sheetId, "paid_campaigns");
+  if (rows.length === 0) return [];
+  return rows
+    .filter((r) => r[0]?.trim() && r[1]?.trim() && !isMetadataRow(r[0]))
+    .map((r) => ({
+      campaign_name: normalizeQuotes(r[0].trim()),
+      platform: (r[1] || "").trim(),
+      territory: (r[2] || "").trim(),
+      start_date: isValidDate(r[3]) ? r[3].trim() : "",
+      spend: safeNumber(r[4]),
+      spend_planned: safeNumber(r[5]),
+      intent_total: safeNumber(r[6]),
+      intent_super: safeNumber(r[7]),
+      intent_moderate: safeNumber(r[8]),
+      best_segment: (r[9] || "").trim(),
+      top_track: normalizeQuotes((r[10] || "").trim()),
+      campaign_objective: (r[11] || "").trim(),
+      notes: (r[12] || "").trim(),
+    }));
+}
 
 // ——— Validation ————————————————————————————————————————————
 function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
@@ -357,7 +380,7 @@ function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
 export async function fetchCampaignSheetData(
   sheetId: string
 ): Promise<CampaignSheetData> {
-  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext] =
+  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns] =
     await Promise.all([
       fetchCampaignSetup(sheetId),
       fetchTracks(sheetId),
@@ -367,9 +390,10 @@ export async function fetchCampaignSheetData(
       fetchTrackDailyImport(sheetId),
       fetchTrackDailyImportTerritory(sheetId),
       fetchTrackUKContext(sheetId),
+      fetchPaidCampaigns(sheetId),
     ]);
 
-  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns };
 
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {

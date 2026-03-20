@@ -100,6 +100,23 @@ export interface UKContextRow {
   note: string;
 }
 
+// ——— Tab: paid_campaigns (paid campaign performance) ————————
+export interface PaidCampaignRow {
+  campaign_name: string;
+  platform: string;        // "Marquee" | "Showcase"
+  territory: string;       // "UK" | "US" | "DE" | "FR" etc
+  start_date: string;      // YYYY-MM-DD
+  spend: number;
+  spend_planned: number;
+  intent_total: number;
+  intent_super: number;
+  intent_moderate: number;
+  best_segment: string;
+  top_track: string;
+  campaign_objective: string;
+  notes: string;
+}
+
 // ——— Parsed Campaign Sheet ————————————————————————————————
 export interface CampaignSheetData {
   setup: CampaignSetup;
@@ -110,6 +127,7 @@ export interface CampaignSheetData {
   dailyTrackData: DailyTrackRow[];
   dailyTerritoryData: DailyTerritoryRow[];
   ukContext: UKContextRow[];
+  paidCampaigns: PaidCampaignRow[];
 }
 
 // ——— Registry ————————————————————————————————————————————
