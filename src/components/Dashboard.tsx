@@ -94,14 +94,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Summary */}
-        <div className="bg-[#131620] rounded-xl border border-[#1E2130] px-5 py-4">
-          <div className="flex items-start gap-3">
-            <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mt-0.5 flex-shrink-0">Summary</span>
-            <p className="text-[13px] text-[#D1D5DB] leading-relaxed">{summary}</p>
-          </div>
-        </div>
-
         {/* Recommended Action */}
         <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/20 px-5 py-4">
           <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2">Recommended Action</p>
