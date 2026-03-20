@@ -217,7 +217,8 @@ export default function TimelineChart({
                 activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }} name="Total Streams" />
               {selectedTracks.map(t => {
                 const r = trackRoles.find(x => x.track_name === t);
-                return <Line key={t} yAxisId="s" type="monotone" dataKey={t} stroke={r?.color ?? "#4B5563"} strokeWidth={1} strokeOpacity={0.25}
+                return <Line key={t} yAxisId="s" type="monotone" dataKey={t} stroke={r?.color ?? "#4B5563"}
+                  strokeWidth={r?.strokeWidth ? r.strokeWidth * 0.6 : 1} strokeOpacity={r?.opacity ?? 0.25}
                   dot={isSparse ? { r: 3, fill: r?.color ?? "#4B5563", stroke: "#0D1117", strokeWidth: 1 } : false}
                   activeDot={false} connectNulls={false} name={t} />;
               })}
@@ -256,19 +257,17 @@ export default function TimelineChart({
                   label={{ value: "Holding post-release", position: "insideTopRight", fill: "#FBBF24", fontSize: 9, fontWeight: 700, offset: 8 }} />
               )}
 
-              {/* Track lines — thick, high contrast, narrative hierarchy */}
+              {/* Track lines — fixed colours for key tracks, muted for others */}
               {selectedTracks.map(track => {
                 const role = trackRoles.find(r => r.track_name === track);
                 if (!role) return null;
-                const isBreakout = role.role === "POST_RELEASE_BREAKOUT";
-                const isAlbum = role.role === "ALBUM_DRIVER";
-                const isPre = role.role === "PRE_RELEASE";
+                const isKey = role.opacity >= 0.5;
                 return <Line key={track} type="monotone" dataKey={track}
                   stroke={role.color}
-                  strokeWidth={isBreakout ? 4 : isAlbum ? 3 : 2}
-                  strokeOpacity={isBreakout ? 1 : isAlbum ? 0.8 : 0.4}
-                  dot={isSparse ? { r: isBreakout ? 6 : isAlbum ? 5 : 4, fill: role.color, stroke: "#0D1117", strokeWidth: 2 } : false}
-                  activeDot={isPre ? false : { r: isBreakout ? 6 : 4, fill: role.color, stroke: "#0D1117", strokeWidth: 2 }}
+                  strokeWidth={role.strokeWidth}
+                  strokeOpacity={role.opacity}
+                  dot={isSparse ? { r: isKey ? 5 : 3, fill: role.color, stroke: "#0D1117", strokeWidth: 2 } : false}
+                  activeDot={isKey ? { r: 5, fill: role.color, stroke: "#0D1117", strokeWidth: 2 } : false}
                   connectNulls={false} name={track} />;
               })}
             </ComposedChart>

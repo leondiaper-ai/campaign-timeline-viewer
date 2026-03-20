@@ -20,7 +20,7 @@ const ROLE_STYLES: Record<TrackNarrativeRole, { strokeWidth: number; opacity: nu
   SUPPORTING: { strokeWidth: 1, opacity: 0.25 },
 };
 
-// Color assignments: breakout gets brightest
+// Fallback role-based colors (used when a track has no fixed color)
 const ROLE_COLORS: Record<TrackNarrativeRole, string> = {
   POST_RELEASE_BREAKOUT: "#FBBF24", // bright amber — stands out
   ALBUM_DRIVER: "#A78BFA",          // purple — prominent but not dominant
@@ -28,13 +28,38 @@ const ROLE_COLORS: Record<TrackNarrativeRole, string> = {
   SUPPORTING: "#4B5563",            // dark grey — minimal
 };
 
+// ——— Fixed per-track colour map for key tracks ——————————————
+// These are always used regardless of inferred role or territory.
+const KEY_TRACK_COLORS: Record<string, string> = {
+  "Death Of Love":        "#F87171", // red — lead single
+  "I Had a Dream":        "#60A5FA", // blue — second single
+  "Trying Times":         "#34D399", // emerald — focus track
+  "Doesn't Just Happen":  "#FBBF24", // amber — breakout
+};
+const MUTED_COLOR = "#4B5563";       // neutral grey for all other tracks
+const KEY_TRACK_STROKE = 2.5;
+const KEY_TRACK_OPACITY = 0.9;
+const MUTED_STROKE = 1;
+const MUTED_OPACITY = 0.2;
+
+/** Apply fixed key-track colours; mute everything else. */
+function applyFixedColors(roles: TrackWithRole[]): TrackWithRole[] {
+  return roles.map(r => {
+    const fixed = KEY_TRACK_COLORS[r.track_name];
+    if (fixed) {
+      return { ...r, color: fixed, strokeWidth: KEY_TRACK_STROKE, opacity: KEY_TRACK_OPACITY };
+    }
+    return { ...r, color: MUTED_COLOR, strokeWidth: MUTED_STROKE, opacity: MUTED_OPACITY };
+  });
+}
+
 export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory): TrackWithRole[] {
   // Use daily data if weekly data is unavailable
   if ((!sheet.weeklyData || sheet.weeklyData.length === 0) && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
     const albumDate = sheet.setup.release_date;
     const trackNames = [...new Set(sheet.dailyTrackData.map(r => r.track_name))];
     if (!albumDate || trackNames.length === 0) {
-      return trackNames.map(tn => ({ track_name: tn, role: "SUPPORTING" as TrackNarrativeRole, color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING }));
+      return applyFixedColors(trackNames.map(tn => ({ track_name: tn, role: "SUPPORTING" as TrackNarrativeRole, color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING })));
     }
     const analysis = new Map<string, { preTotal: number; postTotal: number; firstDate: string }>();
     for (const tn of trackNames) {
@@ -49,23 +74,23 @@ export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory):
       if (a.firstDate >= albumDate && a.postTotal > bPost) { bPost = a.postTotal; breakout = tn; }
       else if (a.postTotal > adPost && a.firstDate < albumDate) { adPost = a.postTotal; albumDriver = tn; }
     }
-    return trackNames.map(tn => {
+    return applyFixedColors(trackNames.map(tn => {
       let role: TrackNarrativeRole;
       if (tn === breakout) role = "POST_RELEASE_BREAKOUT";
       else if (tn === albumDriver) role = "ALBUM_DRIVER";
       else if ((analysis.get(tn)?.preTotal || 0) > 0) role = "PRE_RELEASE";
       else role = "SUPPORTING";
       return { track_name: tn, role, color: ROLE_COLORS[role], ...ROLE_STYLES[role] };
-    });
+    }));
   }
   const albumDate = sheet.setup.release_date;
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   if (!albumDate) {
     // No album date — all tracks equal
-    return sheet.tracks.map((t) => ({
+    return applyFixedColors(sheet.tracks.map((t) => ({
       track_name: t.track_name, role: "SUPPORTING" as TrackNarrativeRole,
       color: ROLE_COLORS.SUPPORTING, ...ROLE_STYLES.SUPPORTING,
-    }));
+    })));
   }
 
   const trackNames = [...new Set(sheet.weeklyData.filter(r => r.track_name !== "TOTAL").map(r => r.track_name))];
@@ -112,7 +137,7 @@ export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory):
     }
   }
 
-  return trackNames.map((tn) => {
+  return applyFixedColors(trackNames.map((tn) => {
     let role: TrackNarrativeRole;
     if (tn === breakout) role = "POST_RELEASE_BREAKOUT";
     else if (tn === albumDriver) role = "ALBUM_DRIVER";
@@ -125,7 +150,7 @@ export function inferTrackRoles(sheet: CampaignSheetData, territory: Territory):
       color: ROLE_COLORS[role],
       ...ROLE_STYLES[role],
     };
-  });
+  }));
 }
 
 // ——— Detect handover moment (album decline → breakout emerges) ——
