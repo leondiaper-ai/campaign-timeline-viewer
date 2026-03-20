@@ -16,20 +16,28 @@ export default function CampaignInsights({ sheet, territory }: Props) {
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
 
   const stats = useMemo(() => {
+    const isUK = territory === "UK";
     const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
     let totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
-    if (totalStreams === 0 && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
-      totalStreams = sheet.dailyTrackData.reduce((sum: number, r: any) => sum + r.global_streams, 0);
+    // Fallback to daily data when weekly totals are zero
+    if (totalStreams === 0) {
+      if (isUK && sheet.dailyTerritoryData && sheet.dailyTerritoryData.length > 0) {
+        totalStreams = sheet.dailyTerritoryData
+          .filter((r) => r.territory === "UK")
+          .reduce((sum, r) => sum + r.streams, 0);
+      } else if (!isUK && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+        totalStreams = sheet.dailyTrackData.reduce((sum: number, r: any) => sum + r.global_streams, 0);
+      }
     }
     const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
     const uk = getUKTotals(sheet);
     return { totalStreams, totalPhysical, uk };
-  }, [sheet, streamKey]);
+  }, [sheet, streamKey, territory]);
 
   const isGlobal = territory === "global";
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className={`grid gap-3 ${isGlobal ? "grid-cols-1" : "grid-cols-2"}`}>
       <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
         <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">
           {isGlobal ? "Global Streams" : "UK Streams"}
@@ -41,14 +49,14 @@ export default function CampaignInsights({ sheet, territory }: Props) {
           </p>
         )}
       </div>
-      <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
-        <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">
-          {isGlobal ? "Physical" : "UK Physical"}
-        </p>
-        <p className="text-2xl font-bold text-[#4ADE80] tabular-nums">
-          {stats.totalPhysical > 0 ? fmt(stats.totalPhysical) : "\u2014"}
-        </p>
-      </div>
+      {!isGlobal && (
+        <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
+          <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">UK Physical</p>
+          <p className="text-2xl font-bold text-[#4ADE80] tabular-nums">
+            {stats.totalPhysical > 0 ? fmt(stats.totalPhysical) : "\u2014"}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
