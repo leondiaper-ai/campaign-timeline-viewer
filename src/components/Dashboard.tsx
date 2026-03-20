@@ -94,13 +94,13 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Recommended Action */}
+        {/* Team Focus */}
         <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/20 px-5 py-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2">Recommended Action</p>
-          <p className="text-[14px] font-semibold text-white mb-1">PUSH &mdash; Doesn&rsquo;t Just Happen</p>
-          <p className="text-[12px] text-[#9CA3AF] mb-2">Why: Leading post-release momentum across UK + Global</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2">Team Focus</p>
+          <p className="text-[14px] font-semibold text-white mb-1">Primary Focus: Single &mdash; &ldquo;Doesn&rsquo;t Just Happen&rdquo;</p>
+          <p className="text-[12px] text-[#9CA3AF] mb-2">Context: Leading post-release momentum across UK + Global</p>
           <div className="flex gap-6">
-            <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">UK:</span> Amplify around Outstore Run (23 Mar)</p>
+            <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">UK:</span> Lean into Outstore Run (23 Mar)</p>
             <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">US:</span> Build into Tour window (May)</p>
           </div>
         </div>
