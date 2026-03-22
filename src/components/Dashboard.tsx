@@ -32,6 +32,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [chartMode, setChartMode] = useState<ChartMode>("campaign");
   const [pinnedDate, setPinnedDate] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
+  const [learningsExpanded, setLearningsExpanded] = useState(false);
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -101,15 +102,19 @@ export default function Dashboard({ initialData }: DashboardProps) {
                 {campaigns.map((c, i) => (<option key={c.campaign_id} value={i}>{c.sheet.setup.artist_name} — {c.sheet.setup.campaign_name}</option>))}
               </select>
             ) : (
-              <h1 className="text-lg font-semibold">{sheet.setup.artist_name}<span className="text-[#6B7280] font-normal"> — {sheet.setup.campaign_name}</span></h1>
+              <div>
+                <h1 className="text-lg font-semibold">{sheet.setup.artist_name}<span className="text-[#6B7280] font-normal"> — {sheet.setup.campaign_name}</span></h1>
+                <p className="text-[11px] text-[#4B5563] mt-0.5">
+                  <span className="capitalize">{sheet.setup.campaign_type}</span>
+                  {sheet.setup.release_date && <> · Released {fmtDate(sheet.setup.release_date)}</>}
+                </p>
+              </div>
             )}
-            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#161922] text-[#6B7280] border border-[#2A2D3E]">{sheet.setup.campaign_type}</span>
-            {sheet.setup.release_date && <span className="text-[10px] text-[#4B5563]">Release: {fmtDate(sheet.setup.release_date)}</span>}
           </div>
           <div className="flex items-center gap-1 bg-[#161922] rounded-lg p-0.5 border border-[#2A2D3E]">
             {(["global", "UK"] as Territory[]).map(t => (
               <button key={t} onClick={() => setTerritory(t)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${territory === t ? "bg-white/10 text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
+                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${territory === t ? "bg-[#6C9EFF]/15 text-[#6C9EFF] shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
                 {t === "global" ? "Global" : "UK"}
               </button>
             ))}
@@ -119,15 +124,15 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
         {/* Team Focus */}
-        <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/20 px-5 py-3">
-          <div className="flex items-center gap-3 mb-1.5">
-            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]">Team Focus</p>
-            <span className="text-[10px] text-[#6B7280]">&middot; Momentum building post-release</span>
+        <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-2.5">
+          <div className="flex items-center gap-3 mb-1">
+            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80">Team Focus</p>
+            <span className="text-[9px] text-[#4B5563]">&middot; Post-release momentum</span>
           </div>
-          <p className="text-[13px] font-semibold text-white mb-1">Primary Focus: Single &mdash; &ldquo;Doesn&rsquo;t Just Happen&rdquo;</p>
-          <div className="flex gap-6">
-            <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">UK:</span> Lean into Outstore Run (23 Mar)</p>
-            <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">US:</span> Build into Tour window (May)</p>
+          <p className="text-[12px] font-semibold text-white mb-0.5">Focus: &ldquo;Doesn&rsquo;t Just Happen&rdquo;</p>
+          <div className="flex gap-5">
+            <p className="text-[10px] text-[#9CA3AF]"><span className="text-[#6B7280] font-medium">UK:</span> Outstore Run (23 Mar)</p>
+            <p className="text-[10px] text-[#9CA3AF]"><span className="text-[#6B7280] font-medium">US:</span> Tour window (May)</p>
           </div>
         </div>
 
@@ -144,13 +149,13 @@ export default function Dashboard({ initialData }: DashboardProps) {
             paidCampaigns={sheet.paidCampaigns} moments={moments} />
         </div>
 
-        {/* Full Campaign Log — collapsed by default */}
+        {/* Full Campaign Timeline — collapsed by default */}
         <div className="bg-[#131620] rounded-xl border border-[#1E2130]">
           <button onClick={() => setLogExpanded(e => !e)}
             className="w-full flex items-center justify-between px-5 py-4 text-left group">
             <div className="flex items-center gap-3">
               <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280]">
-                Full Campaign Log <span className="text-[#4B5563] font-normal ml-1">({moments.length} events)</span>
+                Full Campaign Timeline <span className="text-[#4B5563] font-normal ml-1">({moments.length} events)</span>
               </h3>
               {!logExpanded && <span className="text-[10px] text-[#4B5563] group-hover:text-[#6B7280] transition-colors">Expand to view full campaign history</span>}
             </div>

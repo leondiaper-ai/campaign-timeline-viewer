@@ -129,8 +129,14 @@ function CampTip({ active, payload, label, territory }: any) {
           {sorted.map((m: Moment, i: number) => {
             const cfg = getCategoryConfig(m.moment_type);
             const isPrimary = i === 0 && tipPriority(m) <= 3;
+            // Add visual gap between groups: music (≤3), support (4-5), context (6+)
+            const prevP = i > 0 ? tipPriority(sorted[i - 1]) : 0;
+            const curP = tipPriority(m);
+            const groupBreak = i > 0 && (
+              (prevP <= 3 && curP > 3) || (prevP <= 5 && curP > 5)
+            );
             return (
-              <div key={i} className={`flex items-center gap-1.5 ${i > 0 ? "mt-1" : ""}`}>
+              <div key={i} className={`flex items-center gap-1.5 ${groupBreak ? "mt-2.5 pt-1.5 border-t border-[#2A2D3E]/50" : i > 0 ? "mt-1" : ""}`}>
                 <span style={{ color: cfg.color }} className="text-[10px] w-3 text-center flex-shrink-0">{cfg.icon}</span>
                 <span className={`text-[11px] ${isPrimary ? "font-semibold text-white" : "font-normal text-[#D1D5DB]"}`}>{tipLabel(m)}</span>
               </div>

@@ -118,6 +118,31 @@ export interface PaidCampaignRow {
   notes: string;
 }
 
+// ——— FUTURE: D2C Sales Moments (not yet active) ———————————
+// Will be surfaced once real data is available in sheet
+export interface D2CSalesRow {
+  date: string;           // YYYY-MM-DD
+  product: string;        // "Vinyl", "CD", "Merch Bundle" etc
+  units: number;
+  revenue: number;
+  source: string;         // "Store", "Outstore", "Amazon" etc
+  territory: string;
+  notes: string;
+}
+
+// ——— FUTURE: Mailer Performance (not yet active) ——————————
+// Will be surfaced once real data is available in sheet
+export interface MailerRow {
+  date: string;           // YYYY-MM-DD
+  campaign_name: string;
+  sends: number;
+  open_rate: number;      // 0-100 percentage
+  click_through: number;  // 0-100 percentage
+  conversion: number;     // 0-100 percentage
+  revenue: number;
+  notes: string;
+}
+
 // ——— Parsed Campaign Sheet ————————————————————————————————
 export interface CampaignSheetData {
   setup: CampaignSetup;
