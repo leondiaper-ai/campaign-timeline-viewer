@@ -217,8 +217,9 @@ function classifyNarrative(m: Moment): NarrativeCategory {
   if (type === "music" && t.includes("single")) return "single_release";
   // Paid support (Marquee, Showcase, etc.)
   if (type === "marquee" || type === "paid" || type === "showcase") return "paid_support";
-  // Major narrative beats: tour, TV, radio premiere
+  // Major narrative beats: tour, TV, radio premiere, product milestones (chart positions, merch)
   if (type === "tour" || type === "tv" || type === "radio" || type === "live") return "narrative_major";
+  if (type === "product" || type === "marketing") return "narrative_major";
   // Editorial
   if (type === "editorial") return "editorial_support";
   // Music moments that aren't singles/album (e.g. featured tracks)

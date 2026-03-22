@@ -901,7 +901,7 @@ export function classifyMomentImpact(
       return { moment: m, tier: "supporting" as ImpactTier, context: `Paid support${spendNote}` };
     }
 
-    // ——— SUPPORTING: editorial, key moments, tour, TV ———
+    // ——— SUPPORTING: editorial, key moments, tour, TV, product milestones ———
     if (type === "editorial" && m.is_key) {
       return { moment: m, tier: "supporting" as ImpactTier, context: "Boosted reach and discovery" };
     }
@@ -913,6 +913,17 @@ export function classifyMomentImpact(
     }
     if ((type === "tv" || type === "radio" || type === "media") && m.is_key) {
       return { moment: m, tier: "supporting" as ImpactTier, context: "Media visibility" };
+    }
+    // Key product moments (chart positions, milestones) — treat as driver if near release, supporting otherwise
+    if (type === "product" && m.is_key) {
+      const daysDiff = albumDate ? Math.abs(new Date(m.date).getTime() - new Date(albumDate).getTime()) / 86400000 : 999;
+      if (daysDiff <= 14) {
+        return { moment: m, tier: "driver" as ImpactTier, context: "Campaign milestone" };
+      }
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Campaign milestone" };
+    }
+    if (type === "marketing" && m.is_key) {
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Marketing moment" };
     }
     if (m.is_key && type === "music") {
       return { moment: m, tier: "supporting" as ImpactTier, context: "Music moment" };
