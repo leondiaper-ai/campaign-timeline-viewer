@@ -531,49 +531,72 @@ export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territ
 
 export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territory): GroupedLearnings {
   const result: GroupedLearnings = { music: [], campaign: [], commercial: [], takeaway: [] };
-  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return result;
 
-  const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL")
-    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
-  const trackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
-  const trackNames = [...new Set(trackRows.map(r => r.track_name))];
-
   // ——— MUSIC PERFORMANCE ———
-  // Top track pre-release
-  const preRows = trackRows.filter(r => r.week_start_date < albumDate);
-  if (preRows.length > 0) {
-    const preTotals = new Map<string, number>();
-    for (const r of preRows) preTotals.set(r.track_name, (preTotals.get(r.track_name) || 0) + r[streamKey]);
-    const sorted = [...preTotals.entries()].sort((a, b) => b[1] - a[1]);
-    if (sorted.length > 0 && sorted[0][1] > 0) {
-      result.music.push({ text: `Pre-release led by "${sorted[0][0]}" (~${fmtNum(sorted[0][1])} streams)`, sentiment: "neutral" });
+  // Build track totals from either daily data (preferred) or weekly data
+  const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
+  const weeklyTrackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+
+  // Unified track analysis: { trackName -> { pre, post } }
+  const trackAnalysis = new Map<string, { pre: number; post: number }>();
+
+  if (hasDailyData) {
+    // Use daily data (global streams only for now)
+    for (const r of sheet.dailyTrackData) {
+      const existing = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
+      if (r.date < albumDate) existing.pre += r.global_streams;
+      else existing.post += r.global_streams;
+      trackAnalysis.set(r.track_name, existing);
+    }
+  } else if (weeklyTrackRows.length > 0) {
+    // Fallback to weekly per-track data
+    for (const r of weeklyTrackRows) {
+      const existing = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
+      if (r.week_start_date < albumDate) existing.pre += r[streamKey];
+      else existing.post += r[streamKey];
+      trackAnalysis.set(r.track_name, existing);
     }
   }
 
-  // Top track post-release
-  const postRows = trackRows.filter(r => r.week_start_date >= albumDate);
-  if (postRows.length > 0) {
-    const postTotals = new Map<string, number>();
-    for (const r of postRows) postTotals.set(r.track_name, (postTotals.get(r.track_name) || 0) + r[streamKey]);
-    const sorted = [...postTotals.entries()].sort((a, b) => b[1] - a[1]);
-    if (sorted.length > 0 && sorted[0][1] > 0) {
-      result.music.push({ text: `Post-release dominated by "${sorted[0][0]}" (~${fmtNum(sorted[0][1])} streams)`, sentiment: "positive" });
+  if (trackAnalysis.size > 0) {
+    // Top track pre-release
+    const preSorted = [...trackAnalysis.entries()].filter(([, a]) => a.pre > 0).sort((a, b) => b[1].pre - a[1].pre);
+    if (preSorted.length > 0) {
+      result.music.push({ text: `Pre-release led by "${preSorted[0][0]}" (~${fmtNum(preSorted[0][1].pre)} streams)`, sentiment: "neutral" });
+    }
+
+    // Top track post-release
+    const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
+    if (postSorted.length > 0) {
+      result.music.push({ text: `Post-release dominated by "${postSorted[0][0]}" (~${fmtNum(postSorted[0][1].post)} streams)`, sentiment: "positive" });
+    }
+
+    // Shift detection: did the leading track change?
+    if (preSorted.length > 0 && postSorted.length > 0 && preSorted[0][0] !== postSorted[0][0]) {
+      result.music.push({ text: `Lead track shifted from "${preSorted[0][0]}" to "${postSorted[0][0]}" post-release`, sentiment: "neutral" });
     }
   }
 
-  // Breakout / momentum track
+  // Breakout / momentum track from role analysis
   const roles = inferTrackRoles(sheet, territory);
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
-  if (breakout) {
-    const bPostRows = postRows.filter(r => r.track_name === breakout.track_name && r[streamKey] > 0);
-    if (bPostRows.length >= 2) {
-      const avg = bPostRows.reduce((s, r) => s + r[streamKey], 0) / bPostRows.length;
-      result.music.push({ text: `"${breakout.track_name}" sustained ~${fmtNum(avg)}/week — only track holding momentum`, sentiment: "positive" });
+  if (breakout && trackAnalysis.size > 0) {
+    const bData = trackAnalysis.get(breakout.track_name);
+    if (bData && bData.post > 0) {
+      // Only add if not already covered by post-release dominator
+      const postSorted = [...trackAnalysis.entries()].sort((a, b) => b[1].post - a[1].post);
+      if (postSorted.length > 0 && postSorted[0][0] !== breakout.track_name) {
+        result.music.push({ text: `"${breakout.track_name}" sustained momentum — only track holding post-release`, sentiment: "positive" });
+      }
     }
   }
+
+  // Cap music at 3
+  result.music = result.music.slice(0, 3);
 
   // ——— CAMPAIGN IMPACT ———
   const pcs = sheet.paidCampaigns || [];
@@ -603,26 +626,67 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
 
   // ——— COMMERCIAL SIGNALS ———
   const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
-  if (totalRows.length >= 2) {
-    const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
 
-    if (physicalTotal > 0) {
-      // Check if physical peaked during release week
-      const physByWeek = new Map<string, number>();
-      for (const r of sheet.physicalData) physByWeek.set(r.week_start_date, (physByWeek.get(r.week_start_date) || 0) + r.units);
-      const physPeakWeek = [...physByWeek.entries()].sort((a, b) => b[1] - a[1])[0];
-      if (physPeakWeek && physPeakWeek[0] === peakRow.week_start_date) {
+  // Get peak streams from daily data or weekly TOTAL rows
+  const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL")
+    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+
+  // Compute peak from daily data if available
+  let peakStreams = 0;
+  let peakDate = "";
+  if (hasDailyData) {
+    // Aggregate daily data into weekly-ish buckets by summing all tracks per date
+    const dailyTotals = new Map<string, number>();
+    for (const r of sheet.dailyTrackData) {
+      dailyTotals.set(r.date, (dailyTotals.get(r.date) || 0) + r.global_streams);
+    }
+    for (const [d, s] of dailyTotals) {
+      if (s > peakStreams) { peakStreams = s; peakDate = d; }
+    }
+  } else if (totalRows.length >= 2) {
+    const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
+    peakStreams = peakRow[streamKey];
+    peakDate = peakRow.week_start_date;
+  }
+
+  if (physicalTotal > 0) {
+    const physByWeek = new Map<string, number>();
+    for (const r of sheet.physicalData) physByWeek.set(r.week_start_date, (physByWeek.get(r.week_start_date) || 0) + r.units);
+    const physPeakWeek = [...physByWeek.entries()].sort((a, b) => b[1] - a[1])[0];
+    // Check if physical peak aligns with stream peak (within 7 days for daily data)
+    if (physPeakWeek && peakDate) {
+      const daysDiff = Math.abs(new Date(physPeakWeek[0]).getTime() - new Date(peakDate).getTime()) / 86400000;
+      if (daysDiff <= 7) {
         result.commercial.push({ text: `Physical sales peaked during release week — aligned with stream spike`, sentiment: "positive" });
-      } else if (physPeakWeek) {
+      } else {
         result.commercial.push({ text: `Physical sales (~${fmtNum(physicalTotal)} units) contributed to campaign total`, sentiment: "neutral" });
       }
     }
+  }
 
-    // Post-release drop
-    const postPeakRows = totalRows.filter(r => r.week_start_date > peakRow.week_start_date);
+  // Post-release drop from weekly TOTAL or daily aggregate
+  if (hasDailyData && peakDate) {
+    // Compare peak day to average of 7 days after
+    const dailyTotals = new Map<string, number>();
+    for (const r of sheet.dailyTrackData) dailyTotals.set(r.date, (dailyTotals.get(r.date) || 0) + r.global_streams);
+    const postDays = [...dailyTotals.entries()]
+      .filter(([d]) => d > peakDate)
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .slice(0, 7);
+    if (postDays.length >= 3) {
+      const postAvg = postDays.reduce((s, [, v]) => s + v, 0) / postDays.length;
+      const dropPct = Math.round((1 - postAvg / peakStreams) * 100);
+      if (dropPct > 30) {
+        result.commercial.push({ text: `Streams dropped ~${dropPct}% post-peak — consider extended push window`, sentiment: "negative" });
+      } else if (dropPct > 10) {
+        result.commercial.push({ text: `Moderate ~${dropPct}% decline post-peak — normal release curve`, sentiment: "neutral" });
+      }
+    }
+  } else if (totalRows.length >= 2 && peakDate) {
+    const postPeakRows = totalRows.filter(r => r.week_start_date > peakDate);
     if (postPeakRows.length > 0) {
       const nextWeek = postPeakRows[0];
-      const dropPct = Math.round((1 - nextWeek[streamKey] / peakRow[streamKey]) * 100);
+      const dropPct = Math.round((1 - nextWeek[streamKey] / peakStreams) * 100);
       if (dropPct > 30) {
         result.commercial.push({ text: `Streams dropped ${dropPct}% post-peak — consider extended push window`, sentiment: "negative" });
       } else if (dropPct > 10) {
@@ -646,10 +710,9 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
   if (editorialNearRelease.length > 0) drivers.push("editorial");
   if (physicalTotal > 0) drivers.push("physical sales");
 
-  if (drivers.length > 0 && totalRows.length > 0) {
-    const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
+  if (drivers.length > 0 && peakStreams > 0) {
     result.takeaway.push({
-      text: `Release peak (~${fmtNum(peakRow[streamKey])}) driven by ${drivers.join(", ")} alignment`,
+      text: `Release peak (~${fmtNum(peakStreams)}) driven by ${drivers.join(", ")} alignment`,
       sentiment: "positive",
     });
   }
