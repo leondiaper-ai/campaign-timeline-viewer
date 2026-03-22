@@ -515,11 +515,12 @@ export function getCampaignLearnings(): CampaignLearning[] { return []; }
 
 // 3 bullets max: outcome, driver, gap. Sharp enough to repeat in a meeting.
 export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
+  // 2-3 bullets. Sharp enough to repeat in a meeting without thinking.
   const items: LearningItem[] = [];
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return items;
 
-  // ——— Data ———
+  // ——— gather data ———
   const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
   const weeklyTrackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
@@ -527,7 +528,7 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
   const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
   const hadPaid = pcs.length > 0;
   const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
-  const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
+  const fmtSpend = totalSpend >= 1000 ? `${(totalSpend / 1000).toFixed(0)}K` : `${totalSpend}`;
 
   let peakStreams = 0, peakDate = "";
   const dailyTotals = new Map<string, number>();
@@ -549,44 +550,64 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
     if (next) dropPct = Math.round((1 - next[streamKey] / peakStreams) * 100);
   }
 
-  // ——— 1. OUTCOME (vs expectation) ———
+  // catalogue concentration
+  const trackAnalysis = new Map<string, number>();
+  if (hasDailyData) {
+    for (const r of sheet.dailyTrackData) { if (r.date >= albumDate) trackAnalysis.set(r.track_name, (trackAnalysis.get(r.track_name) || 0) + r.global_streams); }
+  } else if (weeklyTrackRows.length > 0) {
+    for (const r of weeklyTrackRows) { if (r.week_start_date >= albumDate) trackAnalysis.set(r.track_name, (trackAnalysis.get(r.track_name) || 0) + r[streamKey]); }
+  }
+  let topTrackName = "", topTrackShare = 0;
+  if (trackAnalysis.size >= 2) {
+    const sorted = [...trackAnalysis.entries()].sort((a, b) => b[1] - a[1]);
+    const total = sorted.reduce((s, [, v]) => s + v, 0);
+    topTrackShare = total > 0 ? Math.round((sorted[0][1] / total) * 100) : 0;
+    topTrackName = sorted[0][0];
+  }
+
+  const crashed = dropPct > 30;
+  const held = dropPct > 0 && dropPct <= 30;
+  const concentrated = topTrackShare >= 55;
+
+  // ——— 1. OUTCOME — what happened vs what was expected ———
   const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
   if (chart_result && chart_forecast) {
-    const beat = chart_result.replace(/[^0-9]/g, "") && chart_forecast.replace(/[^0-9]/g, "")
-      ? Number(chart_result.replace(/[^0-9]/g, "")) < Number(chart_forecast.replace(/[^0-9]/g, ""))
-      : false;
-    const driver = outcome_driver || (physicalTotal > 0 ? "physical, not just streaming" : hadPaid ? "paid" : "organic");
-    items.push({ text: `${chart_result} result vs ${chart_forecast} forecast → driven by ${driver}`, sentiment: beat ? "positive" : "neutral" });
+    const resNum = Number(chart_result.replace(/[^0-9]/g, ""));
+    const foreNum = Number(chart_forecast.replace(/[^0-9]/g, ""));
+    const beat = resNum && foreNum && resNum < foreNum;
+    const met = resNum && foreNum && resNum === foreNum;
+    const missed = resNum && foreNum && resNum > foreNum;
+    const driver = outcome_driver || (physicalTotal > 0 ? "physical" : hadPaid ? "paid" : "organic");
+
+    if (beat) {
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${driver} closed the gap`, sentiment: "positive" });
+    } else if (met) {
+      items.push({ text: `Hit ${chart_result} as forecast — ${driver} delivered, nothing overperformed`, sentiment: "neutral" });
+    } else if (missed) {
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${driver} wasn't enough`, sentiment: "negative" });
+    } else {
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — driven by ${driver}`, sentiment: "neutral" });
+    }
   }
 
-  // ——— 2. WHAT ACTUALLY DROVE IT ———
-  if (hadPaid && dropPct > 30) {
-    items.push({ text: `Paid (${fmtSpend}) drove the spike, not the campaign → strong launch, no sustained growth`, sentiment: "negative" });
-  } else if (hadPaid && dropPct <= 30) {
-    items.push({ text: `Paid (${fmtSpend}) + editorial drove both launch and hold → campaign worked as designed`, sentiment: "positive" });
-  } else if (physicalTotal > 0 && !hadPaid) {
-    items.push({ text: `Physical sales carried the result → streaming alone didn't deliver`, sentiment: "neutral" });
+  // ——— 2. DRIVER — the uncomfortable truth about what actually moved the number ———
+  if (hadPaid && crashed) {
+    items.push({ text: `£${fmtSpend} paid drove launch day, nothing held after — money in, spike out`, sentiment: "negative" });
+  } else if (hadPaid && held) {
+    items.push({ text: `Paid + editorial held the line post-release — campaign did its job`, sentiment: "positive" });
+  } else if (!hadPaid && physicalTotal > 0) {
+    items.push({ text: `Physical carried this — streaming didn't show up`, sentiment: "neutral" });
+  } else if (!hadPaid && crashed) {
+    items.push({ text: `No paid, no editorial safety net — dropped ${dropPct}% with nothing to catch it`, sentiment: "negative" });
+  } else if (!hadPaid && held) {
+    items.push({ text: `Organic hold without paid — rare, don't assume it repeats`, sentiment: "positive" });
   }
 
-  // ——— 3. GAP (what was missing) ———
-  if (dropPct > 30) {
-    items.push({ text: `Gap → no clear driver after release week`, sentiment: "negative" });
-  } else {
-    // Check catalogue concentration
-    const trackAnalysis = new Map<string, number>();
-    if (hasDailyData) {
-      for (const r of sheet.dailyTrackData) { if (r.date >= albumDate) trackAnalysis.set(r.track_name, (trackAnalysis.get(r.track_name) || 0) + r.global_streams); }
-    } else if (weeklyTrackRows.length > 0) {
-      for (const r of weeklyTrackRows) { if (r.week_start_date >= albumDate) trackAnalysis.set(r.track_name, (trackAnalysis.get(r.track_name) || 0) + r[streamKey]); }
-    }
-    if (trackAnalysis.size >= 2) {
-      const sorted = [...trackAnalysis.entries()].sort((a, b) => b[1] - a[1]);
-      const total = sorted.reduce((s, [, v]) => s + v, 0);
-      const sharePct = total > 0 ? Math.round((sorted[0][1] / total) * 100) : 0;
-      if (sharePct >= 55) {
-        items.push({ text: `Gap → one track didn't carry the catalogue (${sharePct}% of post-release)`, sentiment: "negative" });
-      }
-    }
+  // ——— 3. GAP — what's missing, stated as a fact not advice ———
+  if (crashed && items.length < 3) {
+    items.push({ text: `Nothing drove streams after week 1`, sentiment: "negative" });
+  } else if (concentrated && items.length < 3) {
+    items.push({ text: `${topTrackName} was ${topTrackShare}% of post-release — catalogue didn't activate`, sentiment: "negative" });
   }
 
   return items.slice(0, 3);
