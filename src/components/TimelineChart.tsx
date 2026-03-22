@@ -142,19 +142,80 @@ function intentGrade(total: number): string {
 }
 
 // ——— Moment markers for campaign mode ———
+// Narrative-aware: album/single releases first, then major beats, paid support last
 interface MM { date: string; label: string; fullTitle: string; type: string; color: string; row: number; }
+
+type NarrativeCategory = "album_release" | "single_release" | "narrative_major" | "paid_support" | "editorial_support" | "other";
+
+function classifyNarrative(m: Moment): NarrativeCategory {
+  const t = m.moment_title.toLowerCase();
+  const type = m.moment_type.toLowerCase();
+  // Album release
+  if (type === "music" && (t.includes("album") || t.includes("release")) && !t.includes("single")) return "album_release";
+  // Singles
+  if (type === "music" && (t.includes("single one") || t.includes("single two") || t.includes("single 1") || t.includes("single 2") || t.includes("lead single") || t.includes("follow-up"))) return "single_release";
+  if (type === "music" && t.includes("single")) return "single_release";
+  // Paid support (Marquee, Showcase, etc.)
+  if (type === "marquee" || type === "paid" || type === "showcase") return "paid_support";
+  // Major narrative beats: tour, TV, radio premiere
+  if (type === "tour" || type === "tv" || type === "radio" || type === "live") return "narrative_major";
+  // Editorial
+  if (type === "editorial") return "editorial_support";
+  // Music moments that aren't singles/album (e.g. featured tracks)
+  if (type === "music") return "narrative_major";
+  return "other";
+}
+
 function layoutMoments(allMoments: Moment[], chartDates: string[]): MM[] {
   const dateSet = new Set(chartDates);
   const keyMoments = allMoments.filter(m => m.is_key && dateSet.has(m.date));
-  const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; p: number }>();
-  const pm: Record<string, number> = { marquee: 6, music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
+
+  // Deduplicate per date: pick best narrative category per date
+  const catPriority: Record<NarrativeCategory, number> = {
+    album_release: 100, single_release: 90, narrative_major: 50, paid_support: 20, editorial_support: 10, other: 5,
+  };
+  const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; cat: NarrativeCategory; p: number }>();
   for (const e of keyMoments) {
-    const cat = getCategoryConfig(e.moment_type);
-    const p = pm[e.moment_type] || pm[cat.label.toLowerCase()] || 1;
+    const nc = classifyNarrative(e);
+    const p = catPriority[nc];
+    const vis = getCategoryConfig(e.moment_type);
     const ex = byDate.get(e.date);
-    if (!ex || p > ex.p) byDate.set(e.date, { date: e.date, label: trunc(e.moment_title, 18), fullTitle: e.moment_title, type: e.moment_type, color: cat.color, p });
+    if (!ex || p > ex.p) byDate.set(e.date, { date: e.date, label: trunc(e.moment_title, 18), fullTitle: e.moment_title, type: e.moment_type, color: vis.color, cat: nc, p });
   }
-  return [...byDate.values()].sort((a, b) => b.p - a.p || a.date.localeCompare(b.date)).slice(0, 5)
+
+  // Slot-based selection: narrative first, paid support fills remaining slots
+  const MAX_LABELS = 5;
+  const MAX_PAID = 1;
+  const all = [...byDate.values()];
+  const narrative = all.filter(m => m.cat !== "paid_support" && m.cat !== "editorial_support" && m.cat !== "other");
+  const paid = all.filter(m => m.cat === "paid_support");
+  const rest = all.filter(m => m.cat === "editorial_support" || m.cat === "other");
+
+  // Sort narrative by priority desc then date
+  narrative.sort((a, b) => b.p - a.p || a.date.localeCompare(b.date));
+  paid.sort((a, b) => a.date.localeCompare(b.date));
+  rest.sort((a, b) => b.p - a.p || a.date.localeCompare(b.date));
+
+  const selected: typeof all = [];
+  // 1. Fill with narrative moments
+  for (const m of narrative) {
+    if (selected.length >= MAX_LABELS) break;
+    selected.push(m);
+  }
+  // 2. Add up to MAX_PAID paid support if room
+  let paidCount = 0;
+  for (const m of paid) {
+    if (selected.length >= MAX_LABELS || paidCount >= MAX_PAID) break;
+    selected.push(m);
+    paidCount++;
+  }
+  // 3. Fill remaining with editorial/other if room
+  for (const m of rest) {
+    if (selected.length >= MAX_LABELS) break;
+    selected.push(m);
+  }
+
+  return selected
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((m, i) => ({ date: m.date, label: m.label, fullTitle: m.fullTitle, type: m.type, color: m.color, row: i % 2 }));
 }
