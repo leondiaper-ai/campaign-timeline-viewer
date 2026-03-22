@@ -513,9 +513,10 @@ export interface GroupedLearnings { music: LearningItem[]; campaign: LearningIte
 export interface CampaignLearning { dateLabel: string; eventType: string; text: string; phase: "pre" | "peak" | "post"; }
 export function getCampaignLearnings(): CampaignLearning[] { return []; }
 
-// Flat list — max 3 bullets, each a real judgement
+// Flat list — max 4 bullets, each anchored to real data
 export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
   const items: LearningItem[] = [];
+  const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return items;
 
@@ -529,7 +530,7 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
   const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
   const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
 
-  // Post-release drop %
+  // Peak streams + date
   const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL").sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
   let peakStreams = 0, peakDate = "";
   const dailyTotals = new Map<string, number>();
@@ -540,6 +541,8 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
     const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
     peakStreams = peakRow[streamKey]; peakDate = peakRow.week_start_date;
   }
+
+  // Post-release drop %
   let dropPct = 0;
   if (hasDailyData && peakDate) {
     const postDays = [...dailyTotals.entries()].filter(([d]) => d > peakDate).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 7);
@@ -549,7 +552,7 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
     if (next) dropPct = Math.round((1 - next[streamKey] / peakStreams) * 100);
   }
 
-  // Track concentration post-release
+  // Track concentration
   const trackAnalysis = new Map<string, { pre: number; post: number }>();
   if (hasDailyData) {
     for (const r of sheet.dailyTrackData) {
@@ -565,56 +568,73 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
     }
   }
 
-  // ——— BULLET 1: Why did this campaign succeed or fail? ———
+  // ——— BULLET 1: Outcome — what happened + why ———
   const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
+  const peakLabel = peakStreams > 0 ? `~${fmtNum(peakStreams)} streams` : "";
+
   if (chart_result && chart_forecast) {
-    // We have forecast data — build a single decisive line
     const beat = chart_result.replace(/[^0-9]/g, "") && chart_forecast.replace(/[^0-9]/g, "")
       ? Number(chart_result.replace(/[^0-9]/g, "")) < Number(chart_forecast.replace(/[^0-9]/g, ""))
       : false;
+    // Build driver list with numbers
+    const driverParts: string[] = [];
     if (outcome_driver) {
-      items.push({ text: `Beat forecast (${chart_result} vs ${chart_forecast}) → driven by ${outcome_driver}`, sentiment: beat ? "positive" : "neutral" });
+      driverParts.push(outcome_driver);
     } else {
-      // Infer the driver
-      const driver = physicalTotal > 0 ? "physical sales" : hadPaid ? `paid (${fmtSpend})` : "organic momentum";
-      items.push({ text: `Beat forecast (${chart_result} vs ${chart_forecast}) → driven by ${driver}`, sentiment: beat ? "positive" : "neutral" });
+      if (physicalTotal > 0) driverParts.push(`physical (${fmtNum(physicalTotal)} units)`);
+      if (hadPaid) driverParts.push(`paid (${fmtSpend})`);
+      if (driverParts.length === 0) driverParts.push("organic streaming");
     }
-  } else {
-    // No forecast — lead with what drove the result
-    const drivers: string[] = [];
-    if (physicalTotal > 0) drivers.push("physical sales");
-    if (hadPaid) drivers.push(`paid (${fmtSpend})`);
-    if (drivers.length === 0) drivers.push("organic");
-    items.push({ text: `Launch driven by ${drivers.join(" + ")}`, sentiment: "positive" });
+    items.push({ text: `${chart_result} vs ${chart_forecast} forecast → driven by ${driverParts.join(" + ")}`, sentiment: beat ? "positive" : "neutral" });
+  } else if (peakStreams > 0) {
+    // No forecast — anchor to the spike with drivers
+    const driverParts: string[] = [];
+    if (physicalTotal > 0) driverParts.push(`physical (${fmtNum(physicalTotal)} units)`);
+    if (hadPaid) driverParts.push(`paid (${fmtSpend})`);
+    if (driverParts.length === 0) driverParts.push("organic");
+    items.push({ text: `Release spike (${peakLabel}) → driven by ${driverParts.join(" + ")}`, sentiment: "positive" });
   }
 
-  // ——— BULLET 2: Did it sustain? (only if the answer is interesting) ———
-  if (dropPct > 30) {
+  // ——— BULLET 2: What didn't sustain — anchored to drop data ———
+  if (dropPct > 30 && peakStreams > 0) {
+    const postLabel = fmtNum(Math.round(peakStreams * (1 - dropPct / 100)));
     if (hadPaid) {
-      items.push({ text: `Paid drove the spike but didn't sustain → ~${dropPct}% drop after release`, sentiment: "negative" });
+      items.push({ text: `Post-release drop (~${dropPct}%, down to ${postLabel}) → paid (${fmtSpend}) drove spike but didn't sustain`, sentiment: "negative" });
     } else {
-      items.push({ text: `Didn't sustain → ~${dropPct}% drop after release, no paid support post-launch`, sentiment: "negative" });
+      items.push({ text: `Post-release drop (~${dropPct}%, down to ${postLabel}) → no sustained driver after launch window`, sentiment: "negative" });
     }
   }
-  // Skip if moderate/normal drop — that's not a real insight
 
-  // ——— BULLET 3: What to change next time (only if actionable) ———
-  if (dropPct > 30 && hadPaid) {
-    // Paid didn't create longevity — actionable
-    items.push({ text: `Next time → extend paid window or add post-release editorial push`, sentiment: "neutral" });
-  } else if (trackAnalysis.size > 0) {
+  // ——— BULLET 3: Track or catalogue insight (only if non-obvious) ———
+  if (trackAnalysis.size >= 2) {
     const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
     if (postSorted.length >= 2) {
+      const topName = postSorted[0][0];
       const topPost = postSorted[0][1].post;
       const totalPost = postSorted.reduce((s, [, a]) => s + a.post, 0);
       const sharePct = Math.round((topPost / totalPost) * 100);
-      if (sharePct >= 60) {
-        items.push({ text: `Next time → build wider catalogue support, post-release leaned on one track (${sharePct}%)`, sentiment: "neutral" });
+      if (sharePct >= 55) {
+        items.push({ text: `"${topName}" carried ${sharePct}% of post-release streams → catalogue spread was thin`, sentiment: "negative" });
       }
     }
   }
 
-  return items.slice(0, 3);
+  // ——— BULLET 4 (final): Action line — what to change next time ———
+  if (dropPct > 30 && hadPaid) {
+    items.push({ text: `Next time → extend paid window past release or add post-release editorial push`, sentiment: "neutral" });
+  } else if (dropPct > 30) {
+    items.push({ text: `Next time → add paid or editorial support post-release to hold momentum`, sentiment: "neutral" });
+  } else if (items.length >= 2) {
+    // Only add action line if we have enough context
+    const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
+    const totalPost = postSorted.reduce((s, [, a]) => s + a.post, 0);
+    const sharePct = postSorted.length > 0 ? Math.round((postSorted[0][1].post / totalPost) * 100) : 0;
+    if (sharePct >= 55) {
+      items.push({ text: `Next time → develop secondary track for post-release to spread catalogue engagement`, sentiment: "neutral" });
+    }
+  }
+
+  return items.slice(0, 4);
 }
 
 // Legacy wrapper — returns GroupedLearnings by distributing flat items
