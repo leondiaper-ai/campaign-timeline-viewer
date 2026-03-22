@@ -303,17 +303,27 @@ export default function TimelineChart({
 
   // Key vs muted tracks for track mode
   const keyTracks = useMemo(() => trackRoles.filter(tr => tr.opacity >= 0.5), [trackRoles]);
-  const topTrack = useMemo(() => {
-    if (keyTracks.length === 0) return null;
-    // Find the key track with highest total streams across all data points
-    let best: TrackWithRole | null = null;
-    let bestSum = 0;
-    for (const tr of keyTracks) {
-      const sum = data.reduce((s, dp) => s + ((dp as Record<string, unknown>)[tr.track_name] as number || 0), 0);
-      if (sum > bestSum) { bestSum = sum; best = tr; }
+
+  // Top tracks by window: pre-release vs post-release
+  const { topPre, topPost } = useMemo(() => {
+    if (keyTracks.length === 0) return { topPre: null, topPost: null };
+    const preData = albumDate ? data.filter(dp => dp.date < albumDate) : [];
+    const postData = albumDate ? data.filter(dp => dp.date >= albumDate) : data;
+
+    function findTop(rows: ChartDataPoint[]): TrackWithRole | null {
+      let best: TrackWithRole | null = null;
+      let bestSum = 0;
+      for (const tr of keyTracks) {
+        const sum = rows.reduce((s, dp) => s + ((dp as Record<string, unknown>)[tr.track_name] as number || 0), 0);
+        if (sum > bestSum) { bestSum = sum; best = tr; }
+      }
+      return best;
     }
-    return best;
-  }, [keyTracks, data]);
+    return { topPre: findTop(preData), topPost: findTop(postData) };
+  }, [keyTracks, data, albumDate]);
+
+  // Primary top track for legend emphasis = post-release (or overall if no album date)
+  const topTrack = topPost;
 
   return (
     <div className="w-full">
@@ -333,8 +343,13 @@ export default function TimelineChart({
               <span className="text-[#4B5563]">{territory === "UK" ? "UK campaign performance" : "Global campaign performance"}</span>
             )
           ) : (
-            topTrack ? (
-              <span className="text-[#6B7280]">Top Track: <span className="font-medium" style={{ color: topTrack.color }}>{topTrack.track_name}</span></span>
+            topPost ? (
+              <span className="text-[#6B7280]">
+                {topPre && topPre.track_name !== topPost.track_name && (
+                  <>Pre: <span className="font-medium" style={{ color: topPre.color }}>{topPre.track_name}</span> · </>
+                )}
+                Post: <span className="font-medium" style={{ color: topPost.color }}>{topPost.track_name}</span>
+              </span>
             ) : (
               <span className="text-[#4B5563]">{trackModeContext || "Individual track performance"}</span>
             )

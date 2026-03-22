@@ -601,20 +601,46 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
   // ——— CAMPAIGN IMPACT ———
   const pcs = sheet.paidCampaigns || [];
   if (pcs.length > 0) {
-    // Best intent rate — causal language
+    // 1. Total spend context
+    const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
+    if (totalSpend > 0) {
+      const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
+      result.campaign.push({ text: `${fmtSpend} total spend across ${pcs.length} campaign${pcs.length > 1 ? "s" : ""}`, sentiment: "neutral" });
+    }
+
+    // 2. Best intent with benchmark label
     const withIntent = pcs.filter(p => p.intent_total > 0);
     if (withIntent.length > 0) {
       const best = withIntent.reduce((a, b) => a.intent_total > b.intent_total ? a : b);
-      if (best.intent_total >= 30) {
-        result.campaign.push({ text: `${best.platform} (${best.territory}) drove strongest conversion (${best.intent_total}% intent)`, sentiment: "positive" });
-      } else if (best.intent_total >= 25) {
-        result.campaign.push({ text: `${best.platform} (${best.territory}) conversion on benchmark (${best.intent_total}% intent)`, sentiment: "neutral" });
-      } else {
-        result.campaign.push({ text: `${best.platform} (${best.territory}) underperformed on intent (${best.intent_total}%)`, sentiment: "negative" });
+      const grade = best.intent_total >= 35 ? "exceptional" : best.intent_total >= 30 ? "strong" : best.intent_total >= 25 ? "on benchmark" : "below benchmark";
+      const sentiment: LearningItem["sentiment"] = best.intent_total >= 30 ? "positive" : best.intent_total >= 25 ? "neutral" : "negative";
+      result.campaign.push({ text: `${best.platform} (${best.territory}) drove strongest conversion (${best.intent_total}% intent — ${grade})`, sentiment });
+    }
+
+    // 3. Market comparison — compare territories if multiple exist
+    const territories = [...new Set(pcs.filter(p => p.intent_total > 0).map(p => p.territory))];
+    if (territories.length >= 2) {
+      const avgByTerritory = new Map<string, { total: number; count: number }>();
+      for (const p of pcs) {
+        if (p.intent_total > 0) {
+          const existing = avgByTerritory.get(p.territory) || { total: 0, count: 0 };
+          existing.total += p.intent_total;
+          existing.count += 1;
+          avgByTerritory.set(p.territory, existing);
+        }
+      }
+      const ranked = [...avgByTerritory.entries()]
+        .map(([t, d]) => ({ territory: t, avg: d.total / d.count }))
+        .sort((a, b) => b.avg - a.avg);
+      if (ranked.length >= 2 && ranked[0].avg > ranked[1].avg) {
+        const diff = ranked[0].avg - ranked[1].avg;
+        if (diff > 2) {
+          result.campaign.push({ text: `${ranked[0].territory} outperformed ${ranked[1].territory} in paid conversion efficiency`, sentiment: "positive" });
+        }
       }
     }
 
-    // Best segment — causal language
+    // 4. Best segment
     const segments = pcs.filter(p => p.best_segment).map(p => p.best_segment);
     const segCounts = new Map<string, number>();
     for (const s of segments) segCounts.set(s, (segCounts.get(s) || 0) + 1);
@@ -622,7 +648,39 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
     if (topSeg) {
       result.campaign.push({ text: `"${topSeg[0]}" listeners responded strongest to paid campaigns`, sentiment: "positive" });
     }
+
+    // 5. ROI direction — was paid effective for launch vs sustain?
+    const prePaidDates = pcs.filter(p => p.start_date && p.start_date < albumDate);
+    const postPaidDates = pcs.filter(p => p.start_date && p.start_date >= albumDate);
+    const platforms = [...new Set(pcs.map(p => p.platform))];
+    if (platforms.length > 0) {
+      if (prePaidDates.length > 0 && postPaidDates.length === 0) {
+        result.campaign.push({ text: `${platforms.join(" + ")} effective for driving launch spike, not deployed post-release`, sentiment: "neutral" });
+      } else if (prePaidDates.length > 0 && postPaidDates.length > 0) {
+        result.campaign.push({ text: `${platforms.join(" + ")} deployed across pre and post-release — effective for sustained visibility`, sentiment: "positive" });
+      } else if (postPaidDates.length > 0) {
+        result.campaign.push({ text: `${platforms.join(" + ")} deployed post-release — supporting momentum window`, sentiment: "neutral" });
+      }
+    }
+
+    // 6. Verdict line — overall assessment
+    const avgIntent = withIntent.length > 0 ? withIntent.reduce((s, p) => s + p.intent_total, 0) / withIntent.length : 0;
+    const bestTerritory = territories.length >= 2
+      ? (() => {
+          const avgByT = new Map<string, { total: number; count: number }>();
+          for (const p of pcs) { if (p.intent_total > 0) { const e = avgByT.get(p.territory) || { total: 0, count: 0 }; e.total += p.intent_total; e.count += 1; avgByT.set(p.territory, e); } }
+          return [...avgByT.entries()].map(([t, d]) => ({ t, avg: d.total / d.count })).sort((a, b) => b.avg - a.avg)[0]?.t;
+        })()
+      : null;
+    if (avgIntent > 0) {
+      const overallGrade = avgIntent >= 30 ? "strong" : avgIntent >= 25 ? "on benchmark" : "below benchmark";
+      const territoryNote = bestTerritory ? `, strongest efficiency in ${bestTerritory}` : "";
+      result.campaign.push({ text: `Paid campaigns performed ${overallGrade} overall${territoryNote}`, sentiment: avgIntent >= 25 ? "positive" : "negative" });
+    }
   }
+
+  // Cap campaign at 6
+  result.campaign = result.campaign.slice(0, 6);
 
   // ——— COMMERCIAL SIGNALS ———
   const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
