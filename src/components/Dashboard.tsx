@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { AppData, LoadedCampaign, Territory } from "@/types";
+import { AppData, LoadedCampaign, Territory, Moment, PaidCampaignRow } from "@/types";
 import {
   buildChartData, getAllTrackNames, getAllMoments,
   inferTrackRoles, detectHandoverMoment, getChartInsight,
@@ -34,6 +34,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [pinnedDate, setPinnedDate] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
   const [learningsExpanded, setLearningsExpanded] = useState(false);
+  const [timelineView, setTimelineView] = useState<"impact" | "timeline">("impact");
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -170,56 +171,75 @@ export default function Dashboard({ initialData }: DashboardProps) {
           </button>
 
           {logExpanded && (
-            <div className="px-5 pb-5 space-y-4">
-              {/* Moment Drivers */}
-              {drivers.length > 0 && (
-                <div>
-                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">
-                    Moment Drivers <span className="text-[#4B5563] font-normal ml-1">({drivers.length})</span>
-                  </h4>
-                  <div className="space-y-0.5">
-                    {drivers.map((c, i) => <TieredMomentRow key={`d${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
-                      onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                  </div>
-                </div>
-              )}
+            <div className="px-5 pb-5">
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 mb-4 bg-[#0D1117] rounded-lg p-0.5 w-fit">
+                {(["impact", "timeline"] as const).map(v => (
+                  <button key={v} onClick={() => setTimelineView(v)}
+                    className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${timelineView === v ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
+                    {v === "impact" ? "Impact View" : "Timeline View"}
+                  </button>
+                ))}
+              </div>
 
-              {/* Supporting Activity */}
-              {supporting.length > 0 && (
-                <div>
-                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">
-                    Supporting Activity <span className="text-[#4B5563] font-normal ml-1">({supporting.length})</span>
-                  </h4>
-                  <div className="space-y-0.5">
-                    {supporting.map((c, i) => <TieredMomentRow key={`s${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
-                      onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                  </div>
-                </div>
-              )}
-
-              {/* Background Activity — collapsible */}
-              {background.length > 0 && (
-                <div>
-                  {!showBackground ? (
-                    <button onClick={() => setShowBackground(true)}
-                      className="text-[10px] text-[#4B5563] hover:text-[#6B7280] transition-colors">
-                      + {background.length} additional activit{background.length === 1 ? "y" : "ies"}
-                    </button>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between mb-2 pb-1 border-b border-[#1E2130]">
-                        <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#4B5563]">
-                          Background Activity <span className="font-normal ml-1">({background.length})</span>
-                        </h4>
-                        <button onClick={() => setShowBackground(false)} className="text-[9px] text-[#4B5563] hover:text-[#6B7280] transition-colors">Collapse</button>
-                      </div>
+              {timelineView === "impact" ? (
+                <div className="space-y-4">
+                  {/* Moment Drivers */}
+                  {drivers.length > 0 && (
+                    <div>
+                      <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">
+                        Moment Drivers <span className="text-[#4B5563] font-normal ml-1">({drivers.length})</span>
+                      </h4>
                       <div className="space-y-0.5">
-                        {background.map((c, i) => <TieredMomentRow key={`b${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                        {drivers.map((c, i) => <TieredMomentRow key={`d${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
                           onHover={setHighlightedDate} onClick={handleMomentClick} />)}
                       </div>
-                    </>
+                    </div>
+                  )}
+
+                  {/* Supporting Activity */}
+                  {supporting.length > 0 && (
+                    <div>
+                      <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">
+                        Supporting Activity <span className="text-[#4B5563] font-normal ml-1">({supporting.length})</span>
+                      </h4>
+                      <div className="space-y-0.5">
+                        {supporting.map((c, i) => <TieredMomentRow key={`s${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                          onHover={setHighlightedDate} onClick={handleMomentClick} />)}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Background Activity — collapsible */}
+                  {background.length > 0 && (
+                    <div>
+                      {!showBackground ? (
+                        <button onClick={() => setShowBackground(true)}
+                          className="text-[10px] text-[#4B5563] hover:text-[#6B7280] transition-colors">
+                          + {background.length} additional activit{background.length === 1 ? "y" : "ies"}
+                        </button>
+                      ) : (
+                        <>
+                          <div className="flex items-center justify-between mb-2 pb-1 border-b border-[#1E2130]">
+                            <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#4B5563]">
+                              Background Activity <span className="font-normal ml-1">({background.length})</span>
+                            </h4>
+                            <button onClick={() => setShowBackground(false)} className="text-[9px] text-[#4B5563] hover:text-[#6B7280] transition-colors">Collapse</button>
+                          </div>
+                          <div className="space-y-0.5">
+                            {background.map((c, i) => <TieredMomentRow key={`b${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                              onHover={setHighlightedDate} onClick={handleMomentClick} />)}
+                          </div>
+                        </>
+                      )}
+                    </div>
                   )}
                 </div>
+              ) : (
+                <ChronologicalTimeline moments={moments} classified={classified}
+                  albumDate={albumDate} paidCampaigns={sheet.paidCampaigns || []}
+                  pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                  onHover={setHighlightedDate} onClick={handleMomentClick} />
               )}
             </div>
           )}
@@ -293,6 +313,192 @@ function TieredMomentRow({ classified, pinnedDate, effectiveHighlight, onHover, 
           {context && <span className={`text-[9px] ${isDriver ? "text-[#FBBF24]/70" : "text-[#4B5563]"}`}>— {context}</span>}
         </div>
       </div>
+    </div>
+  );
+}
+
+// ——— Chronological Timeline View ———————————————————————————
+type Phase = "pre" | "release" | "post";
+const PHASE_META: Record<Phase, { label: string; color: string }> = {
+  pre:     { label: "Pre-Release",   color: "#6C9EFF" },
+  release: { label: "Release Week",  color: "#FBBF24" },
+  post:    { label: "Post-Release",  color: "#10B981" },
+};
+const PHASE_ORDER: Phase[] = ["pre", "release", "post"];
+
+interface NarrativeMoment {
+  date: string;
+  label: string;       // "Album Release" or combined title
+  context: string;     // "→ primary campaign driver"
+  isKey: boolean;
+  phase: Phase;
+}
+
+function buildNarrativeMoments(
+  moments: Moment[],
+  classified: ClassifiedMoment[],
+  albumDate: string,
+  paidCampaigns: PaidCampaignRow[],
+): NarrativeMoment[] {
+  if (!albumDate) return [];
+  const albumMs = new Date(albumDate).getTime();
+  const releaseEnd = albumMs + 7 * 86400000; // release week = 7 days
+
+  // Build a lookup from classified moments for context
+  const classifiedMap = new Map<string, ClassifiedMoment>();
+  for (const c of classified) {
+    // Use date+title as key to handle multiple events on same date
+    classifiedMap.set(`${c.moment.date}|${c.moment.moment_title}`, c);
+  }
+
+  // Build paid spend summaries by date+platform for merged display
+  // e.g. "Marquee" on 2026-03-13 with UK $8K + DE $2.5K
+  const paidByDatePlatform = new Map<string, { platform: string; territories: { territory: string; spend: number }[] }>();
+  for (const pc of paidCampaigns) {
+    if (!pc.start_date) continue;
+    const key = `${pc.start_date}|${pc.platform}`;
+    const existing = paidByDatePlatform.get(key);
+    if (existing) {
+      existing.territories.push({ territory: pc.territory, spend: pc.spend });
+    } else {
+      paidByDatePlatform.set(key, { platform: pc.platform, territories: [{ territory: pc.territory, spend: pc.spend }] });
+    }
+  }
+
+  // Track which moments we've already rendered (to dedupe paid campaigns)
+  const renderedPaidKeys = new Set<string>();
+  const result: NarrativeMoment[] = [];
+
+  for (const m of moments) {
+    const dateMs = new Date(m.date).getTime();
+    const phase: Phase = dateMs < albumMs ? "pre" : dateMs < releaseEnd ? "release" : "post";
+    const cl = classifiedMap.get(`${m.date}|${m.moment_title}`);
+    const tier = cl?.tier || "background";
+    const clContext = cl?.context || "";
+
+    // Skip background items entirely in timeline view
+    if (tier === "background") continue;
+
+    const type = m.moment_type.toLowerCase();
+    const isPaid = type === "marquee" || type === "showcase" || type === "paid";
+
+    // For paid campaigns, merge into single line per date+platform
+    if (isPaid) {
+      const paidKey = `${m.date}|${type === "marquee" ? "Marquee" : type === "showcase" ? "Showcase" : "Paid"}`;
+      // Try exact platform match from paid data
+      let matchedKey: string | null = null;
+      for (const [k] of paidByDatePlatform) {
+        if (k.startsWith(m.date + "|")) { matchedKey = k; break; }
+      }
+      const dedupKey = matchedKey || paidKey;
+      if (renderedPaidKeys.has(dedupKey)) continue;
+      renderedPaidKeys.add(dedupKey);
+
+      const paidInfo = matchedKey ? paidByDatePlatform.get(matchedKey) : null;
+      if (paidInfo) {
+        const fmtSpend = (n: number) => n >= 1000 ? `$${(n / 1000).toFixed(1).replace(/\.0$/, "")}K` : `$${n}`;
+        const territoryParts = paidInfo.territories
+          .filter(t => t.spend > 0)
+          .map(t => `${t.territory} ${fmtSpend(t.spend)}`)
+          .join(" / ");
+        const label = territoryParts ? `${paidInfo.platform} (${territoryParts})` : paidInfo.platform;
+        result.push({ date: m.date, label, context: clContext ? `→ ${clContext.charAt(0).toLowerCase()}${clContext.slice(1)}` : "", isKey: tier === "driver", phase });
+      } else {
+        result.push({ date: m.date, label: m.moment_title, context: clContext ? `→ ${clContext.charAt(0).toLowerCase()}${clContext.slice(1)}` : "", isKey: tier === "driver", phase });
+      }
+      continue;
+    }
+
+    // Regular moment
+    // Clean up the title for narrative readability
+    let label = m.moment_title;
+    // Strip redundant "release" from album release titles
+    if (type === "music" && label.toLowerCase().includes("album") && label.toLowerCase().includes("release")) {
+      label = "Album Release";
+    }
+
+    result.push({
+      date: m.date,
+      label,
+      context: clContext ? `→ ${clContext.charAt(0).toLowerCase()}${clContext.slice(1)}` : "",
+      isKey: tier === "driver",
+      phase,
+    });
+  }
+
+  return result;
+}
+
+function ChronologicalTimeline({ moments, classified, albumDate, paidCampaigns, pinnedDate, effectiveHighlight, onHover, onClick }: {
+  moments: Moment[];
+  classified: ClassifiedMoment[];
+  albumDate: string;
+  paidCampaigns: PaidCampaignRow[];
+  pinnedDate: string | null;
+  effectiveHighlight: string | null;
+  onHover: (d: string | null) => void;
+  onClick: (d: string) => void;
+}) {
+  const narrative = useMemo(() => buildNarrativeMoments(moments, classified, albumDate, paidCampaigns), [moments, classified, albumDate, paidCampaigns]);
+
+  const phaseGroups = useMemo(() => {
+    const groups: Record<Phase, NarrativeMoment[]> = { pre: [], release: [], post: [] };
+    for (const nm of narrative) groups[nm.phase].push(nm);
+    // Cap each phase at ~6 items, keeping key items first
+    for (const phase of PHASE_ORDER) {
+      const items = groups[phase];
+      if (items.length > 6) {
+        const key = items.filter(i => i.isKey);
+        const nonKey = items.filter(i => !i.isKey);
+        groups[phase] = [...key, ...nonKey].slice(0, 6);
+      }
+    }
+    return groups;
+  }, [narrative]);
+
+  return (
+    <div className="space-y-4">
+      {PHASE_ORDER.map(phase => {
+        const items = phaseGroups[phase];
+        if (items.length === 0) return null;
+        const meta = PHASE_META[phase];
+        return (
+          <div key={phase}>
+            <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] mb-2 pb-1 border-b border-[#1E2130]"
+              style={{ color: meta.color }}>
+              {meta.label} <span className="text-[#4B5563] font-normal ml-1">({items.length})</span>
+            </h4>
+            <div className="space-y-0.5">
+              {items.map((nm, i) => {
+                const isPinned = pinnedDate === nm.date;
+                return (
+                  <div key={`${phase}${i}`}
+                    onClick={() => onClick(nm.date)}
+                    className={`flex items-start gap-2.5 px-2 py-1.5 rounded-lg transition-all cursor-pointer ${
+                      isPinned ? "bg-white/8 ring-1 ring-white/10" : effectiveHighlight === nm.date ? "bg-white/5" : "hover:bg-white/[0.03]"
+                    }`}
+                    onMouseEnter={() => onHover(nm.date)} onMouseLeave={() => onHover(null)}>
+                    <span className={`text-[10px] tabular-nums flex-shrink-0 mt-px ${nm.isKey ? "text-[#9CA3AF] font-medium" : "text-[#4B5563]"}`} style={{ minWidth: "3.2rem" }}>
+                      {fmtShort(nm.date)}
+                    </span>
+                    <span className="text-[#4B5563] text-[10px] mt-px flex-shrink-0">—</span>
+                    <div className="flex-1 min-w-0">
+                      <span className={`text-[11px] leading-tight ${nm.isKey ? "font-semibold text-white" : "font-normal text-[#D1D5DB]"}`}>
+                        {nm.label}
+                      </span>
+                      {nm.context && (
+                        <span className={`text-[10px] ml-1.5 ${nm.isKey ? "text-[#9CA3AF]" : "text-[#4B5563]"}`}>
+                          {nm.context}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
