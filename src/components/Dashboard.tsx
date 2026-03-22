@@ -135,7 +135,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
             chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
             ukMilestones={ukMilestones} territory={territory}
-            paidCampaigns={sheet.paidCampaigns} />
+            paidCampaigns={sheet.paidCampaigns} moments={moments} />
         </div>
 
         {/* Full Campaign Log — collapsed by default */}

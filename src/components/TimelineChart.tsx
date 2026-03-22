@@ -5,7 +5,7 @@ import {
   ResponsiveContainer, ComposedChart, Line, Bar, Area,
   XAxis, YAxis, Tooltip, CartesianGrid, ReferenceLine, ReferenceArea,
 } from "recharts";
-import { ChartDataPoint, Moment, Territory, PaidCampaignRow } from "@/types";
+import { ChartDataPoint, Moment, Territory, PaidCampaignRow, type EventCategory } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
 import { TrackWithRole, HandoverMoment, getTrackRoleLabel, UKMilestone } from "@/lib/transforms";
 
@@ -48,6 +48,7 @@ interface Props {
   ukMilestones?: UKMilestone[];
   territory?: Territory;
   paidCampaigns?: PaidCampaignRow[];
+  moments?: Moment[];
 }
 
 // ——— Campaign tooltip ———
@@ -142,21 +143,17 @@ function intentGrade(total: number): string {
 
 // ——— Moment markers for campaign mode ———
 interface MM { date: string; label: string; fullTitle: string; type: string; color: string; row: number; }
-function layoutMoments(data: ChartDataPoint[], vis: Set<string>): MM[] {
+function layoutMoments(allMoments: Moment[], chartDates: string[]): MM[] {
+  const dateSet = new Set(chartDates);
+  const keyMoments = allMoments.filter(m => m.is_key && dateSet.has(m.date));
   const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; p: number }>();
   const pm: Record<string, number> = { marquee: 6, music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
-  data.forEach(d => {
-    if (d.events.length > 0) {
-      const ke = d.events.filter(e => e.is_key && vis.has(e.date));
-      if (ke.length > 0) {
-        let best = ke[0], bp = 0;
-        for (const e of ke) { const cat = getCategoryConfig(e.moment_type); const p = pm[e.moment_type] || pm[cat.label.toLowerCase()] || 1; if (p > bp) { bp = p; best = e; } }
-        const cat = getCategoryConfig(best.moment_type);
-        const ex = byDate.get(d.date);
-        if (!ex || bp > ex.p) byDate.set(d.date, { date: d.date, label: trunc(best.moment_title, 18), fullTitle: best.moment_title, type: best.moment_type, color: cat.color, p: bp });
-      }
-    }
-  });
+  for (const e of keyMoments) {
+    const cat = getCategoryConfig(e.moment_type);
+    const p = pm[e.moment_type] || pm[cat.label.toLowerCase()] || 1;
+    const ex = byDate.get(e.date);
+    if (!ex || p > ex.p) byDate.set(e.date, { date: e.date, label: trunc(e.moment_title, 18), fullTitle: e.moment_title, type: e.moment_type, color: cat.color, p });
+  }
   return [...byDate.values()].sort((a, b) => b.p - a.p || a.date.localeCompare(b.date)).slice(0, 5)
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((m, i) => ({ date: m.date, label: m.label, fullTitle: m.fullTitle, type: m.type, color: m.color, row: i % 2 }));
@@ -175,9 +172,10 @@ export default function TimelineChart({
   data, selectedTracks, trackRoles, visibleEventDates,
   highlightedDate, handoverMoment, chartInsight, trackModeContext,
   chartMode, onChartModeChange, albumDate, ukMilestones, territory,
-  paidCampaigns,
+  paidCampaigns, moments: allMoments,
 }: Props) {
-  const moments = useMemo(() => layoutMoments(data, visibleEventDates), [data, visibleEventDates]);
+  const chartDates = useMemo(() => data.map(d => d.date).sort(), [data]);
+  const moments = useMemo(() => layoutMoments(allMoments || [], chartDates), [allMoments, chartDates]);
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
   const isCampaign = chartMode === "campaign";
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
