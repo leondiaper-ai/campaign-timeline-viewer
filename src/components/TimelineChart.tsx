@@ -51,12 +51,58 @@ interface Props {
   moments?: Moment[];
 }
 
+// ——— Tooltip event priority (lower = higher priority) ———
+function tipPriority(m: Moment): number {
+  const t = m.moment_title.toLowerCase();
+  const type = m.moment_type.toLowerCase();
+  // 1. Album release
+  if (type === "music" && (t.includes("album") || (t.includes("release") && !t.includes("single")))) return 1;
+  // 2. Single / key track release
+  if (type === "music" && (t.includes("single") || t.includes("lead") || t.includes("follow-up"))) return 2;
+  if (type === "music") return 3;
+  // 3. Editorial
+  if (type === "editorial" || t.includes("playlist") || t.includes("editorial")) return 4;
+  // 4. Paid support
+  if (type === "marquee" || type === "showcase" || type === "paid") return 5;
+  // 5. Media / TV / press
+  if (type === "media" || type === "tv" || type === "radio" || t.includes("press") || t.includes("interview")) return 6;
+  // 6. Tour / live
+  if (type === "live" || type === "tour" || t.includes("tour")) return 7;
+  return 8;
+}
+
+// ——— Tighten tooltip event labels ———
+function tipLabel(m: Moment): string {
+  const t = m.moment_title;
+  const tl = t.toLowerCase();
+  const type = m.moment_type.toLowerCase();
+
+  // Paid campaigns: already formatted as "Platform (Territory) — Campaign"
+  if (type === "marquee" || type === "showcase" || type === "paid") return t;
+
+  // "Album Release - Title" → "Album Release"
+  if (tl.includes("album") && tl.includes("release")) {
+    const dash = t.indexOf(" - ");
+    if (dash > 0) return t.slice(0, dash);
+    const colon = t.indexOf(": ");
+    if (colon > 0) return t.slice(0, colon);
+    return t;
+  }
+
+  // Keep as-is if already short
+  if (t.length <= 28) return t;
+
+  // Truncate long labels
+  return trunc(t, 28);
+}
+
 // ——— Campaign tooltip ———
 function CampTip({ active, payload, label, territory }: any) {
   if (!active || !payload?.length) return null;
   const dp = payload[0]?.payload;
   if (!dp) return null;
-  const events = dp.events || [];
+  const rawEvents: Moment[] = dp.events || [];
+  const sorted = [...rawEvents].sort((a, b) => tipPriority(a) - tipPriority(b));
   const prev = dp.prev_week_streams;
   const wow = prev != null && prev > 0 && dp.total_streams > 0 ? ((dp.total_streams - prev) / prev) * 100 : null;
   const isUK = territory === "UK";
@@ -78,12 +124,18 @@ function CampTip({ active, payload, label, territory }: any) {
           <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.physical_units)}</span>
         </div>
       )}
-      {events.length > 0 && (
+      {sorted.length > 0 && (
         <div className="mt-2 pt-2 border-t border-[#2A2D3E]">
-          {events.map((m: Moment, i: number) => (<div key={i} className="mb-1 last:mb-0 flex items-center gap-1.5">
-            <span style={{ color: getCategoryConfig(m.moment_type).color }} className="text-xs">{getCategoryConfig(m.moment_type).icon}</span>
-            <span className="text-[11px] font-medium text-white">{m.moment_title}</span>
-          </div>))}
+          {sorted.map((m: Moment, i: number) => {
+            const cfg = getCategoryConfig(m.moment_type);
+            const isPrimary = i === 0 && tipPriority(m) <= 3;
+            return (
+              <div key={i} className={`flex items-center gap-1.5 ${i > 0 ? "mt-1" : ""}`}>
+                <span style={{ color: cfg.color }} className="text-[10px] w-3 text-center flex-shrink-0">{cfg.icon}</span>
+                <span className={`text-[11px] ${isPrimary ? "font-semibold text-white" : "font-normal text-[#D1D5DB]"}`}>{tipLabel(m)}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

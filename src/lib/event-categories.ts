@@ -24,7 +24,7 @@ const EVENT_CATEGORIES: Record<EventCategory, CategoryConfig> = {
     label: "Editorial",
     color: "#EC4899",
     bgColor: "#EC489920",
-    icon: "✎",
+    icon: "★",
   },
   product: {
     label: "Product",
@@ -39,10 +39,16 @@ const EVENT_CATEGORIES: Record<EventCategory, CategoryConfig> = {
     icon: "●",
   },
   marquee: {
-    label: "Marquee",
+    label: "Paid",
     color: "#10B981",
     bgColor: "#10B98120",
-    icon: "◈",
+    icon: "▲",
+  },
+  media: {
+    label: "Media",
+    color: "#F97316",
+    bgColor: "#F9731620",
+    icon: "◆",
   },
 };
 
@@ -68,22 +74,30 @@ export function mapMomentType(momentType: string): EventCategory {
   // Editorial
   if (
     val.includes("editorial") ||
-    val.includes("press") ||
-    val.includes("review") ||
     val.includes("playlist")
   )
     return "editorial";
 
-  // Marquee (paid campaign)
-  if (val.includes("marquee")) return "marquee";
+  // Media / TV / press
+  if (
+    val.includes("tv") ||
+    val.includes("radio") ||
+    val.includes("press") ||
+    val.includes("review") ||
+    val.includes("interview")
+  )
+    return "media";
+
+  // Marquee / Showcase (paid campaign)
+  if (val.includes("marquee") || val.includes("showcase") || val.includes("paid"))
+    return "marquee";
 
   // Marketing
   if (
     val.includes("marketing") ||
     val.includes("ad") ||
     val.includes("social") ||
-    val.includes("promo") ||
-    val.includes("paid")
+    val.includes("promo")
   )
     return "marketing";
 
