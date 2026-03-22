@@ -65,7 +65,7 @@ async function fetchRowsSafe(
 // ——— Parse Helpers ——————————————————————————————————————————
 function safeNumber(val: string | undefined): number {
   if (!val) return 0;
-  const cleaned = val.replace(/,/g, "").trim();
+  const cleaned = val.replace(/[,%]/g, "").trim();
   const n = Number(cleaned);
   return isNaN(n) ? 0 : n;
 }

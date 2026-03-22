@@ -266,8 +266,8 @@ export default function TimelineChart({
               const dates = data.map(d => d.date).sort();
               const idx = dates.indexOf(m.date);
               const pct = dates.length > 1 ? (idx / (dates.length - 1)) * 100 : 50;
-              // Match ALL paid campaigns on this date
-              const pcs = m.type === "marquee" && paidCampaigns?.length
+              // Match ALL paid campaigns on this date (regardless of label type)
+              const pcs = paidCampaigns?.length
                 ? paidCampaigns.filter(p => p.start_date === m.date)
                 : [];
               return (

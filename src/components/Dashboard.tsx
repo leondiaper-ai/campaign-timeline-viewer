@@ -51,15 +51,21 @@ export default function Dashboard({ initialData }: DashboardProps) {
     if (!sheet) return [];
     const base = getAllMoments(sheet);
     // Generate paid-campaign moments from sheet data (paid_campaigns tab)
+    // Deduplicate by date+platform+campaign: one moment per unique combo, with territory in title
     if (sheet.paidCampaigns) {
+      const seen = new Set<string>();
       for (const pc of sheet.paidCampaigns) {
         if (pc.start_date) {
-          base.push({
-            date: pc.start_date,
-            moment_title: `${pc.platform} \u2014 ${pc.campaign_name}`,
-            moment_type: "marquee",
-            is_key: true,
-          });
+          const key = `${pc.start_date}|${pc.platform}|${pc.campaign_name}|${pc.territory}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            base.push({
+              date: pc.start_date,
+              moment_title: `${pc.platform} (${pc.territory}) \u2014 ${pc.campaign_name}`,
+              moment_type: "marquee",
+              is_key: true,
+            });
+          }
         }
       }
     }
