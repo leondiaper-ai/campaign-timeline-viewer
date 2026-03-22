@@ -253,8 +253,16 @@ export default function TimelineChart({
           <button onClick={() => onChartModeChange("tracks")}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${!isCampaign ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>Tracks</button>
         </div>
-        <span className="text-[10px] text-[#4B5563] max-w-[420px] text-right">
-          {isCampaign ? (territory === "UK" ? "UK campaign performance" : "Global campaign performance") : (trackModeContext || "Individual track performance")}
+        <span className="text-[10px] max-w-[420px] text-right">
+          {isCampaign ? (
+            paidCampaigns && paidCampaigns.length > 0 ? (
+              <span className="text-[#6B7280]"><span className="text-[#9CA3AF] font-medium">Hover moments</span> for performance &amp; spend</span>
+            ) : (
+              <span className="text-[#4B5563]">{territory === "UK" ? "UK campaign performance" : "Global campaign performance"}</span>
+            )
+          ) : (
+            <span className="text-[#4B5563]">{trackModeContext || "Individual track performance"}</span>
+          )}
         </span>
       </div>
 
@@ -388,12 +396,6 @@ export default function TimelineChart({
             ))
         )}
       </div>
-      {/* Hover hint — subtle, campaign mode only */}
-      {isCampaign && paidCampaigns && paidCampaigns.length > 0 && (
-        <p className="text-[9px] text-[#4B5563] text-center mt-1.5 opacity-65 select-none">
-          Hover over key moments to see performance &amp; spend
-        </p>
-      )}
     </div>
   );
 }
