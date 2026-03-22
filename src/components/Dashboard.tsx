@@ -31,6 +31,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>("campaign");
   const [pinnedDate, setPinnedDate] = useState<string | null>(null);
+  const [logExpanded, setLogExpanded] = useState(false);
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -112,10 +113,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
         {/* Team Focus */}
-        <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/20 px-5 py-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2">Team Focus</p>
-          <p className="text-[14px] font-semibold text-white mb-1">Primary Focus: Single &mdash; &ldquo;Doesn&rsquo;t Just Happen&rdquo;</p>
-          <p className="text-[12px] text-[#9CA3AF] mb-2">Context: Leading post-release momentum across UK + Global</p>
+        <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/20 px-5 py-3">
+          <div className="flex items-center gap-3 mb-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]">Team Focus</p>
+            <span className="text-[10px] text-[#6B7280]">&middot; Momentum building post-release</span>
+          </div>
+          <p className="text-[13px] font-semibold text-white mb-1">Primary Focus: Single &mdash; &ldquo;Doesn&rsquo;t Just Happen&rdquo;</p>
           <div className="flex gap-6">
             <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">UK:</span> Lean into Outstore Run (23 Mar)</p>
             <p className="text-[11px] text-[#D1D5DB]"><span className="text-[#6B7280] font-semibold">US:</span> Build into Tour window (May)</p>
@@ -135,44 +138,55 @@ export default function Dashboard({ initialData }: DashboardProps) {
             paidCampaigns={sheet.paidCampaigns} />
         </div>
 
-        {/* Phase-grouped moments */}
-        <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280]">
-              Campaign Timeline <span className="text-[#4B5563] font-normal ml-2">({moments.length} moments)</span>
-            </h3>
-            {pinnedDate && <button onClick={() => setPinnedDate(null)} className="text-[10px] text-[#6B7280] hover:text-white underline underline-offset-2">Clear selection</button>}
-          </div>
+        {/* Full Campaign Log — collapsed by default */}
+        <div className="bg-[#131620] rounded-xl border border-[#1E2130]">
+          <button onClick={() => setLogExpanded(e => !e)}
+            className="w-full flex items-center justify-between px-5 py-4 text-left group">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280]">
+                Full Campaign Log <span className="text-[#4B5563] font-normal ml-1">({moments.length} events)</span>
+              </h3>
+              {!logExpanded && <span className="text-[10px] text-[#4B5563] group-hover:text-[#6B7280] transition-colors">Expand to view full campaign history</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              {pinnedDate && logExpanded && <span onClick={(e) => { e.stopPropagation(); setPinnedDate(null); }} className="text-[10px] text-[#6B7280] hover:text-white underline underline-offset-2 cursor-pointer">Clear selection</span>}
+              <svg className={`w-4 h-4 text-[#4B5563] transition-transform ${logExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+            </div>
+          </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Pre-release */}
-            <div>
-              <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">Pre-release</h4>
-              <div className="space-y-1">
-                {phasedMoments.pre.map((m, i) => <MomentRow key={`pre${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
-                  onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                {phasedMoments.pre.length === 0 && <p className="text-[10px] text-[#4B5563]">No pre-release moments</p>}
+          {logExpanded && (
+            <div className="px-5 pb-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Pre-release */}
+                <div>
+                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">Pre-release</h4>
+                  <div className="space-y-1">
+                    {phasedMoments.pre.map((m, i) => <MomentRow key={`pre${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                      onHover={setHighlightedDate} onClick={handleMomentClick} />)}
+                    {phasedMoments.pre.length === 0 && <p className="text-[10px] text-[#4B5563]">No pre-release moments</p>}
+                  </div>
+                </div>
+                {/* Release */}
+                <div>
+                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6C9EFF] mb-2 pb-1 border-b border-[#1E2130]">Album Release</h4>
+                  <div className="space-y-1">
+                    {phasedMoments.release.map((m, i) => <MomentRow key={`rel${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                      onHover={setHighlightedDate} onClick={handleMomentClick} />)}
+                    {phasedMoments.release.length === 0 && <p className="text-[10px] text-[#4B5563]">No release moments</p>}
+                  </div>
+                </div>
+                {/* Post-release */}
+                <div>
+                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">Post-release</h4>
+                  <div className="space-y-1">
+                    {phasedMoments.post.map((m, i) => <MomentRow key={`post${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                      onHover={setHighlightedDate} onClick={handleMomentClick} />)}
+                    {phasedMoments.post.length === 0 && <p className="text-[10px] text-[#4B5563]">No post-release moments</p>}
+                  </div>
+                </div>
               </div>
             </div>
-            {/* Release */}
-            <div>
-              <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6C9EFF] mb-2 pb-1 border-b border-[#1E2130]">Album Release</h4>
-              <div className="space-y-1">
-                {phasedMoments.release.map((m, i) => <MomentRow key={`rel${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
-                  onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                {phasedMoments.release.length === 0 && <p className="text-[10px] text-[#4B5563]">No release moments</p>}
-              </div>
-            </div>
-            {/* Post-release */}
-            <div>
-              <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">Post-release</h4>
-              <div className="space-y-1">
-                {phasedMoments.post.map((m, i) => <MomentRow key={`post${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
-                  onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                {phasedMoments.post.length === 0 && <p className="text-[10px] text-[#4B5563]">No post-release moments</p>}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Learnings */}

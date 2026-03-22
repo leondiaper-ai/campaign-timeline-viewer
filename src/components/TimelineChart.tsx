@@ -157,7 +157,8 @@ function layoutMoments(data: ChartDataPoint[], vis: Set<string>): MM[] {
       }
     }
   });
-  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 7)
+  return [...byDate.values()].sort((a, b) => b.p - a.p || a.date.localeCompare(b.date)).slice(0, 5)
+    .sort((a, b) => a.date.localeCompare(b.date))
     .map((m, i) => ({ date: m.date, label: m.label, fullTitle: m.fullTitle, type: m.type, color: m.color, row: i % 2 }));
 }
 
@@ -194,7 +195,7 @@ export default function TimelineChart({
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${!isCampaign ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>Tracks</button>
         </div>
         <span className="text-[10px] text-[#4B5563] max-w-[420px] text-right">
-          {isCampaign ? "Overall campaign performance" : (trackModeContext || "Individual track performance")}
+          {isCampaign ? (territory === "UK" ? "UK campaign performance" : "Global campaign performance") : (trackModeContext || "Individual track performance")}
         </span>
       </div>
 
@@ -213,8 +214,8 @@ export default function TimelineChart({
               return (
                 <div key={i} className={`absolute flex flex-col items-center ${pc ? "group" : ""}`}
                   style={{ left: `${4 + pct * 0.88}%`, bottom: m.row === 0 ? 20 : 2, transform: "translateX(-50%)" }}>
-                  <span className={`text-[9px] font-bold uppercase tracking-wider whitespace-nowrap px-1 ${pc ? "cursor-pointer" : ""}`} style={{ color: m.color }}>{m.label}</span>
-                  <div className="w-px h-1.5 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.4 }} />
+                  <span className={`text-[10px] font-bold uppercase tracking-wide whitespace-nowrap px-1.5 ${pc ? "cursor-pointer" : ""}`} style={{ color: m.color }}>{m.label}</span>
+                  <div className="w-px h-2 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.5 }} />
                   {pc && (
                     <div className="hidden group-hover:block absolute bottom-full mb-2 z-50 bg-[#1A1D2E] rounded-lg border border-[#2A2D3E] p-2.5 shadow-2xl whitespace-nowrap">
                       <p className="text-[10px] font-semibold text-white mb-1">{pc.platform} &mdash; <span className="text-[#6B7280] font-normal">{pc.territory}</span></p>
@@ -238,25 +239,18 @@ export default function TimelineChart({
         <div className="w-full h-[400px]">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 8, right: hasPhysical ? 60 : 24, left: 8, bottom: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1E2130" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1A1D2A" vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#1E2130" }} tickLine={false} dy={8} interval="preserveStartEnd" />
               <YAxis yAxisId="s" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
               {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />}
               <Tooltip content={<CampTip territory={territory} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
               {highlightedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
-              {moments.map((m, i) => <ReferenceLine key={`m${i}`} x={m.date} yAxisId="s" stroke={m.color} strokeDasharray="3 4" strokeWidth={1.5} strokeOpacity={0.5} />)}
-              <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={`${TOTAL_COLOR}15`} stroke="none" />
-              <Line yAxisId="s" type="monotone" dataKey="total_streams" stroke={TOTAL_COLOR} strokeWidth={3}
+              {moments.map((m, i) => <ReferenceLine key={`m${i}`} x={m.date} yAxisId="s" stroke={m.color} strokeDasharray="4 6" strokeWidth={1} strokeOpacity={0.35} />)}
+              <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={`${TOTAL_COLOR}12`} stroke="none" />
+              <Line yAxisId="s" type="monotone" dataKey="total_streams" stroke={TOTAL_COLOR} strokeWidth={2.5}
                 dot={isSparse ? { r: 4, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 } : false}
                 activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }} name="Total Streams" />
-              {selectedTracks.map(t => {
-                const r = trackRoles.find(x => x.track_name === t);
-                return <Line key={t} yAxisId="s" type="monotone" dataKey={t} stroke={r?.color ?? "#4B5563"}
-                  strokeWidth={r?.strokeWidth ? r.strokeWidth * 0.6 : 1} strokeOpacity={r?.opacity ?? 0.25}
-                  dot={isSparse ? { r: 3, fill: r?.color ?? "#4B5563", stroke: "#0D1117", strokeWidth: 1 } : false}
-                  activeDot={false} connectNulls={false} name={t} />;
-              })}
-              {hasPhysical && <Bar yAxisId="p" dataKey="physical_units" fill={`${PHYSICAL_COLOR}35`} stroke={PHYSICAL_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="Physical" barSize={18} />}
+              {hasPhysical && <Bar yAxisId="p" dataKey="physical_units" fill={`${PHYSICAL_COLOR}30`} stroke={PHYSICAL_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="Physical" barSize={16} />}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -316,17 +310,22 @@ export default function TimelineChart({
 
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-4 mt-3">
-        {isCampaign && <LI color={TOTAL_COLOR} label="Total Streams" type="line" bold />}
-        {trackRoles
-          .filter(tr => selectedTracks.includes(tr.track_name))
-          .sort((a, b) => b.strokeWidth - a.strokeWidth)
-          .map(tr => (
-            <LI key={tr.track_name} color={tr.color}
-              label={isCampaign ? tr.track_name : `${getTrackRoleLabel(tr.role)} — ${tr.track_name}`}
-              type="line" opacity={isCampaign ? 0.25 : tr.opacity}
-              bold={!isCampaign && tr.role === "POST_RELEASE_BREAKOUT"} />
-          ))}
-        {isCampaign && hasPhysical && <LI color={PHYSICAL_COLOR} label="Physical" type="bar" />}
+        {isCampaign ? (
+          <>
+            <LI color={TOTAL_COLOR} label={territory === "UK" ? "UK Streams" : "Global Streams"} type="line" bold />
+            {hasPhysical && <LI color={PHYSICAL_COLOR} label={territory === "UK" ? "UK Physical" : "Physical"} type="bar" />}
+          </>
+        ) : (
+          trackRoles
+            .filter(tr => selectedTracks.includes(tr.track_name))
+            .sort((a, b) => b.strokeWidth - a.strokeWidth)
+            .map(tr => (
+              <LI key={tr.track_name} color={tr.color}
+                label={`${getTrackRoleLabel(tr.role)} — ${tr.track_name}`}
+                type="line" opacity={tr.opacity}
+                bold={tr.role === "POST_RELEASE_BREAKOUT"} />
+            ))
+        )}
       </div>
     </div>
   );
