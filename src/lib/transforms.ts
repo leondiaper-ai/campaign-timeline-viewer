@@ -501,7 +501,22 @@ export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territor
 }
 
 
-// ——— Phase-based Campaign Learnings ——————————————————————————
+// ——— Grouped Campaign Learnings ——————————————————————————
+export interface LearningItem {
+  text: string;
+  sentiment: "positive" | "neutral" | "negative";
+}
+
+export type LearningGroup = "music" | "campaign" | "commercial" | "takeaway";
+
+export interface GroupedLearnings {
+  music: LearningItem[];
+  campaign: LearningItem[];
+  commercial: LearningItem[];
+  takeaway: LearningItem[];
+}
+
+// Keep old interface for backward compat
 export interface CampaignLearning {
   dateLabel: string;
   eventType: string;
@@ -510,68 +525,136 @@ export interface CampaignLearning {
 }
 
 export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territory): CampaignLearning[] {
-  const _wd = sheet.weeklyData || [];
-  if (_wd.length === 0) return [];
+  // Legacy — kept for type compat, but GroupedLearnings is preferred
+  return [];
+}
+
+export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territory): GroupedLearnings {
+  const result: GroupedLearnings = { music: [], campaign: [], commercial: [], takeaway: [] };
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
-  const learnings: CampaignLearning[] = [];
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
-  const fmtDate = (d: string) => {
-    const dt = new Date(d + "T00:00:00");
-    return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-  };
   const albumDate = sheet.setup.release_date;
-  if (!albumDate) return learnings;
+  if (!albumDate) return result;
 
-  const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL")
+  const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL")
     .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
-  if (totalRows.length < 2) return learnings;
+  const trackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
+  const trackNames = [...new Set(trackRows.map(r => r.track_name))];
 
-  // Peak week
-  const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
-  const peakDate = peakRow.week_start_date;
-
-  // 1. Album release peak
-  learnings.push({
-    dateLabel: fmtDate(peakDate),
-    eventType: "ALBUM RELEASE",
-    text: `Peak week (~${fmtNum(peakRow[streamKey])} streams), primary campaign driver`,
-    phase: "peak",
-  });
-
-  // 2. Post-release drop
-  const postPeakRows = totalRows.filter(r => r.week_start_date > peakDate);
-  if (postPeakRows.length > 0) {
-    const nextWeek = postPeakRows[0];
-    const dropPct = Math.round((1 - nextWeek[streamKey] / peakRow[streamKey]) * 100);
-    if (dropPct > 5) {
-      learnings.push({
-        dateLabel: fmtDate(nextWeek.week_start_date),
-        eventType: "POST-RELEASE DROP",
-        text: `Streams declined ~${dropPct}% week-on-week`,
-        phase: "post",
-      });
+  // ——— MUSIC PERFORMANCE ———
+  // Top track pre-release
+  const preRows = trackRows.filter(r => r.week_start_date < albumDate);
+  if (preRows.length > 0) {
+    const preTotals = new Map<string, number>();
+    for (const r of preRows) preTotals.set(r.track_name, (preTotals.get(r.track_name) || 0) + r[streamKey]);
+    const sorted = [...preTotals.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0 && sorted[0][1] > 0) {
+      result.music.push({ text: `Pre-release led by "${sorted[0][0]}" (~${fmtNum(sorted[0][1])} streams)`, sentiment: "neutral" });
     }
   }
 
-  // 3. DJH hold (post-release breakout)
+  // Top track post-release
+  const postRows = trackRows.filter(r => r.week_start_date >= albumDate);
+  if (postRows.length > 0) {
+    const postTotals = new Map<string, number>();
+    for (const r of postRows) postTotals.set(r.track_name, (postTotals.get(r.track_name) || 0) + r[streamKey]);
+    const sorted = [...postTotals.entries()].sort((a, b) => b[1] - a[1]);
+    if (sorted.length > 0 && sorted[0][1] > 0) {
+      result.music.push({ text: `Post-release dominated by "${sorted[0][0]}" (~${fmtNum(sorted[0][1])} streams)`, sentiment: "positive" });
+    }
+  }
+
+  // Breakout / momentum track
   const roles = inferTrackRoles(sheet, territory);
   const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
   if (breakout) {
-    const bRows = sheet.weeklyData
-      .filter(r => r.track_name === breakout.track_name && r[streamKey] > 0)
-      .sort((a,b) => a.week_start_date.localeCompare(b.week_start_date));
-    const avgPost = bRows.length > 0
-      ? bRows.reduce((s,r) => s + r[streamKey], 0) / bRows.length : 0;
-    const firstDate = bRows[0]?.week_start_date || peakDate;
-    learnings.push({
-      dateLabel: fmtDate(firstDate) + "+",
-      eventType: "DJH HOLD",
-      text: `"\u200B${breakout.track_name}" stabilised ~${fmtNum(avgPost)}/week \u2014 only track sustaining momentum`,
-      phase: "post",
+    const bPostRows = postRows.filter(r => r.track_name === breakout.track_name && r[streamKey] > 0);
+    if (bPostRows.length >= 2) {
+      const avg = bPostRows.reduce((s, r) => s + r[streamKey], 0) / bPostRows.length;
+      result.music.push({ text: `"${breakout.track_name}" sustained ~${fmtNum(avg)}/week — only track holding momentum`, sentiment: "positive" });
+    }
+  }
+
+  // ——— CAMPAIGN IMPACT ———
+  const pcs = sheet.paidCampaigns || [];
+  if (pcs.length > 0) {
+    // Best intent rate — causal language
+    const withIntent = pcs.filter(p => p.intent_total > 0);
+    if (withIntent.length > 0) {
+      const best = withIntent.reduce((a, b) => a.intent_total > b.intent_total ? a : b);
+      if (best.intent_total >= 30) {
+        result.campaign.push({ text: `${best.platform} (${best.territory}) drove strongest conversion (${best.intent_total}% intent)`, sentiment: "positive" });
+      } else if (best.intent_total >= 25) {
+        result.campaign.push({ text: `${best.platform} (${best.territory}) conversion on benchmark (${best.intent_total}% intent)`, sentiment: "neutral" });
+      } else {
+        result.campaign.push({ text: `${best.platform} (${best.territory}) underperformed on intent (${best.intent_total}%)`, sentiment: "negative" });
+      }
+    }
+
+    // Best segment — causal language
+    const segments = pcs.filter(p => p.best_segment).map(p => p.best_segment);
+    const segCounts = new Map<string, number>();
+    for (const s of segments) segCounts.set(s, (segCounts.get(s) || 0) + 1);
+    const topSeg = [...segCounts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (topSeg) {
+      result.campaign.push({ text: `"${topSeg[0]}" listeners responded strongest to paid campaigns`, sentiment: "positive" });
+    }
+  }
+
+  // ——— COMMERCIAL SIGNALS ———
+  const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
+  if (totalRows.length >= 2) {
+    const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
+
+    if (physicalTotal > 0) {
+      // Check if physical peaked during release week
+      const physByWeek = new Map<string, number>();
+      for (const r of sheet.physicalData) physByWeek.set(r.week_start_date, (physByWeek.get(r.week_start_date) || 0) + r.units);
+      const physPeakWeek = [...physByWeek.entries()].sort((a, b) => b[1] - a[1])[0];
+      if (physPeakWeek && physPeakWeek[0] === peakRow.week_start_date) {
+        result.commercial.push({ text: `Physical sales peaked during release week — aligned with stream spike`, sentiment: "positive" });
+      } else if (physPeakWeek) {
+        result.commercial.push({ text: `Physical sales (~${fmtNum(physicalTotal)} units) contributed to campaign total`, sentiment: "neutral" });
+      }
+    }
+
+    // Post-release drop
+    const postPeakRows = totalRows.filter(r => r.week_start_date > peakRow.week_start_date);
+    if (postPeakRows.length > 0) {
+      const nextWeek = postPeakRows[0];
+      const dropPct = Math.round((1 - nextWeek[streamKey] / peakRow[streamKey]) * 100);
+      if (dropPct > 30) {
+        result.commercial.push({ text: `Streams dropped ${dropPct}% post-peak — consider extended push window`, sentiment: "negative" });
+      } else if (dropPct > 10) {
+        result.commercial.push({ text: `Moderate ${dropPct}% decline post-peak — normal release curve`, sentiment: "neutral" });
+      }
+    }
+  }
+
+  // ——— KEY TAKEAWAY ———
+  // Build a single summary line
+  const drivers: string[] = [];
+  if (pcs.length > 0) {
+    const platforms = [...new Set(pcs.map(p => p.platform))];
+    drivers.push(platforms.join(" + "));
+  }
+  // Check for editorial moments near release
+  const editorialNearRelease = (sheet.moments || []).filter(m =>
+    m.moment_type.toLowerCase() === "editorial" &&
+    Math.abs(new Date(m.date).getTime() - new Date(albumDate).getTime()) < 14 * 86400000
+  );
+  if (editorialNearRelease.length > 0) drivers.push("editorial");
+  if (physicalTotal > 0) drivers.push("physical sales");
+
+  if (drivers.length > 0 && totalRows.length > 0) {
+    const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
+    result.takeaway.push({
+      text: `Release peak (~${fmtNum(peakRow[streamKey])}) driven by ${drivers.join(", ")} alignment`,
+      sentiment: "positive",
     });
   }
 
-  return learnings.slice(0, 3);
+  return result;
 }
 
 // ——— Inline Chart Insight (1 sentence) ——————————————————————
