@@ -279,7 +279,7 @@ export default function TimelineChart({
                     <div className="hidden group-hover:block absolute bottom-full mb-2 z-50 bg-[#1A1D2E] rounded-lg border border-[#2A2D3E] p-2.5 shadow-2xl whitespace-nowrap">
                       {pcs.map((pc, pi) => (
                         <div key={pi} className={pi > 0 ? "mt-2 pt-2 border-t border-[#2A2D3E]" : ""}>
-                          <p className="text-[10px] font-semibold text-white mb-1">{pc.platform} &mdash; <span className="text-[#6B7280] font-normal">{pc.territory}</span></p>
+                          <p className="text-[10px] font-semibold text-white mb-1">{pc.platform} &mdash; {pc.territory} <span className="text-[#6B7280] font-normal">(Campaign Impact)</span></p>
                           {pc.spend > 0 && <p className="text-[10px] text-[#9CA3AF]">Spend: <span className="text-white font-medium">{fmtSpend(pc.spend)}{pc.spend_planned > 0 ? ` / ${fmtSpend(pc.spend_planned)} planned` : ""}</span></p>}
                           {pc.intent_total > 0 && <p className="text-[10px] text-[#9CA3AF]">Intent: <span className="text-white font-medium">{pc.intent_total}%</span> <span className="text-[#6B7280]">({intentGrade(pc.intent_total)})</span></p>}
                           {pc.best_segment && <p className="text-[10px] text-[#9CA3AF]">Driver: <span className="text-white font-medium">{pc.best_segment}</span></p>}
@@ -388,6 +388,12 @@ export default function TimelineChart({
             ))
         )}
       </div>
+      {/* Hover hint — subtle, campaign mode only */}
+      {isCampaign && paidCampaigns && paidCampaigns.length > 0 && (
+        <p className="text-[9px] text-[#4B5563] text-center mt-1.5 opacity-65 select-none">
+          Hover over key moments to see performance &amp; spend
+        </p>
+      )}
     </div>
   );
 }
