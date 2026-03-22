@@ -990,3 +990,78 @@ export function getUKTotals(sheet: CampaignSheetData): { ukStreams: number; ukPh
   const ukPhysical = sheet.physicalData.reduce((s, r) => s + r.units, 0);
   return { ukStreams, ukPhysical, ukShare };
 }
+
+// ——— Timeline Impact Classification ——————————————————————————
+export type ImpactTier = "driver" | "supporting" | "background";
+
+export interface ClassifiedMoment {
+  moment: Moment;
+  tier: ImpactTier;
+  context: string; // short "why it matters" line
+}
+
+export function classifyMomentImpact(
+  moments: Moment[],
+  sheet: CampaignSheetData,
+  territory: Territory,
+): ClassifiedMoment[] {
+  const albumDate = sheet.setup.release_date || "";
+  const pcs = sheet.paidCampaigns || [];
+
+  return moments.map(m => {
+    const t = m.moment_title.toLowerCase();
+    const type = m.moment_type.toLowerCase();
+
+    // ——— DRIVERS: album release, key singles, paid campaigns on release ———
+    // Album release
+    if (type === "music" && (t.includes("album") || (t.includes("release") && !t.includes("single")))) {
+      return { moment: m, tier: "driver" as ImpactTier, context: "Primary campaign driver" };
+    }
+    // Key singles
+    if (type === "music" && m.is_key && (t.includes("single") || t.includes("lead"))) {
+      const isPreRelease = m.date < albumDate;
+      return { moment: m, tier: "driver" as ImpactTier, context: isPreRelease ? "Built pre-release awareness" : "Sustained post-release momentum" };
+    }
+    // Paid campaigns that align with release window (within 14 days)
+    if ((type === "marquee" || type === "showcase" || type === "paid") && m.is_key) {
+      const pc = pcs.find(p => p.start_date === m.date);
+      const spendNote = pc && pc.spend > 0 ? ` — $${pc.spend >= 1000 ? (pc.spend/1000).toFixed(0) + "K" : pc.spend}` : "";
+      const daysDiff = albumDate ? Math.abs(new Date(m.date).getTime() - new Date(albumDate).getTime()) / 86400000 : 999;
+      if (daysDiff <= 14) {
+        return { moment: m, tier: "driver" as ImpactTier, context: `Drove release window spike${spendNote}` };
+      }
+      return { moment: m, tier: "supporting" as ImpactTier, context: `Paid support${spendNote}` };
+    }
+
+    // ——— SUPPORTING: editorial, key moments, tour, TV ———
+    if (type === "editorial" && m.is_key) {
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Boosted reach and discovery" };
+    }
+    if (type === "editorial") {
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Editorial visibility" };
+    }
+    if ((type === "tour" || type === "live") && m.is_key) {
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Live event awareness" };
+    }
+    if ((type === "tv" || type === "radio" || type === "media") && m.is_key) {
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Media visibility" };
+    }
+    if (m.is_key && type === "music") {
+      return { moment: m, tier: "supporting" as ImpactTier, context: "Music moment" };
+    }
+
+    // ——— BACKGROUND: everything else ———
+    if (type === "marquee" || type === "showcase" || type === "paid") {
+      const pc = pcs.find(p => p.start_date === m.date);
+      const spendNote = pc && pc.spend > 0 ? ` — $${pc.spend >= 1000 ? (pc.spend/1000).toFixed(0) + "K" : pc.spend}` : "";
+      return { moment: m, tier: "background" as ImpactTier, context: `Paid activity${spendNote}` };
+    }
+    if (type === "tour" || type === "live") {
+      return { moment: m, tier: "background" as ImpactTier, context: "Tour / live" };
+    }
+    if (type === "marketing" || type === "product") {
+      return { moment: m, tier: "background" as ImpactTier, context: "Campaign activity" };
+    }
+    return { moment: m, tier: "background" as ImpactTier, context: "" };
+  });
+}

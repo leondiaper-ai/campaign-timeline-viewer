@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect } from "react";
-import { AppData, LoadedCampaign, Territory, Moment } from "@/types";
+import { AppData, LoadedCampaign, Territory } from "@/types";
 import {
   buildChartData, getAllTrackNames, getAllMoments,
   inferTrackRoles, detectHandoverMoment, getChartInsight,
   getCampaignSummary, getTrackModeContext,
   buildUKTrackContext, buildUKMilestones, UKTrackContext,
+  classifyMomentImpact, type ClassifiedMoment, type ImpactTier,
 } from "@/lib/transforms";
 import { getCategoryConfig } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -74,14 +75,17 @@ export default function Dashboard({ initialData }: DashboardProps) {
   }, [sheet]);
   const keyMomentDates = useMemo(() => new Set(moments.filter(m => m.is_key).map(m => m.date)), [moments]);
 
-  // Group moments by phase
   const albumDate = sheet?.setup.release_date || "";
-  const phasedMoments = useMemo(() => {
-    const pre = moments.filter(m => m.date < albumDate);
-    const release = moments.filter(m => m.date === albumDate);
-    const post = moments.filter(m => m.date > albumDate);
-    return { pre, release, post };
-  }, [moments, albumDate]);
+  const [showBackground, setShowBackground] = useState(false);
+
+  // Classify moments by impact tier
+  const classified = useMemo(() => {
+    if (!sheet) return [] as ClassifiedMoment[];
+    return classifyMomentImpact(moments, sheet, territory);
+  }, [moments, sheet, territory]);
+  const drivers = useMemo(() => classified.filter(c => c.tier === "driver").sort((a, b) => a.moment.date.localeCompare(b.moment.date)), [classified]);
+  const supporting = useMemo(() => classified.filter(c => c.tier === "supporting").sort((a, b) => a.moment.date.localeCompare(b.moment.date)), [classified]);
+  const background = useMemo(() => classified.filter(c => c.tier === "background").sort((a, b) => a.moment.date.localeCompare(b.moment.date)), [classified]);
 
   const handleMomentClick = useCallback((date: string) => { setPinnedDate(prev => prev === date ? null : date); }, []);
   const effectiveHighlight = pinnedDate || highlightedDate;
@@ -166,36 +170,57 @@ export default function Dashboard({ initialData }: DashboardProps) {
           </button>
 
           {logExpanded && (
-            <div className="px-5 pb-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Pre-release */}
+            <div className="px-5 pb-5 space-y-4">
+              {/* Moment Drivers */}
+              {drivers.length > 0 && (
                 <div>
-                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">Pre-release</h4>
-                  <div className="space-y-1">
-                    {phasedMoments.pre.map((m, i) => <MomentRow key={`pre${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">
+                    Moment Drivers <span className="text-[#4B5563] font-normal ml-1">({drivers.length})</span>
+                  </h4>
+                  <div className="space-y-0.5">
+                    {drivers.map((c, i) => <TieredMomentRow key={`d${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
                       onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                    {phasedMoments.pre.length === 0 && <p className="text-[10px] text-[#4B5563]">No pre-release moments</p>}
                   </div>
                 </div>
-                {/* Release */}
+              )}
+
+              {/* Supporting Activity */}
+              {supporting.length > 0 && (
                 <div>
-                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6C9EFF] mb-2 pb-1 border-b border-[#1E2130]">Album Release</h4>
-                  <div className="space-y-1">
-                    {phasedMoments.release.map((m, i) => <MomentRow key={`rel${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">
+                    Supporting Activity <span className="text-[#4B5563] font-normal ml-1">({supporting.length})</span>
+                  </h4>
+                  <div className="space-y-0.5">
+                    {supporting.map((c, i) => <TieredMomentRow key={`s${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
                       onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                    {phasedMoments.release.length === 0 && <p className="text-[10px] text-[#4B5563]">No release moments</p>}
                   </div>
                 </div>
-                {/* Post-release */}
+              )}
+
+              {/* Background Activity — collapsible */}
+              {background.length > 0 && (
                 <div>
-                  <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">Post-release</h4>
-                  <div className="space-y-1">
-                    {phasedMoments.post.map((m, i) => <MomentRow key={`post${i}`} moment={m} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
-                      onHover={setHighlightedDate} onClick={handleMomentClick} />)}
-                    {phasedMoments.post.length === 0 && <p className="text-[10px] text-[#4B5563]">No post-release moments</p>}
-                  </div>
+                  {!showBackground ? (
+                    <button onClick={() => setShowBackground(true)}
+                      className="text-[10px] text-[#4B5563] hover:text-[#6B7280] transition-colors">
+                      + {background.length} additional activit{background.length === 1 ? "y" : "ies"}
+                    </button>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2 pb-1 border-b border-[#1E2130]">
+                        <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#4B5563]">
+                          Background Activity <span className="font-normal ml-1">({background.length})</span>
+                        </h4>
+                        <button onClick={() => setShowBackground(false)} className="text-[9px] text-[#4B5563] hover:text-[#6B7280] transition-colors">Collapse</button>
+                      </div>
+                      <div className="space-y-0.5">
+                        {background.map((c, i) => <TieredMomentRow key={`b${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
+                          onHover={setHighlightedDate} onClick={handleMomentClick} />)}
+                      </div>
+                    </>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
@@ -243,25 +268,30 @@ export default function Dashboard({ initialData }: DashboardProps) {
   );
 }
 
-function MomentRow({ moment, pinnedDate, effectiveHighlight, onHover, onClick }: {
-  moment: Moment; pinnedDate: string | null; effectiveHighlight: string | null;
+function TieredMomentRow({ classified, pinnedDate, effectiveHighlight, onHover, onClick }: {
+  classified: ClassifiedMoment; pinnedDate: string | null; effectiveHighlight: string | null;
   onHover: (d: string | null) => void; onClick: (d: string) => void;
 }) {
+  const { moment, tier, context } = classified;
   const cat = getCategoryConfig(moment.moment_type);
   const isPinned = pinnedDate === moment.date;
+  const isDriver = tier === "driver";
+  const isBg = tier === "background";
   return (
     <div onClick={() => onClick(moment.date)}
       className={`flex items-start gap-2 px-2 py-1.5 rounded-lg transition-all cursor-pointer ${
         isPinned ? "bg-white/8 ring-1 ring-white/10" : effectiveHighlight === moment.date ? "bg-white/5" : "hover:bg-white/[0.03]"
       }`}
       onMouseEnter={() => onHover(moment.date)} onMouseLeave={() => onHover(null)}>
-      <span className="w-1.5 h-1.5 rounded-full mt-1 flex-shrink-0" style={{ backgroundColor: cat.color }} />
+      <span className={`${isDriver ? "w-2 h-2" : "w-1.5 h-1.5"} rounded-full mt-1 flex-shrink-0`} style={{ backgroundColor: cat.color, opacity: isBg ? 0.4 : 1 }} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-white leading-tight">{moment.moment_title}</span>
-          {moment.is_key && <span className="text-[7px] font-bold uppercase px-1 py-0.5 rounded bg-amber-500/10 text-amber-400">Key</span>}
+          <span className={`text-[11px] leading-tight ${isDriver ? "font-semibold text-white" : isBg ? "font-normal text-[#6B7280]" : "font-medium text-[#D1D5DB]"}`}>{moment.moment_title}</span>
         </div>
-        <span className="text-[9px] text-[#4B5563]">{fmtShort(moment.date)} · {cat.label}</span>
+        <div className="flex items-center gap-1.5">
+          <span className={`text-[9px] ${isBg ? "text-[#374151]" : "text-[#4B5563]"}`}>{fmtShort(moment.date)} · {cat.label}</span>
+          {context && <span className={`text-[9px] ${isDriver ? "text-[#FBBF24]/70" : "text-[#4B5563]"}`}>— {context}</span>}
+        </div>
       </div>
     </div>
   );
