@@ -40,7 +40,7 @@ export default function CampaignLearnings({ sheet, territory }: CampaignLearning
           <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280]">
             Campaign Learnings <span className="text-[#4B5563] font-normal ml-1">({totalCount})</span>
           </h3>
-          {!expanded && <span className="text-[10px] text-[#4B5563] group-hover:text-[#6B7280] transition-colors">Key takeaways from this campaign</span>}
+          {!expanded && <span className="text-[10px] text-[#4B5563] group-hover:text-[#6B7280] transition-colors">What worked, what didn't, what to change</span>}
         </div>
         <svg className={`w-4 h-4 text-[#4B5563] transition-transform ${expanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />

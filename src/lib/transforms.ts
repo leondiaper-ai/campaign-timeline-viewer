@@ -535,17 +535,14 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return result;
 
-  // ——— MUSIC PERFORMANCE ———
-  // Build track totals from either daily data (preferred) or weekly data
+  // ——— Shared data extraction ———
   const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
   const weeklyTrackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
 
-  // Unified track analysis: { trackName -> { pre, post } }
+  // Track analysis: { trackName -> { pre, post } }
   const trackAnalysis = new Map<string, { pre: number; post: number }>();
-
   if (hasDailyData) {
-    // Use daily data (global streams only for now)
     for (const r of sheet.dailyTrackData) {
       const existing = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
       if (r.date < albumDate) existing.pre += r.global_streams;
@@ -553,7 +550,6 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
       trackAnalysis.set(r.track_name, existing);
     }
   } else if (weeklyTrackRows.length > 0) {
-    // Fallback to weekly per-track data
     for (const r of weeklyTrackRows) {
       const existing = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
       if (r.week_start_date < albumDate) existing.pre += r[streamKey];
@@ -562,217 +558,156 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
     }
   }
 
-  if (trackAnalysis.size > 0) {
-    // Top track pre-release
-    const preSorted = [...trackAnalysis.entries()].filter(([, a]) => a.pre > 0).sort((a, b) => b[1].pre - a[1].pre);
-    if (preSorted.length > 0) {
-      result.music.push({ text: `Pre-release led by "${preSorted[0][0]}" (~${fmtNum(preSorted[0][1].pre)} streams)`, sentiment: "neutral" });
-    }
-
-    // Top track post-release
-    const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
-    if (postSorted.length > 0) {
-      result.music.push({ text: `Post-release dominated by "${postSorted[0][0]}" (~${fmtNum(postSorted[0][1].post)} streams)`, sentiment: "positive" });
-    }
-
-    // Shift detection: did the leading track change?
-    if (preSorted.length > 0 && postSorted.length > 0 && preSorted[0][0] !== postSorted[0][0]) {
-      result.music.push({ text: `Lead track shifted from "${preSorted[0][0]}" to "${postSorted[0][0]}" post-release`, sentiment: "neutral" });
-    }
-  }
-
-  // Breakout / momentum track from role analysis
-  const roles = inferTrackRoles(sheet, territory);
-  const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
-  if (breakout && trackAnalysis.size > 0) {
-    const bData = trackAnalysis.get(breakout.track_name);
-    if (bData && bData.post > 0) {
-      // Only add if not already covered by post-release dominator
-      const postSorted = [...trackAnalysis.entries()].sort((a, b) => b[1].post - a[1].post);
-      if (postSorted.length > 0 && postSorted[0][0] !== breakout.track_name) {
-        result.music.push({ text: `"${breakout.track_name}" sustained momentum — only track holding post-release`, sentiment: "positive" });
-      }
-    }
-  }
-
-  // Cap music at 3
-  result.music = result.music.slice(0, 3);
-
-  // ——— CAMPAIGN IMPACT ———
-  const pcs = sheet.paidCampaigns || [];
-  if (pcs.length > 0) {
-    // 1. Total spend context
-    const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
-    if (totalSpend > 0) {
-      const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
-      result.campaign.push({ text: `${fmtSpend} total spend across ${pcs.length} campaign${pcs.length > 1 ? "s" : ""}`, sentiment: "neutral" });
-    }
-
-    // 2. Best intent with benchmark label
-    const withIntent = pcs.filter(p => p.intent_total > 0);
-    if (withIntent.length > 0) {
-      const best = withIntent.reduce((a, b) => a.intent_total > b.intent_total ? a : b);
-      const grade = best.intent_total >= 35 ? "exceptional" : best.intent_total >= 30 ? "strong" : best.intent_total >= 25 ? "on benchmark" : "below benchmark";
-      const sentiment: LearningItem["sentiment"] = best.intent_total >= 30 ? "positive" : best.intent_total >= 25 ? "neutral" : "negative";
-      result.campaign.push({ text: `${best.platform} (${best.territory}) drove strongest conversion (${best.intent_total}% intent — ${grade})`, sentiment });
-    }
-
-    // 3. Market comparison — compare territories if multiple exist
-    const territories = [...new Set(pcs.filter(p => p.intent_total > 0).map(p => p.territory))];
-    if (territories.length >= 2) {
-      const avgByTerritory = new Map<string, { total: number; count: number }>();
-      for (const p of pcs) {
-        if (p.intent_total > 0) {
-          const existing = avgByTerritory.get(p.territory) || { total: 0, count: 0 };
-          existing.total += p.intent_total;
-          existing.count += 1;
-          avgByTerritory.set(p.territory, existing);
-        }
-      }
-      const ranked = [...avgByTerritory.entries()]
-        .map(([t, d]) => ({ territory: t, avg: d.total / d.count }))
-        .sort((a, b) => b.avg - a.avg);
-      if (ranked.length >= 2 && ranked[0].avg > ranked[1].avg) {
-        const diff = ranked[0].avg - ranked[1].avg;
-        if (diff > 2) {
-          result.campaign.push({ text: `${ranked[0].territory} outperformed ${ranked[1].territory} in paid conversion efficiency`, sentiment: "positive" });
-        }
-      }
-    }
-
-    // 4. Best segment
-    const segments = pcs.filter(p => p.best_segment).map(p => p.best_segment);
-    const segCounts = new Map<string, number>();
-    for (const s of segments) segCounts.set(s, (segCounts.get(s) || 0) + 1);
-    const topSeg = [...segCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (topSeg) {
-      result.campaign.push({ text: `"${topSeg[0]}" listeners responded strongest to paid campaigns`, sentiment: "positive" });
-    }
-
-    // 5. ROI direction — was paid effective for launch vs sustain?
-    const prePaidDates = pcs.filter(p => p.start_date && p.start_date < albumDate);
-    const postPaidDates = pcs.filter(p => p.start_date && p.start_date >= albumDate);
-    const platforms = [...new Set(pcs.map(p => p.platform))];
-    if (platforms.length > 0) {
-      if (prePaidDates.length > 0 && postPaidDates.length === 0) {
-        result.campaign.push({ text: `${platforms.join(" + ")} effective for driving launch spike, not deployed post-release`, sentiment: "neutral" });
-      } else if (prePaidDates.length > 0 && postPaidDates.length > 0) {
-        result.campaign.push({ text: `${platforms.join(" + ")} deployed across pre and post-release — effective for sustained visibility`, sentiment: "positive" });
-      } else if (postPaidDates.length > 0) {
-        result.campaign.push({ text: `${platforms.join(" + ")} deployed post-release — supporting momentum window`, sentiment: "neutral" });
-      }
-    }
-
-    // 6. Verdict line — overall assessment
-    const avgIntent = withIntent.length > 0 ? withIntent.reduce((s, p) => s + p.intent_total, 0) / withIntent.length : 0;
-    const bestTerritory = territories.length >= 2
-      ? (() => {
-          const avgByT = new Map<string, { total: number; count: number }>();
-          for (const p of pcs) { if (p.intent_total > 0) { const e = avgByT.get(p.territory) || { total: 0, count: 0 }; e.total += p.intent_total; e.count += 1; avgByT.set(p.territory, e); } }
-          return [...avgByT.entries()].map(([t, d]) => ({ t, avg: d.total / d.count })).sort((a, b) => b.avg - a.avg)[0]?.t;
-        })()
-      : null;
-    if (avgIntent > 0) {
-      const overallGrade = avgIntent >= 30 ? "strong" : avgIntent >= 25 ? "on benchmark" : "below benchmark";
-      const territoryNote = bestTerritory ? `, strongest efficiency in ${bestTerritory}` : "";
-      result.campaign.push({ text: `Paid campaigns performed ${overallGrade} overall${territoryNote}`, sentiment: avgIntent >= 25 ? "positive" : "negative" });
-    }
-  }
-
-  // Cap campaign at 6
-  result.campaign = result.campaign.slice(0, 6);
-
-  // ——— COMMERCIAL SIGNALS ———
-  const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
-
-  // Get peak streams from daily data or weekly TOTAL rows
+  // Peak streams (daily or weekly)
   const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL")
     .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
-
-  // Compute peak from daily data if available
-  let peakStreams = 0;
-  let peakDate = "";
+  let peakStreams = 0, peakDate = "";
+  const dailyTotals = new Map<string, number>();
   if (hasDailyData) {
-    // Aggregate daily data into weekly-ish buckets by summing all tracks per date
-    const dailyTotals = new Map<string, number>();
-    for (const r of sheet.dailyTrackData) {
-      dailyTotals.set(r.date, (dailyTotals.get(r.date) || 0) + r.global_streams);
-    }
-    for (const [d, s] of dailyTotals) {
-      if (s > peakStreams) { peakStreams = s; peakDate = d; }
-    }
+    for (const r of sheet.dailyTrackData) dailyTotals.set(r.date, (dailyTotals.get(r.date) || 0) + r.global_streams);
+    for (const [d, s] of dailyTotals) { if (s > peakStreams) { peakStreams = s; peakDate = d; } }
   } else if (totalRows.length >= 2) {
     const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
-    peakStreams = peakRow[streamKey];
-    peakDate = peakRow.week_start_date;
+    peakStreams = peakRow[streamKey]; peakDate = peakRow.week_start_date;
   }
 
-  if (physicalTotal > 0) {
+  // Post-peak drop %
+  let dropPct = 0;
+  if (hasDailyData && peakDate) {
+    const postDays = [...dailyTotals.entries()].filter(([d]) => d > peakDate).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 7);
+    if (postDays.length >= 3) {
+      const postAvg = postDays.reduce((s, [, v]) => s + v, 0) / postDays.length;
+      dropPct = Math.round((1 - postAvg / peakStreams) * 100);
+    }
+  } else if (totalRows.length >= 2 && peakDate) {
+    const next = totalRows.find(r => r.week_start_date > peakDate);
+    if (next) dropPct = Math.round((1 - next[streamKey] / peakStreams) * 100);
+  }
+
+  // ——— MUSIC PERFORMANCE (max 2 bullets) ———
+  if (trackAnalysis.size > 0) {
+    const preSorted = [...trackAnalysis.entries()].filter(([, a]) => a.pre > 0).sort((a, b) => b[1].pre - a[1].pre);
+    const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
+    const preLeader = preSorted[0]?.[0];
+    const postLeader = postSorted[0]?.[0];
+
+    // 1. Leadership line — combined pre/post
+    if (preLeader && postLeader) {
+      if (preLeader !== postLeader) {
+        result.music.push({ text: `Leadership shifted from "${preLeader}" (pre) to "${postLeader}" post-release`, sentiment: "neutral" });
+      } else {
+        result.music.push({ text: `"${postLeader}" dominated throughout — ${fmtNum(postSorted[0][1].post)} post-release streams`, sentiment: "positive" });
+      }
+    } else if (postLeader) {
+      result.music.push({ text: `"${postLeader}" dominated post-release (~${fmtNum(postSorted[0][1].post)} streams)`, sentiment: "positive" });
+    }
+
+    // 2. Breakout / momentum insight (only if adds something new)
+    const roles = inferTrackRoles(sheet, territory);
+    const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
+    if (breakout && breakout.track_name !== postLeader) {
+      result.music.push({ text: `"${breakout.track_name}" only track sustaining momentum post-release`, sentiment: "positive" });
+    } else if (postSorted.length >= 2 && postLeader) {
+      // Concentration check: does top track dwarf #2?
+      const topPost = postSorted[0][1].post;
+      const secondPost = postSorted[1][1].post;
+      if (secondPost > 0 && topPost / secondPost >= 2) {
+        result.music.push({ text: `Post-release streams concentrated in one track — limited catalogue spread`, sentiment: "negative" });
+      }
+    }
+  }
+
+  // ——— CAMPAIGN IMPACT (max 3 bullets) ———
+  const pcs = sheet.paidCampaigns || [];
+  if (pcs.length > 0) {
+    const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
+    const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
+    const withIntent = pcs.filter(p => p.intent_total > 0);
+    const avgIntent = withIntent.length > 0 ? withIntent.reduce((s, p) => s + p.intent_total, 0) / withIntent.length : 0;
+
+    // Best territory
+    const territories = [...new Set(withIntent.map(p => p.territory))];
+    let bestTerritory: string | null = null;
+    if (territories.length >= 2) {
+      const avgByT = new Map<string, { total: number; count: number }>();
+      for (const p of withIntent) { const e = avgByT.get(p.territory) || { total: 0, count: 0 }; e.total += p.intent_total; e.count += 1; avgByT.set(p.territory, e); }
+      const ranked = [...avgByT.entries()].map(([t, d]) => ({ t, avg: d.total / d.count })).sort((a, b) => b.avg - a.avg);
+      if (ranked.length >= 2 && ranked[0].avg - ranked[1].avg > 2) bestTerritory = ranked[0].t;
+    }
+
+    // 1. Verdict line — spend + grade + best market, all in one
+    if (avgIntent > 0) {
+      const grade = avgIntent >= 35 ? "exceptional" : avgIntent >= 30 ? "strong" : avgIntent >= 25 ? "on benchmark" : "below benchmark";
+      const sentiment: LearningItem["sentiment"] = avgIntent >= 30 ? "positive" : avgIntent >= 25 ? "neutral" : "negative";
+      const territoryNote = bestTerritory ? `, strongest in ${bestTerritory}` : "";
+      result.campaign.push({ text: `${fmtSpend} spent — paid performed ${grade} (${Math.round(avgIntent)}% avg intent${territoryNote})`, sentiment });
+    } else if (totalSpend > 0) {
+      result.campaign.push({ text: `${fmtSpend} spent across ${pcs.length} campaign${pcs.length > 1 ? "s" : ""} — no intent data available`, sentiment: "neutral" });
+    }
+
+    // 2. Deployment timing insight
+    const prePaid = pcs.filter(p => p.start_date && p.start_date < albumDate);
+    const postPaid = pcs.filter(p => p.start_date && p.start_date >= albumDate);
+    if (prePaid.length > 0 && postPaid.length === 0) {
+      result.campaign.push({ text: `Paid concentrated pre-release — effective for spike, no post-release support`, sentiment: "neutral" });
+    } else if (prePaid.length > 0 && postPaid.length > 0) {
+      result.campaign.push({ text: `Paid deployed across pre and post-release — sustained visibility window`, sentiment: "positive" });
+    } else if (postPaid.length > 0 && prePaid.length === 0) {
+      result.campaign.push({ text: `Paid deployed post-release only — no pre-release paid push`, sentiment: "neutral" });
+    }
+  }
+
+  // ——— COMMERCIAL SIGNALS (max 2 bullets) ———
+  const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
+
+  // Combine physical + momentum into interpretive lines
+  if (physicalTotal > 0 && peakDate) {
     const physByWeek = new Map<string, number>();
     for (const r of sheet.physicalData) physByWeek.set(r.week_start_date, (physByWeek.get(r.week_start_date) || 0) + r.units);
     const physPeakWeek = [...physByWeek.entries()].sort((a, b) => b[1] - a[1])[0];
-    // Check if physical peak aligns with stream peak (within 7 days for daily data)
-    if (physPeakWeek && peakDate) {
+    if (physPeakWeek) {
       const daysDiff = Math.abs(new Date(physPeakWeek[0]).getTime() - new Date(peakDate).getTime()) / 86400000;
       if (daysDiff <= 7) {
-        result.commercial.push({ text: `Physical sales peaked during release week — aligned with stream spike`, sentiment: "positive" });
+        result.commercial.push({ text: `Physical sales amplified the release spike rather than sustaining momentum`, sentiment: "neutral" });
       } else {
-        result.commercial.push({ text: `Physical sales (~${fmtNum(physicalTotal)} units) contributed to campaign total`, sentiment: "neutral" });
+        result.commercial.push({ text: `Physical sales (~${fmtNum(physicalTotal)} units) landed off-peak — limited streaming impact`, sentiment: "negative" });
       }
     }
   }
 
-  // Post-release drop from weekly TOTAL or daily aggregate
-  if (hasDailyData && peakDate) {
-    // Compare peak day to average of 7 days after
-    const dailyTotals = new Map<string, number>();
-    for (const r of sheet.dailyTrackData) dailyTotals.set(r.date, (dailyTotals.get(r.date) || 0) + r.global_streams);
-    const postDays = [...dailyTotals.entries()]
-      .filter(([d]) => d > peakDate)
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .slice(0, 7);
-    if (postDays.length >= 3) {
-      const postAvg = postDays.reduce((s, [, v]) => s + v, 0) / postDays.length;
-      const dropPct = Math.round((1 - postAvg / peakStreams) * 100);
-      if (dropPct > 30) {
-        result.commercial.push({ text: `Streams dropped ~${dropPct}% post-peak — consider extended push window`, sentiment: "negative" });
-      } else if (dropPct > 10) {
-        result.commercial.push({ text: `Moderate ~${dropPct}% decline post-peak — normal release curve`, sentiment: "neutral" });
-      }
-    }
-  } else if (totalRows.length >= 2 && peakDate) {
-    const postPeakRows = totalRows.filter(r => r.week_start_date > peakDate);
-    if (postPeakRows.length > 0) {
-      const nextWeek = postPeakRows[0];
-      const dropPct = Math.round((1 - nextWeek[streamKey] / peakStreams) * 100);
-      if (dropPct > 30) {
-        result.commercial.push({ text: `Streams dropped ${dropPct}% post-peak — consider extended push window`, sentiment: "negative" });
-      } else if (dropPct > 10) {
-        result.commercial.push({ text: `Moderate ${dropPct}% decline post-peak — normal release curve`, sentiment: "neutral" });
-      }
-    }
+  if (dropPct > 30) {
+    result.commercial.push({ text: `~${dropPct}% drop post-peak — momentum not sustained beyond release window`, sentiment: "negative" });
   }
 
-  // ——— KEY TAKEAWAY ———
-  // Build a single summary line
-  const drivers: string[] = [];
-  if (pcs.length > 0) {
-    const platforms = [...new Set(pcs.map(p => p.platform))];
-    drivers.push(platforms.join(" + "));
-  }
-  // Check for editorial moments near release
-  const editorialNearRelease = (sheet.moments || []).filter(m =>
-    m.moment_type.toLowerCase() === "editorial" &&
-    Math.abs(new Date(m.date).getTime() - new Date(albumDate).getTime()) < 14 * 86400000
-  );
-  if (editorialNearRelease.length > 0) drivers.push("editorial");
-  if (physicalTotal > 0) drivers.push("physical sales");
+  // ——— KEY TAKEAWAY (outcome summary + one edge insight) ———
+  // 1. Outcome summary
+  const wasReleaseFocused = dropPct > 30;
+  const hadPaid = pcs.length > 0;
+  const paidWorked = pcs.filter(p => p.intent_total >= 25).length > 0;
 
-  if (drivers.length > 0 && peakStreams > 0) {
-    result.takeaway.push({
-      text: `Release peak (~${fmtNum(peakStreams)}) driven by ${drivers.join(", ")} alignment`,
-      sentiment: "positive",
-    });
+  if (wasReleaseFocused && hadPaid && paidWorked) {
+    result.takeaway.push({ text: `Campaign optimised for release impact — strong launch, but momentum not sustained post-release`, sentiment: "neutral" });
+  } else if (wasReleaseFocused) {
+    result.takeaway.push({ text: `Momentum concentrated around release window — consider extending paid and editorial push`, sentiment: "negative" });
+  } else if (hadPaid && paidWorked && peakStreams > 0) {
+    result.takeaway.push({ text: `Effective campaign — paid and editorial alignment created sustained performance`, sentiment: "positive" });
+  } else if (peakStreams > 0) {
+    result.takeaway.push({ text: `Release peak (~${fmtNum(peakStreams)}) achieved but without clear paid amplification`, sentiment: "neutral" });
+  }
+
+  // 2. One "edge" insight — the slightly uncomfortable truth
+  if (hadPaid && dropPct > 30) {
+    result.takeaway.push({ text: `Paid drove the spike but didn't materially change the long-term trajectory`, sentiment: "negative" });
+  } else if (trackAnalysis.size > 0) {
+    const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
+    if (postSorted.length >= 2) {
+      const topPost = postSorted[0][1].post;
+      const totalPost = postSorted.reduce((s, [, a]) => s + a.post, 0);
+      const sharePct = Math.round((topPost / totalPost) * 100);
+      if (sharePct >= 50) {
+        result.takeaway.push({ text: `Post-release dependent on a single track (${sharePct}% of streams) — catalogue breadth underperformed`, sentiment: "negative" });
+      }
+    }
   }
 
   return result;
