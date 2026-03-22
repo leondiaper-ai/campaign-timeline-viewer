@@ -144,7 +144,7 @@ function intentGrade(total: number): string {
 interface MM { date: string; label: string; fullTitle: string; type: string; color: string; row: number; }
 function layoutMoments(data: ChartDataPoint[], vis: Set<string>): MM[] {
   const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; p: number }>();
-  const pm: Record<string, number> = { music: 5, marquee: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
+  const pm: Record<string, number> = { marquee: 6, music: 5, live: 4, editorial: 3, marketing: 2, product: 1 };
   data.forEach(d => {
     if (d.events.length > 0) {
       const ke = d.events.filter(e => e.is_key && vis.has(e.date));
@@ -207,24 +207,26 @@ export default function TimelineChart({
               const dates = data.map(d => d.date).sort();
               const idx = dates.indexOf(m.date);
               const pct = dates.length > 1 ? (idx / (dates.length - 1)) * 100 : 50;
-              // Match paid campaign by date + title substring
-              const pc = m.type === "marquee" && paidCampaigns?.length
-                ? paidCampaigns.find(p => p.start_date === m.date && m.fullTitle.includes(p.campaign_name))
-                : null;
+              // Match ALL paid campaigns on this date
+              const pcs = m.type === "marquee" && paidCampaigns?.length
+                ? paidCampaigns.filter(p => p.start_date === m.date)
+                : [];
               return (
-                <div key={i} className={`absolute flex flex-col items-center ${pc ? "group" : ""}`}
+                <div key={i} className={`absolute flex flex-col items-center ${pcs.length > 0 ? "group" : ""}`}
                   style={{ left: `${4 + pct * 0.88}%`, bottom: m.row === 0 ? 20 : 2, transform: "translateX(-50%)" }}>
-                  <span className={`text-[10px] font-bold uppercase tracking-wide whitespace-nowrap px-1.5 ${pc ? "cursor-pointer" : ""}`} style={{ color: m.color }}>{m.label}</span>
+                  <span className={`text-[10px] font-bold uppercase tracking-wide whitespace-nowrap px-1.5 ${pcs.length > 0 ? "cursor-pointer" : ""}`} style={{ color: m.color }}>{m.label}</span>
                   <div className="w-px h-2 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.5 }} />
-                  {pc && (
+                  {pcs.length > 0 && (
                     <div className="hidden group-hover:block absolute bottom-full mb-2 z-50 bg-[#1A1D2E] rounded-lg border border-[#2A2D3E] p-2.5 shadow-2xl whitespace-nowrap">
-                      <p className="text-[10px] font-semibold text-white mb-1">{pc.platform} &mdash; <span className="text-[#6B7280] font-normal">{pc.territory}</span></p>
-                      {pc.spend > 0 && <p className="text-[10px] text-[#9CA3AF]">Spend: <span className="text-white font-medium">{fmtSpend(pc.spend)}{pc.spend_planned > 0 ? ` / ${fmtSpend(pc.spend_planned)} planned` : ""}</span></p>}
-                      {pc.intent_total > 0 && <p className="text-[10px] text-[#9CA3AF]">Intent: <span className="text-white font-medium">{pc.intent_total}%</span> <span className="text-[#6B7280]">({intentGrade(pc.intent_total)})</span></p>}
-                      {pc.best_segment && <p className="text-[10px] text-[#9CA3AF]">Driver: <span className="text-white font-medium">{pc.best_segment}</span></p>}
-                      {pc.top_track && <p className="text-[10px] text-[#9CA3AF]">Top Track: <span className="text-white font-medium">{pc.top_track}</span></p>}
-                      {pc.campaign_objective && <p className="text-[10px] text-[#9CA3AF]">Objective: <span className="text-white font-medium">{pc.campaign_objective}</span></p>}
-                      {pc.notes && <p className="text-[10px] text-[#6B7280] mt-1 italic">{pc.notes}</p>}
+                      {pcs.map((pc, pi) => (
+                        <div key={pi} className={pi > 0 ? "mt-2 pt-2 border-t border-[#2A2D3E]" : ""}>
+                          <p className="text-[10px] font-semibold text-white mb-1">{pc.platform} &mdash; <span className="text-[#6B7280] font-normal">{pc.territory}</span></p>
+                          {pc.spend > 0 && <p className="text-[10px] text-[#9CA3AF]">Spend: <span className="text-white font-medium">{fmtSpend(pc.spend)}{pc.spend_planned > 0 ? ` / ${fmtSpend(pc.spend_planned)} planned` : ""}</span></p>}
+                          {pc.intent_total > 0 && <p className="text-[10px] text-[#9CA3AF]">Intent: <span className="text-white font-medium">{pc.intent_total}%</span> <span className="text-[#6B7280]">({intentGrade(pc.intent_total)})</span></p>}
+                          {pc.best_segment && <p className="text-[10px] text-[#9CA3AF]">Driver: <span className="text-white font-medium">{pc.best_segment}</span></p>}
+                          {pc.top_track && <p className="text-[10px] text-[#9CA3AF]">Top Track: <span className="text-white font-medium">{pc.top_track}</span></p>}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
