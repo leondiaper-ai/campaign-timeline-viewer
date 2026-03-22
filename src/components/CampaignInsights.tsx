@@ -9,6 +9,12 @@ function fmt(v: number): string {
   if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
   return v.toLocaleString();
 }
+function fmtSpend(v: number): string {
+  if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `£${(v / 1_000).toFixed(0)}K`;
+  if (v > 0) return `£${v}`;
+  return "—";
+}
 
 interface Props { sheet: CampaignSheetData; territory: Territory; }
 
@@ -31,13 +37,25 @@ export default function CampaignInsights({ sheet, territory }: Props) {
     }
     const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
     const uk = getUKTotals(sheet);
-    return { totalStreams, totalPhysical, uk };
+
+    // Paid campaign spend
+    const pcs = sheet.paidCampaigns || [];
+    const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
+    // Efficiency: spend per 1K streams
+    const efficiency = totalStreams > 0 && totalSpend > 0
+      ? totalSpend / (totalStreams / 1000)
+      : 0;
+
+    return { totalStreams, totalPhysical, uk, totalSpend, efficiency };
   }, [sheet, streamKey, territory]);
 
   const isGlobal = territory === "global";
 
+  const hasSpend = stats.totalSpend > 0;
+  const cols = hasSpend ? "grid-cols-3" : "grid-cols-2";
+
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className={`grid ${cols} gap-3`}>
       <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
         <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">
           {isGlobal ? "Global Streams" : "UK Streams"}
@@ -55,6 +73,17 @@ export default function CampaignInsights({ sheet, territory }: Props) {
           {stats.totalPhysical > 0 ? fmt(stats.totalPhysical) : "\u2014"}
         </p>
       </div>
+      {hasSpend && (
+        <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
+          <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">Campaign Spend</p>
+          <p className="text-2xl font-bold text-[#FBBF24] tabular-nums">{fmtSpend(stats.totalSpend)}</p>
+          {stats.efficiency > 0 && (
+            <p className="text-[10px] text-[#4B5563] mt-1">
+              £{stats.efficiency.toFixed(2)} per 1K streams
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

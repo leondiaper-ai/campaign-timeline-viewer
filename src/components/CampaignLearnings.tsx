@@ -17,7 +17,7 @@ function SentimentDot({ sentiment }: { sentiment: LearningItem["sentiment"] }) {
 }
 
 export default function CampaignLearnings({ sheet, territory }: CampaignLearningsProps) {
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const items = useMemo(() => getCampaignLearningsFlat(sheet, territory), [sheet, territory]);
 
   if (items.length === 0) return null;

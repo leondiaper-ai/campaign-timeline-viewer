@@ -299,6 +299,7 @@ export default function TimelineChart({
   const chartDates = useMemo(() => data.map(d => d.date).sort(), [data]);
   const moments = useMemo(() => layoutMoments(allMoments || [], chartDates), [allMoments, chartDates]);
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
+  const physicalMax = useMemo(() => hasPhysical ? Math.max(...data.map(d => d.physical_units || 0)) : 0, [data, hasPhysical]);
   const isCampaign = chartMode === "campaign";
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
   const isSparse = useMemo(() => data.filter(d => d.total_streams > 0).length <= 3, [data]);
@@ -414,8 +415,16 @@ export default function TimelineChart({
               <CartesianGrid strokeDasharray="3 3" stroke="#1A1D2A" vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#1E2130" }} tickLine={false} dy={8} interval="preserveStartEnd" />
               <YAxis yAxisId="s" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
-              {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />}
+              {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: PHYSICAL_COLOR }} axisLine={false} tickLine={false} width={50}
+                domain={[0, Math.ceil(physicalMax * 1.3)]} />}
               <Tooltip content={<CampTip territory={territory} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
+
+              {/* Pre-release phase shading */}
+              {phases && phases.first < phases.albumDate && (
+                <ReferenceArea x1={phases.first} x2={phases.albumDate} yAxisId="s" fill="#6B728008"
+                  label={{ value: "PRE-RELEASE", position: "insideTopLeft", fill: "#4B5563", fontSize: 9, fontWeight: 700 }} />
+              )}
+
               {pinnedDate && <ReferenceLine x={pinnedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2.5} strokeOpacity={0.9} />}
               {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
               {moments.map((m, i) => <ReferenceLine key={`m${i}`} x={m.date} yAxisId="s" stroke={m.color} strokeDasharray="4 6" strokeWidth={1} strokeOpacity={0.35} />)}
@@ -423,7 +432,7 @@ export default function TimelineChart({
               <Line yAxisId="s" type="monotone" dataKey="total_streams" stroke={TOTAL_COLOR} strokeWidth={2.5}
                 dot={isSparse ? { r: 4, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 } : false}
                 activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }} name="Total Streams" />
-              {hasPhysical && <Bar yAxisId="p" dataKey="physical_units" fill={`${PHYSICAL_COLOR}30`} stroke={PHYSICAL_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="Physical" barSize={16} />}
+              {hasPhysical && <Bar yAxisId="p" dataKey="physical_units" fill={`${PHYSICAL_COLOR}40`} stroke={PHYSICAL_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="Physical" barSize={20} />}
             </ComposedChart>
           </ResponsiveContainer>
         </div>

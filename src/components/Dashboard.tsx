@@ -8,8 +8,9 @@ import {
   getCampaignSummary, getTrackModeContext,
   buildUKTrackContext, buildUKMilestones, UKTrackContext,
   classifyMomentImpact, type ClassifiedMoment, type ImpactTier,
+  getCampaignLearningsFlat,
 } from "@/lib/transforms";
-import { getCategoryConfig } from "@/lib/event-categories";
+import { getCategoryConfig, getAllCategories } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
 import CampaignLearnings from "./CampaignLearnings";
 import TimelineChart, { ChartMode } from "./TimelineChart";
@@ -50,6 +51,11 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const ukTrackContext = useMemo(() => sheet ? buildUKTrackContext(sheet) : [], [sheet]);
   const ukMilestones = useMemo(() => sheet ? buildUKMilestones(sheet) : [], [sheet]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
+  const topLearning = useMemo(() => {
+    if (!sheet) return null;
+    const items = getCampaignLearningsFlat(sheet, territory);
+    return items.length > 0 ? items[0] : null;
+  }, [sheet, territory]);
   const moments = useMemo(() => {
     if (!sheet) return [];
     const base = getAllMoments(sheet);
@@ -135,18 +141,15 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Team Focus */}
-        <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-2.5">
-          <div className="flex items-center gap-3 mb-1">
-            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80">Team Focus</p>
-            <span className="text-[9px] text-[#4B5563]">&middot; Post-release momentum</span>
+        {/* Top Learning — surfaced above the fold */}
+        {topLearning && (
+          <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-2.5">
+            <div className="flex items-center gap-3 mb-1">
+              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80">Key Takeaway</p>
+            </div>
+            <p className="text-[12px] font-semibold text-white">{topLearning.text}</p>
           </div>
-          <p className="text-[12px] font-semibold text-white mb-0.5">Focus: &ldquo;Doesn&rsquo;t Just Happen&rdquo;</p>
-          <div className="flex gap-5">
-            <p className="text-[10px] text-[#9CA3AF]"><span className="text-[#6B7280] font-medium">UK:</span> Outstore Run (23 Mar)</p>
-            <p className="text-[10px] text-[#9CA3AF]"><span className="text-[#6B7280] font-medium">US:</span> Tour window (May)</p>
-          </div>
-        </div>
+        )}
 
         {/* Stats */}
         <CampaignInsights sheet={sheet} territory={territory} />
@@ -197,14 +200,24 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
           {logExpanded && (
             <div className="px-5 pb-5">
-              {/* View Toggle */}
-              <div className="flex items-center gap-1 mb-4 bg-[#0D1117] rounded-lg p-0.5 w-fit">
-                {(["impact", "timeline"] as const).map(v => (
-                  <button key={v} onClick={() => setTimelineView(v)}
-                    className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${timelineView === v ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
-                    {v === "impact" ? "Impact View" : "Timeline View"}
-                  </button>
-                ))}
+              {/* View Toggle + Legend */}
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-1 bg-[#0D1117] rounded-lg p-0.5 w-fit">
+                  {(["impact", "timeline"] as const).map(v => (
+                    <button key={v} onClick={() => setTimelineView(v)}
+                      className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${timelineView === v ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
+                      {v === "impact" ? "Impact View" : "Timeline View"}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  {Object.entries(getAllCategories()).map(([key, cfg]) => (
+                    <div key={key} className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
+                      <span className="text-[9px] text-[#6B7280]">{cfg.label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {timelineView === "impact" ? (
