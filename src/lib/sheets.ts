@@ -152,6 +152,9 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
       campaign_type: "album",
       release_date: "",
       default_territory: "global",
+      chart_result: "",
+      chart_forecast: "",
+      outcome_driver: "",
     };
   }
   const r = rows[0];
@@ -161,6 +164,9 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
     campaign_type: cleanCampaignType(r[2]),
     release_date: isValidDate(r[3]) ? r[3].trim() : "",
     default_territory: cleanTerritory(r[4]),
+    chart_result: (r[5] || "").trim(),
+    chart_forecast: (r[6] || "").trim(),
+    outcome_driver: (r[7] || "").trim(),
   };
 }
 

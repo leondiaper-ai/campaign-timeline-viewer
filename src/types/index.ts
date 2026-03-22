@@ -32,6 +32,9 @@ export interface CampaignSetup {
   campaign_type: CampaignType;
   release_date: string; // ISO YYYY-MM-DD
   default_territory: Territory;
+  chart_result: string;   // e.g. "Top 3", "#1"
+  chart_forecast: string; // e.g. "Top 10", "Top 20"
+  outcome_driver: string; // e.g. "physical sales", "streaming"
 }
 
 // ——— Tab 2: tracks (one row per track) ———————————————————

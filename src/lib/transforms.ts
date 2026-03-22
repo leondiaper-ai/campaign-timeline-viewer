@@ -501,66 +501,50 @@ export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territor
 }
 
 
-// ——— Grouped Campaign Learnings ——————————————————————————
+// ——— Campaign Learnings (flat, outcome-first) ——————————————
 export interface LearningItem {
   text: string;
   sentiment: "positive" | "neutral" | "negative";
 }
 
+// Legacy types kept for backward compat
 export type LearningGroup = "music" | "campaign" | "commercial" | "takeaway";
+export interface GroupedLearnings { music: LearningItem[]; campaign: LearningItem[]; commercial: LearningItem[]; takeaway: LearningItem[]; }
+export interface CampaignLearning { dateLabel: string; eventType: string; text: string; phase: "pre" | "peak" | "post"; }
+export function getCampaignLearnings(): CampaignLearning[] { return []; }
 
-export interface GroupedLearnings {
-  music: LearningItem[];
-  campaign: LearningItem[];
-  commercial: LearningItem[];
-  takeaway: LearningItem[];
-}
-
-// Keep old interface for backward compat
-export interface CampaignLearning {
-  dateLabel: string;
-  eventType: string;
-  text: string;
-  phase: "pre" | "peak" | "post";
-}
-
-export function getCampaignLearnings(sheet: CampaignSheetData, territory: Territory): CampaignLearning[] {
-  // Legacy — kept for type compat, but GroupedLearnings is preferred
-  return [];
-}
-
-export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territory): GroupedLearnings {
-  const result: GroupedLearnings = { music: [], campaign: [], commercial: [], takeaway: [] };
+// Flat list — max 4 bullets, outcome line first
+export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
+  const items: LearningItem[] = [];
   const fmtNum = (n: number) => n >= 1_000_000 ? `${(n/1_000_000).toFixed(1)}M` : n >= 1_000 ? `${(n/1_000).toFixed(0)}K` : String(n);
   const albumDate = sheet.setup.release_date;
-  if (!albumDate) return result;
+  if (!albumDate) return items;
 
-  // ——— Shared data extraction ———
+  // ——— Data extraction ———
   const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
   const weeklyTrackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const pcs = sheet.paidCampaigns || [];
+  const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
 
-  // Track analysis: { trackName -> { pre, post } }
+  // Track analysis
   const trackAnalysis = new Map<string, { pre: number; post: number }>();
   if (hasDailyData) {
     for (const r of sheet.dailyTrackData) {
-      const existing = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
-      if (r.date < albumDate) existing.pre += r.global_streams;
-      else existing.post += r.global_streams;
-      trackAnalysis.set(r.track_name, existing);
+      const e = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
+      if (r.date < albumDate) e.pre += r.global_streams; else e.post += r.global_streams;
+      trackAnalysis.set(r.track_name, e);
     }
   } else if (weeklyTrackRows.length > 0) {
     for (const r of weeklyTrackRows) {
-      const existing = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
-      if (r.week_start_date < albumDate) existing.pre += r[streamKey];
-      else existing.post += r[streamKey];
-      trackAnalysis.set(r.track_name, existing);
+      const e = trackAnalysis.get(r.track_name) || { pre: 0, post: 0 };
+      if (r.week_start_date < albumDate) e.pre += r[streamKey]; else e.post += r[streamKey];
+      trackAnalysis.set(r.track_name, e);
     }
   }
 
-  // Peak streams (daily or weekly)
-  const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL")
-    .sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
+  // Peak + drop
+  const totalRows = (sheet.weeklyData || []).filter(r => r.track_name === "TOTAL").sort((a, b) => a.week_start_date.localeCompare(b.week_start_date));
   let peakStreams = 0, peakDate = "";
   const dailyTotals = new Map<string, number>();
   if (hasDailyData) {
@@ -570,134 +554,56 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
     const peakRow = totalRows.reduce((best, r) => r[streamKey] > best[streamKey] ? r : best, totalRows[0]);
     peakStreams = peakRow[streamKey]; peakDate = peakRow.week_start_date;
   }
-
-  // Post-peak drop %
   let dropPct = 0;
   if (hasDailyData && peakDate) {
     const postDays = [...dailyTotals.entries()].filter(([d]) => d > peakDate).sort((a, b) => a[0].localeCompare(b[0])).slice(0, 7);
-    if (postDays.length >= 3) {
-      const postAvg = postDays.reduce((s, [, v]) => s + v, 0) / postDays.length;
-      dropPct = Math.round((1 - postAvg / peakStreams) * 100);
-    }
+    if (postDays.length >= 3) { const avg = postDays.reduce((s, [, v]) => s + v, 0) / postDays.length; dropPct = Math.round((1 - avg / peakStreams) * 100); }
   } else if (totalRows.length >= 2 && peakDate) {
     const next = totalRows.find(r => r.week_start_date > peakDate);
     if (next) dropPct = Math.round((1 - next[streamKey] / peakStreams) * 100);
   }
 
-  // ——— MUSIC PERFORMANCE (max 2 bullets) ———
-  if (trackAnalysis.size > 0) {
-    const preSorted = [...trackAnalysis.entries()].filter(([, a]) => a.pre > 0).sort((a, b) => b[1].pre - a[1].pre);
-    const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
-    const preLeader = preSorted[0]?.[0];
-    const postLeader = postSorted[0]?.[0];
-
-    // 1. Leadership line — combined pre/post
-    if (preLeader && postLeader) {
-      if (preLeader !== postLeader) {
-        result.music.push({ text: `Leadership shifted from "${preLeader}" (pre) to "${postLeader}" post-release`, sentiment: "neutral" });
-      } else {
-        result.music.push({ text: `"${postLeader}" dominated throughout — ${fmtNum(postSorted[0][1].post)} post-release streams`, sentiment: "positive" });
-      }
-    } else if (postLeader) {
-      result.music.push({ text: `"${postLeader}" dominated post-release (~${fmtNum(postSorted[0][1].post)} streams)`, sentiment: "positive" });
-    }
-
-    // 2. Breakout / momentum insight (only if adds something new)
-    const roles = inferTrackRoles(sheet, territory);
-    const breakout = roles.find(r => r.role === "POST_RELEASE_BREAKOUT");
-    if (breakout && breakout.track_name !== postLeader) {
-      result.music.push({ text: `"${breakout.track_name}" only track sustaining momentum post-release`, sentiment: "positive" });
-    } else if (postSorted.length >= 2 && postLeader) {
-      // Concentration check: does top track dwarf #2?
-      const topPost = postSorted[0][1].post;
-      const secondPost = postSorted[1][1].post;
-      if (secondPost > 0 && topPost / secondPost >= 2) {
-        result.music.push({ text: `Post-release streams concentrated in one track — limited catalogue spread`, sentiment: "negative" });
-      }
-    }
+  // ——— BULLET 1: Outcome vs forecast ———
+  const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
+  if (chart_result && chart_forecast) {
+    const driverNote = outcome_driver ? ` → ${outcome_driver} made the difference` : "";
+    const beat = chart_result.replace(/[^0-9]/g, "") && chart_forecast.replace(/[^0-9]/g, "")
+      ? Number(chart_result.replace(/[^0-9]/g, "")) < Number(chart_forecast.replace(/[^0-9]/g, ""))
+      : false;
+    items.push({ text: `${chart_result} result vs ${chart_forecast} forecast${driverNote}`, sentiment: beat ? "positive" : "neutral" });
+  } else if (peakStreams > 0) {
+    // Fallback: no forecast data, lead with peak performance
+    const driver = physicalTotal > 0 ? "physical + streaming" : pcs.length > 0 ? "paid + editorial" : "organic";
+    items.push({ text: `Peak of ~${fmtNum(peakStreams)} streams → driven by ${driver}`, sentiment: "positive" });
   }
 
-  // ——— CAMPAIGN IMPACT (max 3 bullets) ———
-  const pcs = sheet.paidCampaigns || [];
+  // ——— BULLET 2: What drove the launch ———
+  const launchDrivers: string[] = [];
   if (pcs.length > 0) {
     const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
     const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
-    const withIntent = pcs.filter(p => p.intent_total > 0);
-    const avgIntent = withIntent.length > 0 ? withIntent.reduce((s, p) => s + p.intent_total, 0) / withIntent.length : 0;
-
-    // Best territory
-    const territories = [...new Set(withIntent.map(p => p.territory))];
-    let bestTerritory: string | null = null;
-    if (territories.length >= 2) {
-      const avgByT = new Map<string, { total: number; count: number }>();
-      for (const p of withIntent) { const e = avgByT.get(p.territory) || { total: 0, count: 0 }; e.total += p.intent_total; e.count += 1; avgByT.set(p.territory, e); }
-      const ranked = [...avgByT.entries()].map(([t, d]) => ({ t, avg: d.total / d.count })).sort((a, b) => b.avg - a.avg);
-      if (ranked.length >= 2 && ranked[0].avg - ranked[1].avg > 2) bestTerritory = ranked[0].t;
-    }
-
-    // 1. Verdict line — spend + grade + best market, all in one
-    if (avgIntent > 0) {
-      const grade = avgIntent >= 35 ? "exceptional" : avgIntent >= 30 ? "strong" : avgIntent >= 25 ? "on benchmark" : "below benchmark";
-      const sentiment: LearningItem["sentiment"] = avgIntent >= 30 ? "positive" : avgIntent >= 25 ? "neutral" : "negative";
-      const territoryNote = bestTerritory ? `, strongest in ${bestTerritory}` : "";
-      result.campaign.push({ text: `${fmtSpend} spent — paid performed ${grade} (${Math.round(avgIntent)}% avg intent${territoryNote})`, sentiment });
-    } else if (totalSpend > 0) {
-      result.campaign.push({ text: `${fmtSpend} spent across ${pcs.length} campaign${pcs.length > 1 ? "s" : ""} — no intent data available`, sentiment: "neutral" });
-    }
-
-    // 2. Deployment timing insight
-    const prePaid = pcs.filter(p => p.start_date && p.start_date < albumDate);
-    const postPaid = pcs.filter(p => p.start_date && p.start_date >= albumDate);
-    if (prePaid.length > 0 && postPaid.length === 0) {
-      result.campaign.push({ text: `Paid concentrated pre-release — effective for spike, no post-release support`, sentiment: "neutral" });
-    } else if (prePaid.length > 0 && postPaid.length > 0) {
-      result.campaign.push({ text: `Paid deployed across pre and post-release — sustained visibility window`, sentiment: "positive" });
-    } else if (postPaid.length > 0 && prePaid.length === 0) {
-      result.campaign.push({ text: `Paid deployed post-release only — no pre-release paid push`, sentiment: "neutral" });
-    }
+    launchDrivers.push(`paid (${fmtSpend})`);
+  }
+  const editorialNearRelease = (sheet.moments || []).filter(m =>
+    m.moment_type.toLowerCase() === "editorial" && Math.abs(new Date(m.date).getTime() - new Date(albumDate).getTime()) < 14 * 86400000
+  );
+  if (editorialNearRelease.length > 0) launchDrivers.push("editorial");
+  if (physicalTotal > 0) launchDrivers.push("physical sales");
+  if (launchDrivers.length > 0) {
+    items.push({ text: `Launch worked → ${launchDrivers.join(" + ")} drove the spike`, sentiment: "positive" });
   }
 
-  // ——— COMMERCIAL SIGNALS (max 2 bullets) ———
-  const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
-
-  // Combine physical + momentum into interpretive lines
-  if (physicalTotal > 0 && peakDate) {
-    const physByWeek = new Map<string, number>();
-    for (const r of sheet.physicalData) physByWeek.set(r.week_start_date, (physByWeek.get(r.week_start_date) || 0) + r.units);
-    const physPeakWeek = [...physByWeek.entries()].sort((a, b) => b[1] - a[1])[0];
-    if (physPeakWeek) {
-      const daysDiff = Math.abs(new Date(physPeakWeek[0]).getTime() - new Date(peakDate).getTime()) / 86400000;
-      if (daysDiff <= 7) {
-        result.commercial.push({ text: `Physical sales amplified the release spike rather than sustaining momentum`, sentiment: "neutral" });
-      } else {
-        result.commercial.push({ text: `Physical sales (~${fmtNum(physicalTotal)} units) landed off-peak — limited streaming impact`, sentiment: "negative" });
-      }
-    }
-  }
-
+  // ——— BULLET 3: What didn't sustain ———
   if (dropPct > 30) {
-    result.commercial.push({ text: `~${dropPct}% drop post-peak — momentum not sustained beyond release window`, sentiment: "negative" });
+    items.push({ text: `Didn't sustain → streams dropped ~${dropPct}% post-peak`, sentiment: "negative" });
+  } else if (dropPct > 10) {
+    items.push({ text: `Moderate drop → ~${dropPct}% decline post-peak, normal curve`, sentiment: "neutral" });
   }
 
-  // ——— KEY TAKEAWAY (outcome summary + one edge insight) ———
-  // 1. Outcome summary
-  const wasReleaseFocused = dropPct > 30;
+  // ——— BULLET 4: Edge insight / what to change ———
   const hadPaid = pcs.length > 0;
-  const paidWorked = pcs.filter(p => p.intent_total >= 25).length > 0;
-
-  if (wasReleaseFocused && hadPaid && paidWorked) {
-    result.takeaway.push({ text: `Campaign optimised for release impact — strong launch, but momentum not sustained post-release`, sentiment: "neutral" });
-  } else if (wasReleaseFocused) {
-    result.takeaway.push({ text: `Momentum concentrated around release window — consider extending paid and editorial push`, sentiment: "negative" });
-  } else if (hadPaid && paidWorked && peakStreams > 0) {
-    result.takeaway.push({ text: `Effective campaign — paid and editorial alignment created sustained performance`, sentiment: "positive" });
-  } else if (peakStreams > 0) {
-    result.takeaway.push({ text: `Release peak (~${fmtNum(peakStreams)}) achieved but without clear paid amplification`, sentiment: "neutral" });
-  }
-
-  // 2. One "edge" insight — the slightly uncomfortable truth
   if (hadPaid && dropPct > 30) {
-    result.takeaway.push({ text: `Paid drove the spike but didn't materially change the long-term trajectory`, sentiment: "negative" });
+    items.push({ text: `Paid boosted the moment, not long-term growth`, sentiment: "negative" });
   } else if (trackAnalysis.size > 0) {
     const postSorted = [...trackAnalysis.entries()].filter(([, a]) => a.post > 0).sort((a, b) => b[1].post - a[1].post);
     if (postSorted.length >= 2) {
@@ -705,11 +611,20 @@ export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territo
       const totalPost = postSorted.reduce((s, [, a]) => s + a.post, 0);
       const sharePct = Math.round((topPost / totalPost) * 100);
       if (sharePct >= 50) {
-        result.takeaway.push({ text: `Post-release dependent on a single track (${sharePct}% of streams) — catalogue breadth underperformed`, sentiment: "negative" });
+        items.push({ text: `Post-release leaned on one track (${sharePct}% of streams) — spread was thin`, sentiment: "negative" });
       }
     }
   }
 
+  return items.slice(0, 4);
+}
+
+// Legacy wrapper — returns GroupedLearnings by distributing flat items
+export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territory): GroupedLearnings {
+  const flat = getCampaignLearningsFlat(sheet, territory);
+  const result: GroupedLearnings = { music: [], campaign: [], commercial: [], takeaway: [] };
+  // Put all items in takeaway for backward compat
+  result.takeaway = flat;
   return result;
 }
 
