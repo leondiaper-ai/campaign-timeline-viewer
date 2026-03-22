@@ -39,6 +39,7 @@ interface Props {
   trackRoles: TrackWithRole[];
   visibleEventDates: Set<string>;
   highlightedDate: string | null;
+  pinnedDate?: string | null;
   handoverMoment?: HandoverMoment | null;
   chartInsight?: string | null;
   trackModeContext?: string | null;
@@ -290,7 +291,7 @@ function getPhases(data: ChartDataPoint[], albumDate?: string) {
 
 export default function TimelineChart({
   data, selectedTracks, trackRoles, visibleEventDates,
-  highlightedDate, handoverMoment, chartInsight, trackModeContext,
+  highlightedDate, pinnedDate, handoverMoment, chartInsight, trackModeContext,
   chartMode, onChartModeChange, albumDate, ukMilestones, territory,
   paidCampaigns, moments: allMoments,
 }: Props) {
@@ -404,7 +405,8 @@ export default function TimelineChart({
               <YAxis yAxisId="s" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
               {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />}
               <Tooltip content={<CampTip territory={territory} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
-              {highlightedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
+              {pinnedDate && <ReferenceLine x={pinnedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2.5} strokeOpacity={0.9} />}
+              {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
               {moments.map((m, i) => <ReferenceLine key={`m${i}`} x={m.date} yAxisId="s" stroke={m.color} strokeDasharray="4 6" strokeWidth={1} strokeOpacity={0.35} />)}
               <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={`${TOTAL_COLOR}12`} stroke="none" />
               <Line yAxisId="s" type="monotone" dataKey="total_streams" stroke={TOTAL_COLOR} strokeWidth={2.5}
@@ -425,7 +427,8 @@ export default function TimelineChart({
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#151825" }} tickLine={false} dy={8} interval="preserveStartEnd" />
               <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
               <Tooltip content={<TrackTip trackRoles={trackRoles} ukMilestones={ukMilestones} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
-              {highlightedDate && <ReferenceLine x={highlightedDate} stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
+              {pinnedDate && <ReferenceLine x={pinnedDate} stroke="#FBBF24" strokeWidth={2.5} strokeOpacity={0.9} />}
+              {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
 
               {/* Phase background shading */}
               {phases && (

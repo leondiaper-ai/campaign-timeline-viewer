@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback, useEffect } from "react";
+import { useMemo, useState, useCallback, useEffect, useRef } from "react";
 import { AppData, LoadedCampaign, Territory, Moment, PaidCampaignRow } from "@/types";
 import {
   buildChartData, getAllTrackNames, getAllMoments,
@@ -88,7 +88,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const supporting = useMemo(() => classified.filter(c => c.tier === "supporting").sort((a, b) => a.moment.date.localeCompare(b.moment.date)), [classified]);
   const background = useMemo(() => classified.filter(c => c.tier === "background").sort((a, b) => a.moment.date.localeCompare(b.moment.date)), [classified]);
 
-  const handleMomentClick = useCallback((date: string) => { setPinnedDate(prev => prev === date ? null : date); }, []);
+  const chartRef = useRef<HTMLDivElement>(null);
+  const handleMomentClick = useCallback((date: string) => {
+    const next = pinnedDate === date ? null : date;
+    setPinnedDate(next);
+    if (next && chartRef.current) {
+      chartRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [pinnedDate]);
   const effectiveHighlight = pinnedDate || highlightedDate;
   const handleCampaignChange = useCallback((idx: number) => { setCampaignIdx(idx); setHighlightedDate(null); setPinnedDate(null); setChartMode("campaign"); }, []);
 
@@ -145,9 +152,27 @@ export default function Dashboard({ initialData }: DashboardProps) {
         <CampaignInsights sheet={sheet} territory={territory} />
 
         {/* Chart */}
-        <div className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
+        <div ref={chartRef} className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5 scroll-mt-4">
+          {/* Pinned moment context label */}
+          {pinnedDate && (() => {
+            const pm = moments.find(m => m.date === pinnedDate);
+            const pc = classified.find(c => c.moment.date === pinnedDate);
+            if (!pm) return null;
+            return (
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#FBBF24] animate-pulse" />
+                  <span className="text-[11px] font-medium text-white">{pm.moment_title}</span>
+                  {pc?.context && <span className="text-[10px] text-[#9CA3AF]">→ {pc.context.charAt(0).toLowerCase()}{pc.context.slice(1)}</span>}
+                  <span className="text-[10px] text-[#4B5563]">{fmtShort(pinnedDate)}</span>
+                </div>
+                <button onClick={() => setPinnedDate(null)} className="text-[9px] text-[#4B5563] hover:text-[#9CA3AF] transition-colors">Clear</button>
+              </div>
+            );
+          })()}
           <TimelineChart data={chartData} selectedTracks={allTrackNames} trackRoles={trackRoles}
             visibleEventDates={keyMomentDates} highlightedDate={effectiveHighlight}
+            pinnedDate={pinnedDate}
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
             chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
             ukMilestones={ukMilestones} territory={territory}
