@@ -346,10 +346,20 @@ export default function TimelineChart({
           ) : (
             topPost ? (
               <span className="text-[#6B7280]">
-                {topPre && topPre.track_name !== topPost.track_name && (
-                  <>Pre: <span className="font-medium" style={{ color: topPre.color }}>{topPre.track_name}</span> · </>
+                {topPre && topPre.track_name !== topPost.track_name ? (
+                  <>
+                    <span className="text-[#9CA3AF] font-medium">Lead track shift</span>
+                    <span className="text-[#4B5563] mx-1">(pre → post release):</span>
+                    <span className="font-medium" style={{ color: topPre.color }}>{topPre.track_name}</span>
+                    <span className="text-[#FBBF24] mx-1">→</span>
+                    <span className="font-medium" style={{ color: topPost.color }}>{topPost.track_name}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-[#9CA3AF] font-medium">Lead track:</span>
+                    <span className="font-medium ml-1" style={{ color: topPost.color }}>{topPost.track_name}</span>
+                  </>
                 )}
-                Post: <span className="font-medium" style={{ color: topPost.color }}>{topPost.track_name}</span>
               </span>
             ) : (
               <span className="text-[#4B5563]">{trackModeContext || "Individual track performance"}</span>
