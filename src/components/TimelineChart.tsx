@@ -7,7 +7,7 @@ import {
 } from "recharts";
 import { ChartDataPoint, Moment, Territory, PaidCampaignRow, type EventCategory } from "@/types";
 import { getCategoryConfig } from "@/lib/event-categories";
-import { TrackWithRole, HandoverMoment, getTrackRoleLabel, UKMilestone } from "@/lib/transforms";
+import { TrackWithRole, HandoverMoment, UKMilestone } from "@/lib/transforms";
 
 const TOTAL_COLOR = "#6C9EFF";
 const PHYSICAL_COLOR = "#4ADE80";
@@ -153,32 +153,33 @@ function TrackTip({ active, payload, label, trackRoles, ukMilestones }: any) {
   if (!active || !payload?.length) return null;
   const dp = payload[0]?.payload;
   if (!dp) return null;
+  const ranked = (trackRoles as TrackWithRole[])
+    .filter(tr => dp[tr.track_name] != null && (dp[tr.track_name] as number) > 0)
+    .sort((a: TrackWithRole, b: TrackWithRole) => (dp[b.track_name] as number) - (dp[a.track_name] as number));
   return (
     <div className="bg-[#1A1D2E] rounded-xl border border-[#2A2D3E] p-3 max-w-xs shadow-2xl">
       <p className="text-[11px] font-semibold text-[#6B7280] mb-2">{label ? fmtFull(label) : ""}</p>
-      {(trackRoles as TrackWithRole[])
-        .filter(tr => dp[tr.track_name] != null && (dp[tr.track_name] as number) > 0)
-        .sort((a: TrackWithRole, b: TrackWithRole) => (dp[b.track_name] as number) - (dp[a.track_name] as number))
-        .map((tr: TrackWithRole, i: number) => {
-          const ukm = (ukMilestones as UKMilestone[] || []).find((m: UKMilestone) => m.date === label && m.track_name === tr.track_name);
-          return (
-            <div key={i} className="mb-1">
-              <div className="flex items-center justify-between gap-4">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tr.color }} />
-                  <span className="text-xs text-[#9CA3AF]">{tr.track_name}</span>
-                </div>
-                <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp[tr.track_name] as number)}</span>
+      {ranked.map((tr: TrackWithRole, i: number) => {
+        const ukm = (ukMilestones as UKMilestone[] || []).find((m: UKMilestone) => m.date === label && m.track_name === tr.track_name);
+        const isTop = i < 3;
+        return (
+          <div key={i} className={`${i > 0 ? "mt-1" : ""} ${!isTop && i === 3 ? "mt-2 pt-1.5 border-t border-[#2A2D3E]/50" : ""}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: tr.color, opacity: isTop ? 1 : 0.4 }} />
+                <span className={`text-xs ${isTop ? "text-[#D1D5DB] font-medium" : "text-[#6B7280]"}`}>{tr.track_name}</span>
               </div>
-              {ukm && (
-                <div className="flex items-center justify-between gap-4 ml-4">
-                  <span className="text-[10px] text-[#6B7280]">UK</span>
-                  <span className="text-[10px] text-[#6B7280] tabular-nums">{fmt(ukm.uk_streams)}</span>
-                </div>
-              )}
+              <span className={`text-xs tabular-nums ${isTop ? "font-semibold text-white" : "font-normal text-[#6B7280]"}`}>{fmt(dp[tr.track_name] as number)}</span>
             </div>
-          );
-        })}
+            {ukm && isTop && (
+              <div className="flex items-center justify-between gap-4 ml-4">
+                <span className="text-[10px] text-[#6B7280]">UK</span>
+                <span className="text-[10px] text-[#6B7280] tabular-nums">{fmt(ukm.uk_streams)}</span>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -298,8 +299,21 @@ export default function TimelineChart({
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
   const isCampaign = chartMode === "campaign";
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
-  // Detect sparse data (e.g. territory view with few dates) — show dots so single points are visible
   const isSparse = useMemo(() => data.filter(d => d.total_streams > 0).length <= 3, [data]);
+
+  // Key vs muted tracks for track mode
+  const keyTracks = useMemo(() => trackRoles.filter(tr => tr.opacity >= 0.5), [trackRoles]);
+  const topTrack = useMemo(() => {
+    if (keyTracks.length === 0) return null;
+    // Find the key track with highest total streams across all data points
+    let best: TrackWithRole | null = null;
+    let bestSum = 0;
+    for (const tr of keyTracks) {
+      const sum = data.reduce((s, dp) => s + ((dp as Record<string, unknown>)[tr.track_name] as number || 0), 0);
+      if (sum > bestSum) { bestSum = sum; best = tr; }
+    }
+    return best;
+  }, [keyTracks, data]);
 
   return (
     <div className="w-full">
@@ -319,7 +333,11 @@ export default function TimelineChart({
               <span className="text-[#4B5563]">{territory === "UK" ? "UK campaign performance" : "Global campaign performance"}</span>
             )
           ) : (
-            <span className="text-[#4B5563]">{trackModeContext || "Individual track performance"}</span>
+            topTrack ? (
+              <span className="text-[#6B7280]">Top Track: <span className="font-medium" style={{ color: topTrack.color }}>{topTrack.track_name}</span></span>
+            ) : (
+              <span className="text-[#4B5563]">{trackModeContext || "Individual track performance"}</span>
+            )
           )}
         </span>
       </div>
@@ -404,7 +422,8 @@ export default function TimelineChart({
               )}
 
               {/* Album release marker */}
-              {albumDate && <ReferenceLine x={albumDate} stroke="#6B7280" strokeWidth={1} strokeDasharray="4 4" strokeOpacity={0.4} />}
+              {albumDate && <ReferenceLine x={albumDate} stroke="#8B5CF6" strokeWidth={1.5} strokeDasharray="4 4" strokeOpacity={0.5}
+                label={{ value: "Album Release", position: "insideTopLeft", fill: "#8B5CF6", fontSize: 9, fontWeight: 600, offset: 4 }} />}
 
               {/* DJH handover annotation */}
               {handoverMoment && (
@@ -443,14 +462,13 @@ export default function TimelineChart({
             {hasPhysical && <LI color={PHYSICAL_COLOR} label={territory === "UK" ? "UK Physical" : "Physical"} type="bar" />}
           </>
         ) : (
-          trackRoles
-            .filter(tr => selectedTracks.includes(tr.track_name))
+          keyTracks
             .sort((a, b) => b.strokeWidth - a.strokeWidth)
             .map(tr => (
               <LI key={tr.track_name} color={tr.color}
-                label={`${getTrackRoleLabel(tr.role)} — ${tr.track_name}`}
-                type="line" opacity={tr.opacity}
-                bold={tr.role === "POST_RELEASE_BREAKOUT"} />
+                label={tr.track_name}
+                type="line" opacity={1}
+                bold={topTrack?.track_name === tr.track_name} />
             ))
         )}
       </div>
