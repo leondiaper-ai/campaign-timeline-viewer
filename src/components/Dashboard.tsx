@@ -80,63 +80,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
   const albumDate = sheet?.setup.release_date || "";
   const [showBackground, setShowBackground] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-
-  // ——— DEBUG: raw data source diagnostics ———
-  const debugInfo = useMemo(() => {
-    if (!sheet) return null;
-    const dtd = sheet.dailyTrackData || [];
-    const dtt = sheet.dailyTerritoryData || [];
-    const wd = sheet.weeklyData || [];
-
-    // Global daily data
-    const globalDates = dtd.map(r => r.date).sort();
-    const globalTracks = [...new Set(dtd.map(r => r.track_name))];
-
-    // Territory daily data (UK)
-    const ukTerrRows = dtt.filter(r => r.territory === "UK");
-    const ukTerrDates = ukTerrRows.map(r => r.date).sort();
-    const ukTerrTracks = [...new Set(ukTerrRows.map(r => r.track_name))];
-    const allTerrValues = [...new Set(dtt.map(r => r.territory))];
-
-    // Weekly data
-    const wdWithUK = wd.filter(r => r.streams_uk > 0);
-    const wdDates = wd.map(r => r.week_start_date).sort();
-    const wdUKDates = wdWithUK.map(r => r.week_start_date).sort();
-
-    // Which path does buildChartData use?
-    const usesDailyPath = dtd.length > 0;
-    const usesTerrData = territory !== "global" && dtt.length > 0;
-
-    // Chart data inspection
-    const cdNonZero = chartData.filter(d => d.total_streams > 0);
-    const cdDates = chartData.map(d => d.date).sort();
-
-    // Per-track in chart data (for current territory)
-    const trackChartInfo = allTrackNames.map(tn => {
-      const vals = chartData.filter(d => typeof d[tn] === "number" && (d[tn] as number) > 0);
-      const dates = vals.map(d => d.date).sort();
-      return {
-        name: tn,
-        nonZeroPoints: vals.length,
-        minDate: dates[0] || "none",
-        maxDate: dates[dates.length - 1] || "none",
-        first3: vals.slice(0, 3).map(d => `${d.date}=${d[tn]}`),
-      };
-    });
-
-    return {
-      territory,
-      chartPath: usesDailyPath ? "daily" : "weekly",
-      terrDataUsed: usesTerrData ? "dailyTerritoryData (UK)" : usesDailyPath ? "dailyTrackData (global)" : "weeklyData",
-      dailyTrackData: { count: dtd.length, tracks: globalTracks, minDate: globalDates[0], maxDate: globalDates[globalDates.length - 1] },
-      dailyTerritoryData: { count: dtt.length, territories: allTerrValues, ukCount: ukTerrRows.length, ukTracks: ukTerrTracks, ukMinDate: ukTerrDates[0], ukMaxDate: ukTerrDates[ukTerrDates.length - 1], ukDates: [...new Set(ukTerrDates)] },
-      weeklyData: { count: wd.length, minDate: wdDates[0], maxDate: wdDates[wdDates.length - 1], ukNonZero: wdWithUK.length, ukMinDate: wdUKDates[0], ukMaxDate: wdUKDates[wdUKDates.length - 1] },
-      chartData: { totalPoints: chartData.length, nonZeroPoints: cdNonZero.length, minDate: cdDates[0], maxDate: cdDates[cdDates.length - 1] },
-      trackChartInfo,
-    };
-  }, [sheet, territory, chartData, allTrackNames]);
-
   // Classify moments by impact tier
   const classified = useMemo(() => {
     if (!sheet) return [] as ClassifiedMoment[];
@@ -384,51 +327,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
                 </tbody>
               </table>
             </div>
-          </div>
-        )}
-
-        {/* ——— DEBUG PANEL (temporary) ——— */}
-        {debugInfo && (
-          <div className="bg-[#0a0c12] rounded-xl border border-[#2A2D3E] p-4 mt-4">
-            <button onClick={() => setShowDebug(!showDebug)} className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] hover:text-[#FCD34D]">
-              🔍 DATA DEBUG {showDebug ? "▲" : "▼"}
-            </button>
-            {showDebug && (
-              <pre className="mt-3 text-[10px] text-[#9CA3AF] font-mono whitespace-pre-wrap leading-relaxed overflow-x-auto">
-{`Territory: ${debugInfo.territory}
-Chart path: ${debugInfo.chartPath}
-Data source for streams: ${debugInfo.terrDataUsed}
-
-═══ dailyTrackData (global source) ═══
-  Rows: ${debugInfo.dailyTrackData.count}
-  Tracks: ${debugInfo.dailyTrackData.tracks.join(", ") || "none"}
-  Date range: ${debugInfo.dailyTrackData.minDate || "none"} → ${debugInfo.dailyTrackData.maxDate || "none"}
-
-═══ dailyTerritoryData (UK source) ═══
-  Total rows: ${debugInfo.dailyTerritoryData.count}
-  Territory values: ${debugInfo.dailyTerritoryData.territories.join(", ") || "none"}
-  UK rows: ${debugInfo.dailyTerritoryData.ukCount}
-  UK tracks: ${debugInfo.dailyTerritoryData.ukTracks.join(", ") || "none"}
-  UK date range: ${debugInfo.dailyTerritoryData.ukMinDate || "none"} → ${debugInfo.dailyTerritoryData.ukMaxDate || "none"}
-  UK dates: ${debugInfo.dailyTerritoryData.ukDates.join(", ") || "none"}
-
-═══ weeklyData ═══
-  Rows: ${debugInfo.weeklyData.count}
-  Date range: ${debugInfo.weeklyData.minDate || "none"} → ${debugInfo.weeklyData.maxDate || "none"}
-  UK non-zero: ${debugInfo.weeklyData.ukNonZero}
-  UK date range: ${debugInfo.weeklyData.ukMinDate || "none"} → ${debugInfo.weeklyData.ukMaxDate || "none"}
-
-═══ chartData (what the chart renders) ═══
-  Total points: ${debugInfo.chartData.totalPoints}
-  Non-zero points: ${debugInfo.chartData.nonZeroPoints}
-  Date range: ${debugInfo.chartData.minDate || "none"} → ${debugInfo.chartData.maxDate || "none"}
-
-═══ Per-track in chart ═══
-${debugInfo.trackChartInfo.map(t =>
-  `  ${t.name}: ${t.nonZeroPoints} non-zero points, ${t.minDate} → ${t.maxDate}\n    First 3: ${t.first3.join(", ") || "none"}`
-).join("\n")}`}
-              </pre>
-            )}
           </div>
         )}
 
