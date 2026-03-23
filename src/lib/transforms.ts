@@ -201,15 +201,23 @@ function buildChartFromDailyData(
   sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
 ): ChartDataPoint[] {
   // When territory is not global AND we have territory daily data, use that
-  const useTerritory = territory !== "global"
+  const hasTerrData = territory !== "global"
     && sheet.dailyTerritoryData
     && sheet.dailyTerritoryData.length > 0;
 
   // Build track data: track -> date -> streams
   const trackByDate = new Map<string, Map<string, number>>();
 
-  if (useTerritory) {
-    // Use territory-specific daily data
+  if (hasTerrData) {
+    // Step 1: seed with global daily data so pre-release dates are present
+    sheet.dailyTrackData.forEach(r => {
+      if (!selectedTracks.includes(r.track_name)) return;
+      if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
+      trackByDate.get(r.track_name)!.set(r.date, r.global_streams);
+    });
+
+    // Step 2: overwrite with territory-specific data where it exists
+    // (post-release territory rows replace the global values)
     sheet.dailyTerritoryData
       .filter(r => r.territory === territory)
       .forEach(r => {
@@ -243,7 +251,7 @@ function buildChartFromDailyData(
   trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
   // Add moment dates as ghost points — but only when we have enough real data
   // to avoid drowning sparse territory data in null-filled dates
-  if (!useTerritory || allDates.size >= 3) {
+  if (!hasTerrData || allDates.size >= 3) {
     sheet.moments.forEach(m => allDates.add(m.date));
   }
 

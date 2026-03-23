@@ -98,7 +98,7 @@ function cleanTrackRole(raw: string | undefined): TrackRole {
 
 function cleanTerritory(raw: string | undefined): Territory {
   const val = (raw || "global").trim().toLowerCase();
-  if (val === "uk") return "UK";
+  if (val === "uk" || val === "gb" || val === "united kingdom" || val === "great britain") return "UK";
   return "global";
 }
 
