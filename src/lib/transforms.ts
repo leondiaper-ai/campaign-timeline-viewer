@@ -721,6 +721,18 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
   return items.slice(0, 3);
 }
 
+// ——— Paid Role: qualitative insight for spend card ———
+export function getPaidRole(sheet: CampaignSheetData, territory: Territory): string {
+  const albumDate = sheet.setup.release_date;
+  if (!albumDate) return "";
+  const a = analyseCampaign(sheet, territory);
+  if (!a.hadPaid) return "";
+
+  if (a.crashed) return "Spike driver (release week), low post-release carry";
+  if (a.held) return "Launch + sustain driver, held post-release";
+  return "Launch support";
+}
+
 // Legacy wrapper — returns GroupedLearnings by distributing flat items
 export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territory): GroupedLearnings {
   const flat = getCampaignLearningsFlat(sheet, territory);

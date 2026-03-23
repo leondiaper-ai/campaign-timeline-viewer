@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { CampaignSheetData, Territory } from "@/types";
-import { getUKTotals } from "@/lib/transforms";
+import { getUKTotals, getPaidRole } from "@/lib/transforms";
 
 function fmt(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -41,13 +41,11 @@ export default function CampaignInsights({ sheet, territory }: Props) {
     // Paid campaign spend
     const pcs = sheet.paidCampaigns || [];
     const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
-    // Efficiency: spend per 1K streams
-    const efficiency = totalStreams > 0 && totalSpend > 0
-      ? totalSpend / (totalStreams / 1000)
-      : 0;
 
-    return { totalStreams, totalPhysical, uk, totalSpend, efficiency };
+    return { totalStreams, totalPhysical, uk, totalSpend };
   }, [sheet, streamKey, territory]);
+
+  const paidRole = useMemo(() => getPaidRole(sheet, territory), [sheet, territory]);
 
   const isGlobal = territory === "global";
 
@@ -74,15 +72,18 @@ export default function CampaignInsights({ sheet, territory }: Props) {
         </p>
       </div>
       {hasSpend && (
-        <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
+        <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4 group relative">
           <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">Digital Campaign Spend</p>
           <p className="text-[9px] text-[#4B5563] -mt-0.5 mb-1">Marquee + Showcase</p>
           <p className="text-2xl font-bold text-[#FBBF24] tabular-nums">{fmtSpend(stats.totalSpend)}</p>
-          {stats.efficiency > 0 && (
-            <p className="text-[10px] text-[#4B5563] mt-1">
-              £{stats.efficiency.toFixed(2)} per 1K streams
-            </p>
+          {paidRole && (
+            <p className="text-[10px] text-[#6B7280] mt-1 italic">{paidRole}</p>
           )}
+          {/* Hover tooltip for context */}
+          <div className="hidden group-hover:block absolute bottom-full left-0 mb-2 z-50 bg-[#1A1D2E] rounded-lg border border-[#2A2D3E] px-3 py-2 shadow-2xl whitespace-nowrap">
+            <p className="text-[10px] text-[#9CA3AF]">Based on tracked digital spend only.</p>
+            <p className="text-[10px] text-[#6B7280]">Excludes editorial, physical, and organic impact.</p>
+          </div>
         </div>
       )}
     </div>
