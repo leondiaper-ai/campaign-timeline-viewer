@@ -43,6 +43,35 @@ async function fetchRows(
   return (response.data.values as string[][]) || [];
 }
 
+/** Fetch including header row (A1:Z) — returns { header, rows } */
+async function fetchWithHeader(
+  spreadsheetId: string,
+  tabName: string
+): Promise<{ header: string[]; rows: string[][] }> {
+  const sheets = getSheetsClient();
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `'${tabName}'!A1:Z`,
+  });
+  const all = (response.data.values as string[][]) || [];
+  return { header: (all[0] || []).map(h => (h || "").trim().toLowerCase()), rows: all.slice(1) };
+}
+
+async function fetchWithHeaderSafe(
+  spreadsheetId: string,
+  tabName: string
+): Promise<{ header: string[]; rows: string[][] } | null> {
+  try {
+    return await fetchWithHeader(spreadsheetId, tabName);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("Unable to parse range") || msg.includes("not found")) {
+      return null;
+    }
+    throw err;
+  }
+}
+
 async function fetchRowsSafe(
   spreadsheetId: string,
   tabName: string
@@ -143,8 +172,8 @@ function isMetadataRow(firstCell: string): boolean {
 
 // ——— Tab Parsers ———————————————————————————————————————————
 async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
-  const rows = await fetchRows(sheetId, "campaign_setup");
-  if (rows.length === 0) {
+  const data = await fetchWithHeaderSafe(sheetId, "campaign_setup");
+  if (!data || data.rows.length === 0) {
     console.warn("[CTV] campaign_setup tab is empty — using defaults.");
     return {
       campaign_name: "Untitled Campaign",
@@ -157,7 +186,33 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
       outcome_driver: "",
     };
   }
-  const r = rows[0];
+  const h = data.header;
+  const r = data.rows[0];
+
+  // Column-name lookup (handles both old positional and new named formats)
+  const col = (name: string): string => {
+    const i = h.findIndex(c => c === name || c.replace(/[_\s]/g, "") === name.replace(/[_\s]/g, ""));
+    return i >= 0 ? (r[i] || "").trim() : "";
+  };
+
+  // Detect format: new sheets have "campaign_id" in col 0
+  const isNewFormat = h[0] === "campaign_id";
+
+  if (isNewFormat) {
+    // New format: campaign_id, artist_name, campaign_name, start_date, release_date, default_territory, (blank), track_list
+    return {
+      campaign_name: normalizeQuotes(col("campaign_name") || "Untitled Campaign"),
+      artist_name: col("artist_name") || "Unknown Artist",
+      campaign_type: cleanCampaignType(col("campaign_type")),
+      release_date: isValidDate(col("release_date")) ? col("release_date") : (isValidDate(col("start_date")) ? col("start_date") : ""),
+      default_territory: cleanTerritory(col("default_territory")),
+      chart_result: col("chart_result"),
+      chart_forecast: col("chart_forecast"),
+      outcome_driver: col("outcome_driver"),
+    };
+  }
+
+  // Legacy positional format
   return {
     campaign_name: normalizeQuotes((r[0] || "Untitled Campaign").trim()),
     artist_name: (r[1] || "Unknown Artist").trim(),
@@ -171,101 +226,263 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
 }
 
 async function fetchTracks(sheetId: string): Promise<Track[]> {
+  // Try legacy tab first
   const rows = await fetchRowsSafe(sheetId, "tracks");
-  if (rows.length === 0) {
-    console.warn("[CTV] tracks tab is empty — no track data.");
-    return [];
+  if (rows.length > 0) {
+    return rows
+      .filter((r) => r[0]?.trim() && !isMetadataRow(r[0]))
+      .map((r, i) => ({
+        track_name: normalizeQuotes(r[0].trim()),
+        track_role: cleanTrackRole(r[1]),
+        release_date: isValidDate(r[2]) ? r[2].trim() : "",
+        default_on: parseBool(r[3], false),
+        sort_order: safeNumber(r[4]) || i + 1,
+      }));
   }
-  return rows
-    .filter((r) => r[0]?.trim() && !isMetadataRow(r[0]))
-    .map((r, i) => ({
-      track_name: normalizeQuotes(r[0].trim()),
-      track_role: cleanTrackRole(r[1]),
-      release_date: isValidDate(r[2]) ? r[2].trim() : "",
-      default_on: parseBool(r[3], false),
-      sort_order: safeNumber(r[4]) || i + 1,
-    }));
+
+  // New format: infer tracks from track_metrics tab (unique track names)
+  const tmData = await fetchWithHeaderSafe(sheetId, "track_metrics");
+  if (tmData && tmData.rows.length > 0) {
+    const trackCol = Math.max(0, tmData.header.findIndex(c => c.includes("track")));
+    const seen = new Set<string>();
+    const tracks: Track[] = [];
+    for (const r of tmData.rows) {
+      const name = normalizeQuotes((r[trackCol] || "").trim());
+      if (name && !seen.has(name)) {
+        seen.add(name);
+        tracks.push({
+          track_name: name,
+          track_role: "album_track",
+          release_date: "",
+          default_on: true,
+          sort_order: tracks.length + 1,
+        });
+      }
+    }
+    if (tracks.length > 0) return tracks;
+  }
+
+  console.warn("[CTV] No track data found.");
+  return [];
 }
 
 async function fetchWeeklyData(sheetId: string): Promise<WeeklyRow[]> {
-  let rows = await fetchRowsSafe(sheetId, "weekly_data_compat");
-  if (rows.length === 0) rows = await fetchRowsSafe(sheetId, "weekly_data");
-  if (rows.length === 0) {
-    console.warn("[CTV] weekly_data tab is empty — no streaming data.");
+  // Try legacy tabs first
+  for (const tab of ["weekly_data_compat", "weekly_data"]) {
+    const rows = await fetchRowsSafe(sheetId, tab);
+    if (rows.length > 0) {
+      return rows
+        .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]) && !isMetadataRow(r[1]))
+        .map((r) => ({
+          week_start_date: r[0].trim(),
+          track_name: normalizeQuotes(r[1].trim()),
+          streams_global: safeNumber(r[2]),
+          streams_uk: safeNumber(r[3]),
+        }));
+    }
+  }
+
+  // New format: weekly_metrics — territory as rows, need to pivot
+  // Headers: week_ending, territory, total_streams, retail_units, d2c_units
+  const data = await fetchWithHeaderSafe(sheetId, "weekly_metrics");
+  if (!data || data.rows.length === 0) {
+    console.warn("[CTV] No weekly data found.");
     return [];
   }
-  return rows
-    .filter(
-      (r) =>
-        r[0] &&
-        isValidDate(r[0]) &&
-        r[1]?.trim() &&
-        !isMetadataRow(r[0]) &&
-        !isMetadataRow(r[1])
-    )
-    .map((r) => ({
-      week_start_date: r[0].trim(),
-      track_name: normalizeQuotes(r[1].trim()),
-      streams_global: safeNumber(r[2]),
-      streams_uk: safeNumber(r[3]),
-    }));
+
+  const h = data.header;
+  const dateCol = h.findIndex(c => c.includes("week"));
+  const terrCol = h.findIndex(c => c.includes("territory"));
+  const streamsCol = h.findIndex(c => c.includes("total_streams") || c.includes("streams"));
+
+  if (dateCol < 0 || streamsCol < 0) {
+    console.warn("[CTV] weekly_metrics missing required columns.");
+    return [];
+  }
+
+  // Group by date, pivot territory into columns
+  const byDate = new Map<string, { global: number; uk: number }>();
+  for (const r of data.rows) {
+    const date = (r[dateCol] || "").trim();
+    if (!isValidDate(date)) continue;
+    const terr = terrCol >= 0 ? cleanTerritory(r[terrCol]) : "global";
+    const streams = safeNumber(r[streamsCol]);
+    if (!byDate.has(date)) byDate.set(date, { global: 0, uk: 0 });
+    const entry = byDate.get(date)!;
+    if (terr === "UK") entry.uk = streams;
+    else entry.global = streams;
+  }
+
+  return [...byDate.entries()].map(([date, v]) => ({
+    week_start_date: date,
+    track_name: "TOTAL",
+    streams_global: v.global,
+    streams_uk: v.uk,
+  }));
 }
 
 async function fetchPhysicalData(sheetId: string): Promise<PhysicalRow[]> {
+  // Try legacy tab first
   const rows = await fetchRowsSafe(sheetId, "physical_data");
-  if (rows.length === 0) return [];
-  return rows
-    .filter((r) => r[0] && isValidDate(r[0]))
-    .map((r) => ({
-      week_start_date: r[0].trim(),
-      units: safeNumber(r[1]),
-    }));
+  if (rows.length > 0) {
+    return rows
+      .filter((r) => r[0] && isValidDate(r[0]))
+      .map((r) => ({
+        week_start_date: r[0].trim(),
+        units: safeNumber(r[1]),
+      }));
+  }
+
+  // New format: extract retail_units + d2c_units from weekly_metrics (UK rows only)
+  const data = await fetchWithHeaderSafe(sheetId, "weekly_metrics");
+  if (!data || data.rows.length === 0) return [];
+
+  const h = data.header;
+  const dateCol = h.findIndex(c => c.includes("week"));
+  const terrCol = h.findIndex(c => c.includes("territory"));
+  const retailCol = h.findIndex(c => c.includes("retail"));
+  const d2cCol = h.findIndex(c => c.includes("d2c"));
+
+  if (dateCol < 0 || (retailCol < 0 && d2cCol < 0)) return [];
+
+  const result: PhysicalRow[] = [];
+  for (const r of data.rows) {
+    const date = (r[dateCol] || "").trim();
+    if (!isValidDate(date)) continue;
+    // Use UK rows for physical (UK chart position)
+    const terr = terrCol >= 0 ? cleanTerritory(r[terrCol]) : "global";
+    if (terr !== "UK") continue;
+    const retail = retailCol >= 0 ? safeNumber(r[retailCol]) : 0;
+    const d2c = d2cCol >= 0 ? safeNumber(r[d2cCol]) : 0;
+    const units = retail + d2c;
+    if (units > 0) result.push({ week_start_date: date, units });
+  }
+  return result;
 }
 
 async function fetchMoments(sheetId: string): Promise<Moment[]> {
-  let rows = await fetchRowsSafe(sheetId, "campaign_moments");
-  if (rows.length === 0) rows = await fetchRowsSafe(sheetId, "moments");
-  if (rows.length === 0) {
-    console.warn("[CTV] moments tab is empty — no campaign moments.");
-    return [];
+  // Try new format first (header-based), then legacy
+  for (const tab of ["campaign_moments", "moments"]) {
+    const data = await fetchWithHeaderSafe(sheetId, tab);
+    if (!data || data.rows.length === 0) continue;
+
+    const h = data.header;
+    // Detect new format by checking for known column names
+    const hasNamedCols = h.includes("date") || h.includes("event_title") || h.includes("is_core_moment");
+
+    if (hasNamedCols) {
+      const dateCol = Math.max(0, h.findIndex(c => c === "date"));
+      const titleCol = Math.max(0, h.findIndex(c => c.includes("title") || c.includes("event_title") || c.includes("moment_title")));
+      const typeCol = h.findIndex(c => c === "event_type" || c === "moment_type");
+      // is_key: prefer is_core_moment, fall back to show_on_chart, then is_key
+      const keyCol = h.findIndex(c => c === "is_core_moment" || c === "show_on_chart" || c === "is_key");
+
+      return data.rows
+        .filter((r) => r[dateCol] && isValidDate(r[dateCol]) && !isMetadataRow(r[dateCol]))
+        .map((r) => ({
+          date: r[dateCol].trim(),
+          moment_title: normalizeQuotes((r[titleCol >= 0 ? titleCol : 1] || "Untitled moment").trim()),
+          moment_type: (r[typeCol >= 0 ? typeCol : 2] || "music").trim().toLowerCase(),
+          is_key: parseBool(r[keyCol >= 0 ? keyCol : 3], false),
+        }));
+    }
+
+    // Legacy positional format
+    return data.rows
+      .filter((r) => r[0] && isValidDate(r[0]) && !isMetadataRow(r[0]))
+      .map((r) => ({
+        date: r[0].trim(),
+        moment_title: normalizeQuotes((r[1] || "Untitled moment").trim()),
+        moment_type: (r[2] || "music").trim().toLowerCase(),
+        is_key: parseBool(r[3], false),
+      }));
   }
-  return rows
-    .filter((r) => r[0] && isValidDate(r[0]) && !isMetadataRow(r[0]))
-    .map((r) => ({
-      date: r[0].trim(),
-      moment_title: normalizeQuotes((r[1] || "Untitled moment").trim()),
-      moment_type: (r[2] || "music").trim().toLowerCase(),
-      is_key: parseBool(r[3], false),
-    }));
+
+  console.warn("[CTV] No moments tab found.");
+  return [];
 }
 
-/** Tab: track_daily_import — daily track streams (CSV import) */
+/** Tab: track_daily_import or track_metrics — per-track streams (global rows) */
 async function fetchTrackDailyImport(sheetId: string): Promise<DailyTrackRow[]> {
-  const rows = await fetchRowsSafe(sheetId, "track_daily_import");
-  if (rows.length === 0) return [];
-  return rows
-    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+  // Try legacy tab first
+  const legacyRows = await fetchRowsSafe(sheetId, "track_daily_import");
+  if (legacyRows.length > 0) {
+    return legacyRows
+      .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+      .map((r) => ({
+        date: r[0].trim(),
+        track_name: normalizeQuotes(r[1].trim()),
+        global_streams: safeNumber(r[2]),
+      }))
+      .filter((r) => r.global_streams > 0);
+  }
+
+  // New format: track_metrics — week_ending, territory, track_name, streams
+  // Extract global rows as DailyTrackRow
+  const data = await fetchWithHeaderSafe(sheetId, "track_metrics");
+  if (!data || data.rows.length === 0) return [];
+
+  const h = data.header;
+  const dateCol = Math.max(0, h.findIndex(c => c.includes("week") || c === "date"));
+  const terrCol = h.findIndex(c => c.includes("territory"));
+  const trackCol = Math.max(0, h.findIndex(c => c.includes("track")));
+  const streamsCol = Math.max(0, h.findIndex(c => c.includes("streams")));
+
+  return data.rows
+    .filter((r) => {
+      const date = (r[dateCol] || "").trim();
+      const terr = terrCol >= 0 ? cleanTerritory(r[terrCol]) : "global";
+      return isValidDate(date) && terr === "global" && safeNumber(r[streamsCol]) > 0;
+    })
     .map((r) => ({
-      date: r[0].trim(),
-      track_name: normalizeQuotes(r[1].trim()),
-      global_streams: safeNumber(r[2]),
+      date: r[dateCol].trim(),
+      track_name: normalizeQuotes((r[trackCol] || "").trim()),
+      global_streams: safeNumber(r[streamsCol]),
     }))
-    .filter((r) => r.global_streams > 0);
+    .filter((r) => r.track_name.length > 0);
 }
 
-/** Tab: track_daily_import_territory — daily territory streams (CSV import) */
+/** Tab: track_daily_import_territory or track_metrics — per-track territory streams */
 async function fetchTrackDailyImportTerritory(sheetId: string): Promise<DailyTerritoryRow[]> {
-  const rows = await fetchRowsSafe(sheetId, "track_daily_import_territory");
-  if (rows.length === 0) return [];
-  return rows
-    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+  // Try legacy tab first
+  const legacyRows = await fetchRowsSafe(sheetId, "track_daily_import_territory");
+  if (legacyRows.length > 0) {
+    return legacyRows
+      .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+      .map((r) => ({
+        date: r[0].trim(),
+        track_name: normalizeQuotes(r[1].trim()),
+        territory: cleanTerritory(r[2]),
+        streams: safeNumber(r[3]),
+      }))
+      .filter((r) => r.streams > 0);
+  }
+
+  // New format: track_metrics — extract non-global rows as territory data
+  const data = await fetchWithHeaderSafe(sheetId, "track_metrics");
+  if (!data || data.rows.length === 0) return [];
+
+  const h = data.header;
+  const dateCol = Math.max(0, h.findIndex(c => c.includes("week") || c === "date"));
+  const terrCol = h.findIndex(c => c.includes("territory"));
+  const trackCol = Math.max(0, h.findIndex(c => c.includes("track")));
+  const streamsCol = Math.max(0, h.findIndex(c => c.includes("streams")));
+
+  if (terrCol < 0) return []; // No territory column = no territory data
+
+  return data.rows
+    .filter((r) => {
+      const date = (r[dateCol] || "").trim();
+      const terr = cleanTerritory(r[terrCol]);
+      return isValidDate(date) && terr !== "global" && safeNumber(r[streamsCol]) > 0;
+    })
     .map((r) => ({
-      date: r[0].trim(),
-      track_name: normalizeQuotes(r[1].trim()),
-      territory: cleanTerritory(r[2]),
-      streams: safeNumber(r[3]),
+      date: r[dateCol].trim(),
+      track_name: normalizeQuotes((r[trackCol] || "").trim()),
+      territory: cleanTerritory(r[terrCol]),
+      streams: safeNumber(r[streamsCol]),
     }))
-    .filter((r) => r.streams > 0);
+    .filter((r) => r.track_name.length > 0);
 }
 
 /** Tab: track_uk_context — manual UK context */
