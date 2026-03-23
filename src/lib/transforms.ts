@@ -635,6 +635,34 @@ function fmtWeekOf(d: string): string {
   return `W/C ${mon} ${day}`;
 }
 
+// Context tag for a moment based on its type
+function momentTag(m: Moment): string {
+  const t = m.moment_type.toLowerCase();
+  const title = m.moment_title.toLowerCase();
+  if (t === "live" || t === "tour" || title.includes("tour") || title.includes("concert") || title.includes("festival")) return "live driver";
+  if (title.includes("outstore") || title.includes("signing") || title.includes("meet")) return "fan moment";
+  if (t === "media" || t === "tv" || t === "radio" || title.includes("press") || title.includes("interview")) return "media window";
+  if (t === "editorial" || title.includes("playlist")) return "editorial push";
+  if (t === "music" || title.includes("single") || title.includes("release")) return "new music";
+  if (t === "marketing" || t === "marquee" || t === "paid" || t === "showcase") return "digital push";
+  if (t === "product" || title.includes("chart") || title.includes("merch") || title.includes("vinyl")) return "product moment";
+  return "";
+}
+
+// Clean moment title for display: strip redundant prefixes, keep it short
+function cleanTitle(m: Moment): string {
+  let t = m.moment_title;
+  // Paid campaigns are already formatted well
+  if (m.moment_type.toLowerCase() === "paid") return t;
+  // Truncate long titles
+  if (t.length > 35) {
+    const dash = t.indexOf(" - ");
+    if (dash > 0 && dash < 30) t = t.slice(0, dash);
+    else t = t.slice(0, 32) + "…";
+  }
+  return t;
+}
+
 export function getTeamPush(sheet: CampaignSheetData, territory: Territory): TeamPush | null {
   const albumDate = sheet.setup.release_date;
   if (!albumDate) return null;
@@ -642,33 +670,58 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   const a = analyseCampaign(sheet, territory);
   const today = new Date().toISOString().slice(0, 10);
 
-  // ——— Lead track ———
+  // ——— Lead track: strongest post-release performer ———
   const leadTrack = a.topTrackName || sheet.setup.campaign_name || "lead single";
 
-  // ——— Market focus ———
-  const market = territory === "UK" ? "UK" : "UK + Global";
+  // ——— Market focus: infer from territory + paid data ———
+  let market = territory === "UK" ? "UK" : "Global";
+  // If paid campaigns target specific territories, reflect that
+  if (a.paidTerritories && a.paidTerritories.includes("+")) {
+    market = a.paidTerritories;
+  }
 
-  // ——— Future moments: sorted, key moments first ———
+  // ——— Gather future moments (deduplicated) ———
   const allMoments = [...(sheet.moments || [])];
-  // Add paid campaigns as moments for scanning
+  // Add paid campaigns but deduplicate by date+platform
   if (sheet.paidCampaigns) {
+    const seenPaid = new Set<string>();
     for (const pc of sheet.paidCampaigns) {
-      if (pc.start_date) allMoments.push({ date: pc.start_date, moment_title: `${pc.platform} (${pc.territory})`, moment_type: "paid", is_key: true });
+      if (pc.start_date) {
+        const key = `${pc.start_date}|${pc.platform}`;
+        if (!seenPaid.has(key)) {
+          seenPaid.add(key);
+          allMoments.push({ date: pc.start_date, moment_title: `${pc.platform} (${pc.territory})`, moment_type: "paid", is_key: true });
+        }
+      }
     }
   }
+
+  // Future key moments, sorted by date
   const futureMoments = allMoments
+    .filter(m => m.date > today && m.is_key)
+    .sort((x, y) => x.date.localeCompare(y.date));
+
+  // Deduplicate by date: keep highest-impact moment per date
+  const futureByDate = new Map<string, Moment>();
+  for (const m of futureMoments) {
+    const ex = futureByDate.get(m.date);
+    if (!ex) { futureByDate.set(m.date, m); continue; }
+    // Prefer non-paid over paid, then by title length (more specific = better)
+    const exIsPaid = ex.moment_type.toLowerCase() === "paid";
+    const mIsPaid = m.moment_type.toLowerCase() === "paid";
+    if (exIsPaid && !mIsPaid) futureByDate.set(m.date, m);
+  }
+  const uniqueFuture = [...futureByDate.values()].sort((x, y) => x.date.localeCompare(y.date));
+
+  // Also scan all future (including non-key) for fallback
+  const allFuture = allMoments
     .filter(m => m.date > today)
-    .sort((x, y) => {
-      // Key moments first, then by date
-      if (x.is_key !== y.is_key) return x.is_key ? -1 : 1;
-      return x.date.localeCompare(y.date);
-    });
+    .sort((x, y) => x.date.localeCompare(y.date));
 
-  // Nearest future moment = support, second = next
-  const supportMoment = futureMoments[0] || null;
-  const nextMoment = futureMoments.length > 1 ? futureMoments[1] : null;
+  const supportMoment = uniqueFuture[0] || allFuture[0] || null;
+  const nextMoment = uniqueFuture.length > 1 ? uniqueFuture[1] : (allFuture.length > 1 ? allFuture[1] : null);
 
-  // ——— Recent past moments (for support if no future) ———
+  // ——— Recent past key moments (fallback if no future) ———
   const recentPast = allMoments
     .filter(m => m.date <= today && m.date >= albumDate && m.is_key)
     .sort((x, y) => y.date.localeCompare(x.date));
@@ -677,24 +730,28 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   // ——— Build push line ———
   const push = `'${leadTrack}' (${market} focus)`;
 
-  // ——— Build support line ———
+  // ——— Build support line with context tag ———
   let support = "";
   if (supportMoment) {
-    support = `${supportMoment.moment_title} (${fmtWeekOf(supportMoment.date)})`;
+    const tag = momentTag(supportMoment);
+    const title = cleanTitle(supportMoment);
+    support = `${title} (${fmtWeekOf(supportMoment.date)})${tag ? ` — ${tag}` : ""}`;
   } else if (latestPast) {
-    support = `${latestPast.moment_title} momentum (${fmtWeekOf(latestPast.date)})`;
+    const tag = momentTag(latestPast);
+    support = `${cleanTitle(latestPast)} momentum${tag ? ` — ${tag}` : ""}`;
   } else if (a.hadPaid) {
-    support = "extend digital campaign post-release";
+    support = "extend digital campaign post-release — digital push";
   } else {
-    support = "add editorial or paid activation";
+    support = "add editorial or paid activation — open window";
   }
 
-  // ——— Build next line ———
+  // ——— Build next line with context tag ———
   let next = "";
   if (nextMoment) {
-    next = `build into ${nextMoment.moment_title} (${fmtWeekOf(nextMoment.date)})`;
-  } else if (supportMoment && futureMoments.length === 1) {
-    // Only one future moment — next is about sustaining
+    const tag = momentTag(nextMoment);
+    const title = cleanTitle(nextMoment);
+    next = `build into ${title} (${fmtWeekOf(nextMoment.date)})${tag ? ` — ${tag}` : ""}`;
+  } else if (supportMoment && uniqueFuture.length <= 1) {
     next = "sustain post-moment with playlist + editorial push";
   } else {
     next = "identify next activation window";
