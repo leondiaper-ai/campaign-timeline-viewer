@@ -228,52 +228,47 @@ function classifyNarrative(m: Moment): NarrativeCategory {
 }
 
 function layoutMoments(allMoments: Moment[], chartDates: string[]): MM[] {
+  // All is_key moments get a label — no slot limit. If a moment's date isn't
+  // in the chart data we still show it (Recharts will place it at the nearest x).
   const dateSet = new Set(chartDates);
-  const keyMoments = allMoments.filter(m => m.is_key && dateSet.has(m.date));
+  const keyMoments = allMoments.filter(m => m.is_key);
 
   // Deduplicate per date: pick best narrative category per date
   const catPriority: Record<NarrativeCategory, number> = {
     album_release: 100, single_release: 90, narrative_major: 50, paid_support: 20, editorial_support: 10, other: 5,
   };
-  const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; cat: NarrativeCategory; p: number }>();
+  const byDate = new Map<string, { date: string; label: string; fullTitle: string; type: string; color: string; cat: NarrativeCategory; p: number; inChart: boolean }>();
   for (const e of keyMoments) {
     const nc = classifyNarrative(e);
     const p = catPriority[nc];
     const vis = getCategoryConfig(e.moment_type);
     const ex = byDate.get(e.date);
-    if (!ex || p > ex.p) byDate.set(e.date, { date: e.date, label: trunc(e.moment_title, 18), fullTitle: e.moment_title, type: e.moment_type, color: vis.color, cat: nc, p });
+    if (!ex || p > ex.p) byDate.set(e.date, { date: e.date, label: trunc(e.moment_title, 18), fullTitle: e.moment_title, type: e.moment_type, color: vis.color, cat: nc, p, inChart: dateSet.has(e.date) });
   }
 
-  // Slot-based selection: narrative first, paid support fills remaining slots
-  const MAX_LABELS = 5;
-  const MAX_PAID = 1;
+  // All narrative/product/music moments always show.
+  // Paid + editorial capped to avoid clutter.
+  const MAX_PAID = 2;
+  const MAX_EDITORIAL = 1;
   const all = [...byDate.values()];
-  const narrative = all.filter(m => m.cat !== "paid_support" && m.cat !== "editorial_support" && m.cat !== "other");
-  const paid = all.filter(m => m.cat === "paid_support");
-  const rest = all.filter(m => m.cat === "editorial_support" || m.cat === "other");
-
-  // Sort narrative by priority desc then date
-  narrative.sort((a, b) => b.p - a.p || a.date.localeCompare(b.date));
-  paid.sort((a, b) => a.date.localeCompare(b.date));
-  rest.sort((a, b) => b.p - a.p || a.date.localeCompare(b.date));
-
   const selected: typeof all = [];
-  // 1. Fill with narrative moments
-  for (const m of narrative) {
-    if (selected.length >= MAX_LABELS) break;
+
+  // 1. Always include narrative moments (music, product, live, etc)
+  for (const m of all.filter(m => m.cat !== "paid_support" && m.cat !== "editorial_support" && m.cat !== "other")
+    .sort((a, b) => b.p - a.p || a.date.localeCompare(b.date))) {
     selected.push(m);
   }
-  // 2. Add up to MAX_PAID paid support if room
+  // 2. Add paid support (capped)
   let paidCount = 0;
-  for (const m of paid) {
-    if (selected.length >= MAX_LABELS || paidCount >= MAX_PAID) break;
-    selected.push(m);
-    paidCount++;
+  for (const m of all.filter(m => m.cat === "paid_support").sort((a, b) => a.date.localeCompare(b.date))) {
+    if (paidCount >= MAX_PAID) break;
+    selected.push(m); paidCount++;
   }
-  // 3. Fill remaining with editorial/other if room
-  for (const m of rest) {
-    if (selected.length >= MAX_LABELS) break;
-    selected.push(m);
+  // 3. Add editorial/other (capped)
+  let editCount = 0;
+  for (const m of all.filter(m => m.cat === "editorial_support" || m.cat === "other").sort((a, b) => b.p - a.p || a.date.localeCompare(b.date))) {
+    if (editCount >= MAX_EDITORIAL) break;
+    selected.push(m); editCount++;
   }
 
   return selected
@@ -416,7 +411,7 @@ export default function TimelineChart({
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#1E2130" }} tickLine={false} dy={8} interval="preserveStartEnd" />
               <YAxis yAxisId="s" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
               {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: PHYSICAL_COLOR }} axisLine={false} tickLine={false} width={50}
-                domain={[0, Math.ceil(physicalMax * 1.3)]} />}
+                domain={[0, Math.ceil(physicalMax * 3)]} />}
               <Tooltip content={<CampTip territory={territory} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
 
               {/* Pre-release phase shading */}
