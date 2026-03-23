@@ -432,3 +432,35 @@ export async function fetchActiveCampaigns(): Promise<RegistryEntry[]> {
   const all = await fetchRegistry();
   return all.filter((e) => e.status === "active");
 }
+
+// ——— Debug: raw territory tab inspection ——————————————————
+export async function debugTerritoryData(sheetId: string) {
+  const raw = await fetchRowsSafe(sheetId, "track_daily_import_territory");
+  // Return first 10 raw rows + parsed rows + summary stats
+  const parsed = raw
+    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+    .map((r) => ({
+      date: r[0].trim(),
+      track_name: r[1].trim(),
+      raw_territory: r[2] || "(empty)",
+      normalized_territory: cleanTerritory(r[2]),
+      streams: safeNumber(r[3]),
+    }));
+
+  const ukRows = parsed.filter(r => r.normalized_territory === "UK");
+  const globalRows = parsed.filter(r => r.normalized_territory === "global");
+  const ukDates = [...new Set(ukRows.map(r => r.date))].sort();
+  const rawTerritoryValues = [...new Set(parsed.map(r => r.raw_territory))];
+
+  return {
+    total_raw_rows: raw.length,
+    total_parsed_rows: parsed.length,
+    raw_territory_values_found: rawTerritoryValues,
+    uk_row_count: ukRows.length,
+    global_row_count: globalRows.length,
+    uk_date_range: ukDates.length > 0 ? { first: ukDates[0], last: ukDates[ukDates.length - 1], count: ukDates.length } : null,
+    first_10_raw_rows: raw.slice(0, 10),
+    first_10_uk_rows: ukRows.slice(0, 10),
+    last_10_uk_rows: ukRows.slice(-10),
+  };
+}
