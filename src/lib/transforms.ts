@@ -669,7 +669,7 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   return { push, support, next };
 }
 
-// 3 bullets: outcome, driver, gap. References real data.
+// 3 bullets: outcome, driver, gap. Insight, not narration.
 export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
   const items: LearningItem[] = [];
   const albumDate = sheet.setup.release_date;
@@ -677,45 +677,48 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
 
   const a = analyseCampaign(sheet, territory);
   const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
+  const fmtPhys = a.physicalTotal >= 1000 ? `${(a.physicalTotal / 1000).toFixed(1)}K` : `${a.physicalTotal}`;
 
-  // ——— 1. OUTCOME vs EXPECTATION ———
+  // ——— 1. OUTCOME — what happened vs what was expected ———
   if (chart_result && chart_forecast) {
     const resNum = Number(chart_result.replace(/[^0-9]/g, ""));
     const foreNum = Number(chart_forecast.replace(/[^0-9]/g, ""));
     const beat = resNum && foreNum && resNum < foreNum;
     const missed = resNum && foreNum && resNum > foreNum;
-    const driver = outcome_driver || (a.physicalTotal > 0 ? "physical sales" : a.hadPaid ? "paid digital" : "organic streaming");
 
-    if (beat) {
-      items.push({ text: `Charted ${chart_result} against a ${chart_forecast} forecast — ${driver} overdelivered`, sentiment: "positive" });
+    if (beat && a.physicalTotal > 0) {
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — physical (${fmtPhys} units) bridged the gap, streaming alone wouldn't have landed it`, sentiment: "positive" });
+    } else if (beat) {
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${outcome_driver || "campaign"} overdelivered on the target`, sentiment: "positive" });
     } else if (missed) {
-      items.push({ text: `Charted ${chart_result} against a ${chart_forecast} forecast — ${driver} fell short`, sentiment: "negative" });
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${outcome_driver || "campaign"} created a moment but not enough to land the target`, sentiment: "negative" });
     } else {
-      items.push({ text: `Charted ${chart_result} in line with ${chart_forecast} forecast — ${driver} delivered as expected`, sentiment: "neutral" });
+      items.push({ text: `${chart_result} as forecast — result landed but nothing overperformed`, sentiment: "neutral" });
     }
-  } else if (a.peakStreams > 0) {
-    // No forecast data — use peak + trajectory
-    items.push({ text: `Peaked at ${a.fmtPeak} daily streams${a.crashed ? `, then dropped ${a.dropPct}% within the first week` : a.held ? `, holding within ${a.dropPct}% post-release` : ""}`, sentiment: a.crashed ? "negative" : "neutral" });
+  } else if (a.peakStreams > 0 && a.physicalTotal > 0) {
+    items.push({ text: `Physical (${fmtPhys} units) drove the chart position — streaming amplified but didn't sustain`, sentiment: "neutral" });
   }
 
-  // ——— 2. DRIVER — what moved the number, with data ———
+  // ——— 2. DRIVER — what actually moved the number (unique from bullet 1) ———
   if (a.hadPaid && a.crashed) {
-    items.push({ text: `${a.fmtSpend} digital spend (Marquee + Showcase) drove the release spike to ${a.fmtPeak} streams — but streaming fell ${a.dropPct}% once paid ended`, sentiment: "negative" });
+    items.push({ text: `${a.fmtSpend} paid created a moment, not momentum — amplified release week but no second driver behind it`, sentiment: "negative" });
   } else if (a.hadPaid && a.held) {
-    items.push({ text: `${a.fmtSpend} digital spend combined with editorial support held streams within ${a.dropPct}% of the ${a.fmtPeak} peak post-release`, sentiment: "positive" });
-  } else if (!a.hadPaid && a.physicalTotal > 0) {
-    items.push({ text: `Physical sales (${a.physicalTotal >= 1000 ? `${(a.physicalTotal / 1000).toFixed(1)}K` : a.physicalTotal} units) were the primary chart driver — streaming peaked at ${a.fmtPeak} but didn't sustain`, sentiment: "neutral" });
+    items.push({ text: `${a.fmtSpend} paid + editorial sustained beyond release week — campaign worked as designed`, sentiment: "positive" });
+  } else if (!a.hadPaid && a.physicalTotal > 0 && a.crashed) {
+    items.push({ text: `Physical drove the chart, paid drove the spike — neither sustained streaming post-release`, sentiment: "negative" });
   } else if (!a.hadPaid && a.crashed) {
-    items.push({ text: `No paid support in place — streams peaked at ${a.fmtPeak} then dropped ${a.dropPct}% without a digital safety net`, sentiment: "negative" });
+    items.push({ text: `No paid or editorial safety net — nothing behind the release to carry streaming forward`, sentiment: "negative" });
   } else if (!a.hadPaid && a.held) {
-    items.push({ text: `Organic streaming held at ${a.fmtPeak} peak without paid — an unusual result worth protecting`, sentiment: "positive" });
+    items.push({ text: `Held organically without paid — rare, worth protecting with targeted support`, sentiment: "positive" });
   }
 
-  // ——— 3. GAP — what was missing, referencing specific data ———
-  if (a.crashed && items.length < 3) {
-    items.push({ text: `No sustained streaming driver after release week — the ${a.fmtPeak} peak had no editorial, paid, or playlist follow-through to hold it`, sentiment: "negative" });
+  // ——— 3. GAP — what was missing (unique from bullets 1+2) ———
+  if (a.crashed && a.concentrated && items.length < 3) {
+    items.push({ text: `No second driver after release week — ${a.topTrackName} carried ${a.topTrackShare}% of post-release, catalogue didn't activate`, sentiment: "negative" });
+  } else if (a.crashed && items.length < 3) {
+    items.push({ text: `Streaming had no follow-through — no playlist hold, no editorial tail, no reason for listeners to come back`, sentiment: "negative" });
   } else if (a.concentrated && items.length < 3) {
-    items.push({ text: `Post-release streaming concentrated on ${a.topTrackName} (${a.topTrackShare}% of total) — remaining catalogue tracks didn't activate`, sentiment: "negative" });
+    items.push({ text: `${a.topTrackName} carried ${a.topTrackShare}% post-release — catalogue depth wasn't unlocked`, sentiment: "negative" });
   }
 
   return items.slice(0, 3);
@@ -728,9 +731,9 @@ export function getPaidRole(sheet: CampaignSheetData, territory: Territory): str
   const a = analyseCampaign(sheet, territory);
   if (!a.hadPaid) return "";
 
-  if (a.crashed) return "Spike driver (release week), low post-release carry";
-  if (a.held) return "Launch + sustain driver, held post-release";
-  return "Launch support";
+  if (a.crashed) return "Paid created a moment, not momentum";
+  if (a.held) return "Paid amplified and sustained post-release";
+  return "Paid amplified the launch";
 }
 
 // Legacy wrapper — returns GroupedLearnings by distributing flat items
