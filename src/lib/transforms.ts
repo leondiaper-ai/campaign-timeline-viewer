@@ -209,15 +209,8 @@ function buildChartFromDailyData(
   const trackByDate = new Map<string, Map<string, number>>();
 
   if (hasTerrData) {
-    // Step 1: seed with global daily data so pre-release dates are present
-    sheet.dailyTrackData.forEach(r => {
-      if (!selectedTracks.includes(r.track_name)) return;
-      if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
-      trackByDate.get(r.track_name)!.set(r.date, r.global_streams);
-    });
-
-    // Step 2: overwrite with territory-specific data where it exists
-    // (post-release territory rows replace the global values)
+    // Strict territory filtering — only territory-specific rows, no global fallback.
+    // If UK data is missing for a date, that date shows as a gap (null), not global.
     sheet.dailyTerritoryData
       .filter(r => r.territory === territory)
       .forEach(r => {
@@ -558,7 +551,7 @@ function analyseCampaign(sheet: CampaignSheetData, territory: Territory): Campai
   const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
   const hadPaid = pcs.length > 0;
   const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
-  const fmtSpend = totalSpend >= 1000 ? `£${(totalSpend / 1000).toFixed(0)}K` : `£${totalSpend}`;
+  const fmtSpend = totalSpend >= 1000 ? `$${(totalSpend / 1000).toFixed(0)}K` : `$${totalSpend}`;
 
   let peakStreams = 0, peakDate = "";
   const dailyTotals = new Map<string, number>();
@@ -774,7 +767,7 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
   const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
   const fmtPhys = a.physicalTotal >= 1000 ? `${(a.physicalTotal / 1000).toFixed(1)}K` : `${a.physicalTotal}`;
 
-  // Compact paid ref: "£16K Marquee (UK + DE)"
+  // Compact paid ref: "$16K Marquee (UK + DE)"
   const paidRef = a.hadPaid
     ? `${a.fmtSpend} ${a.paidPlatforms || "paid"}${a.paidTerritories ? ` (${a.paidTerritories})` : ""}`
     : "";

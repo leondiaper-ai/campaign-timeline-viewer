@@ -10,9 +10,9 @@ function fmt(v: number): string {
   return v.toLocaleString();
 }
 function fmtSpend(v: number): string {
-  if (v >= 1_000_000) return `£${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `£${(v / 1_000).toFixed(0)}K`;
-  if (v > 0) return `£${v}`;
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
+  if (v > 0) return `$${v}`;
   return "—";
 }
 
