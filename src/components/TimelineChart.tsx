@@ -299,6 +299,30 @@ export default function TimelineChart({
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
   const isSparse = useMemo(() => data.filter(d => d.total_streams > 0).length <= 3, [data]);
 
+  // Smart Y-axis domain for Tracks mode: prevent a single massive spike
+  // from crushing all other track lines to invisible.
+  // Strategy: collect all per-track values, sort, use 95th percentile * 1.3
+  // so the majority of data is readable while spikes just go off-chart.
+  const trackYDomain = useMemo(() => {
+    if (selectedTracks.length === 0) return undefined;
+    const vals: number[] = [];
+    for (const dp of data) {
+      for (const tn of selectedTracks) {
+        const v = dp[tn];
+        if (typeof v === "number" && v > 0) vals.push(v);
+      }
+    }
+    if (vals.length < 2) return undefined;
+    vals.sort((a, b) => a - b);
+    const p95 = vals[Math.floor(vals.length * 0.95)];
+    const max = vals[vals.length - 1];
+    // Only cap if the max is >3x the 95th percentile (genuine spike)
+    if (max > p95 * 3) {
+      return [0, Math.ceil(p95 * 1.3)];
+    }
+    return undefined; // let Recharts auto-scale
+  }, [data, selectedTracks]);
+
   // Key vs muted tracks for track mode
   const keyTracks = useMemo(() => trackRoles.filter(tr => tr.opacity >= 0.5), [trackRoles]);
 
@@ -440,7 +464,8 @@ export default function TimelineChart({
             <ComposedChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#151825" vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#151825" }} tickLine={false} dy={8} interval="preserveStartEnd" />
-              <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
+              <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
+                domain={trackYDomain as [number, number] | undefined} allowDataOverflow={!!trackYDomain} />
               <Tooltip content={<TrackTip trackRoles={trackRoles} ukMilestones={ukMilestones} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
               {pinnedDate && <ReferenceLine x={pinnedDate} stroke="#FBBF24" strokeWidth={2.5} strokeOpacity={0.9} />}
               {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}
