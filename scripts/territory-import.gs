@@ -18,6 +18,7 @@ function onOpen() {
     .addItem("Import Staged Data", "importStagedData")
     .addItem("Validate Master Data", "validateMasterData")
     .addItem("Setup Tabs (first time)", "setupTabs")
+    .addItem("Re-seed Master from Existing Data", "seedMasterData")
     .addToUi();
 }
 
@@ -78,39 +79,106 @@ function setupTabs() {
 // ——— Seed master from existing track_metrics ——————————————
 
 function seedFromTrackMetrics_(ss, master) {
-  const tm = ss.getSheetByName("track_metrics");
-  if (!tm) return;
-
-  const data = tm.getDataRange().getValues();
-  if (data.length <= 1) return;
-
-  const header = data[0].map(h => String(h).trim().toLowerCase());
-  const dateCol = header.indexOf("week_ending");
-  const terrCol = header.indexOf("territory");
-  const trackCol = header.indexOf("track_name");
-  const streamsCol = header.indexOf("streams");
-
-  if (dateCol < 0 || streamsCol < 0) return;
-
   const now = new Date().toISOString();
   const rows = [];
 
-  for (let i = 1; i < data.length; i++) {
-    const r = data[i];
-    const date = normalizeDate_(r[dateCol]);
-    const track = normalizeName_(String(r[trackCol] || "").trim());
-    const territory = normalizeTerritory_(String(r[terrCol] || "global"));
-    const streams = parseStreams_(r[streamsCol]);
+  // Try track_metrics first (new format)
+  const tm = ss.getSheetByName("track_metrics");
+  if (tm) {
+    const data = tm.getDataRange().getValues();
+    if (data.length > 1) {
+      const header = data[0].map(h => String(h).trim().toLowerCase());
+      const dateCol = header.indexOf("week_ending");
+      const terrCol = header.indexOf("territory");
+      const trackCol = header.indexOf("track_name");
+      const streamsCol = header.indexOf("streams");
+      if (dateCol >= 0 && streamsCol >= 0) {
+        for (let i = 1; i < data.length; i++) {
+          const r = data[i];
+          const date = normalizeDate_(r[dateCol]);
+          const track = normalizeName_(String(r[trackCol] || "").trim());
+          const territory = normalizeTerritory_(String(r[terrCol] || "global"));
+          const streams = parseStreams_(r[streamsCol]);
+          if (date && track && streams > 0) {
+            rows.push([date, track, territory, streams, "seed:track_metrics", now]);
+          }
+        }
+      }
+    }
+  }
 
-    if (date && track && streams > 0) {
-      rows.push([date, track, territory, streams, "seed:track_metrics", now]);
+  // Also try legacy tabs: track_daily_import (global) + track_daily_import_territory (UK etc)
+  if (rows.length === 0) {
+    // Global data from track_daily_import (date, track_name, streams)
+    const tdi = ss.getSheetByName("track_daily_import");
+    if (tdi) {
+      const data = tdi.getDataRange().getValues();
+      if (data.length > 1) {
+        const header = data[0].map(h => String(h).trim().toLowerCase());
+        const dateCol = Math.max(0, header.indexOf("date"));
+        const trackCol = Math.max(0, header.indexOf("track_name"));
+        const streamsCol = header.indexOf("streams");
+        const sCol = streamsCol >= 0 ? streamsCol : header.indexOf("global_streams");
+        if (sCol >= 0) {
+          for (let i = 1; i < data.length; i++) {
+            const r = data[i];
+            const date = normalizeDate_(r[dateCol]);
+            const track = normalizeName_(String(r[trackCol] || "").trim());
+            const streams = parseStreams_(r[sCol >= 0 ? sCol : 2]);
+            if (date && track && streams > 0) {
+              rows.push([date, track, "global", streams, "seed:track_daily_import", now]);
+            }
+          }
+        }
+      }
+    }
+    // Territory data from track_daily_import_territory (date, track_name, territory, streams)
+    const tdit = ss.getSheetByName("track_daily_import_territory");
+    if (tdit) {
+      const data = tdit.getDataRange().getValues();
+      if (data.length > 1) {
+        const header = data[0].map(h => String(h).trim().toLowerCase());
+        const dateCol = Math.max(0, header.indexOf("date"));
+        const trackCol = Math.max(0, header.indexOf("track_name"));
+        const terrCol = header.indexOf("territory");
+        const streamsCol = Math.max(0, header.indexOf("streams"));
+        for (let i = 1; i < data.length; i++) {
+          const r = data[i];
+          const date = normalizeDate_(r[dateCol]);
+          const track = normalizeName_(String(r[trackCol] || "").trim());
+          const territory = terrCol >= 0 ? normalizeTerritory_(String(r[terrCol] || "global")) : "global";
+          const streams = parseStreams_(r[streamsCol]);
+          if (date && track && streams > 0) {
+            rows.push([date, track, territory, streams, "seed:track_daily_import_territory", now]);
+          }
+        }
+      }
     }
   }
 
   if (rows.length > 0) {
     master.getRange(2, 1, rows.length, 6).setValues(rows);
-    Logger.log("Seeded territory_master with " + rows.length + " rows from track_metrics");
+    Logger.log("Seeded territory_master with " + rows.length + " rows");
   }
+}
+
+// ——— Manual Seed ————————————————————————————————————————
+
+function seedMasterData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const ui = SpreadsheetApp.getUi();
+  let master = ss.getSheetByName("territory_master");
+  if (!master) {
+    ui.alert("Error", "No territory_master tab. Run Setup Tabs first.", ui.ButtonSet.OK);
+    return;
+  }
+  // Clear existing data (keep header)
+  if (master.getLastRow() > 1) {
+    master.getRange(2, 1, master.getLastRow() - 1, 6).clearContent();
+  }
+  seedFromTrackMetrics_(ss, master);
+  const rowCount = master.getLastRow() - 1;
+  ui.alert("Seed Complete", "Seeded " + rowCount + " rows into territory_master.", ui.ButtonSet.OK);
 }
 
 // ——— Import Staged Data ——————————————————————————————————
