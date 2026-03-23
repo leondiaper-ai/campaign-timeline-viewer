@@ -513,14 +513,25 @@ export interface GroupedLearnings { music: LearningItem[]; campaign: LearningIte
 export interface CampaignLearning { dateLabel: string; eventType: string; text: string; phase: "pre" | "peak" | "post"; }
 export function getCampaignLearnings(): CampaignLearning[] { return []; }
 
-// 3 bullets max: outcome, driver, gap. Sharp enough to repeat in a meeting.
-export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
-  // 2-3 bullets. Sharp enough to repeat in a meeting without thinking.
-  const items: LearningItem[] = [];
-  const albumDate = sheet.setup.release_date;
-  if (!albumDate) return items;
+// ——— Shared campaign analysis data ———
+interface CampaignAnalysis {
+  peakStreams: number;
+  peakDate: string;
+  dropPct: number;
+  crashed: boolean;   // >30% drop
+  held: boolean;      // ≤30% drop
+  hadPaid: boolean;
+  totalSpend: number;
+  fmtSpend: string;
+  physicalTotal: number;
+  topTrackName: string;
+  topTrackShare: number;
+  concentrated: boolean;  // top track ≥55%
+  fmtPeak: string;
+}
 
-  // ——— gather data ———
+function analyseCampaign(sheet: CampaignSheetData, territory: Territory): CampaignAnalysis {
+  const albumDate = sheet.setup.release_date || "";
   const hasDailyData = sheet.dailyTrackData && sheet.dailyTrackData.length > 0;
   const weeklyTrackRows = (sheet.weeklyData || []).filter(r => r.track_name !== "TOTAL");
   const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
@@ -528,7 +539,7 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
   const physicalTotal = (sheet.physicalData || []).reduce((s, r) => s + r.units, 0);
   const hadPaid = pcs.length > 0;
   const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
-  const fmtSpend = totalSpend >= 1000 ? `${(totalSpend / 1000).toFixed(0)}K` : `${totalSpend}`;
+  const fmtSpend = totalSpend >= 1000 ? `£${(totalSpend / 1000).toFixed(0)}K` : `£${totalSpend}`;
 
   let peakStreams = 0, peakDate = "";
   const dailyTotals = new Map<string, number>();
@@ -550,7 +561,6 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
     if (next) dropPct = Math.round((1 - next[streamKey] / peakStreams) * 100);
   }
 
-  // catalogue concentration
   const trackAnalysis = new Map<string, number>();
   if (hasDailyData) {
     for (const r of sheet.dailyTrackData) { if (r.date >= albumDate) trackAnalysis.set(r.track_name, (trackAnalysis.get(r.track_name) || 0) + r.global_streams); }
@@ -565,49 +575,97 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
     topTrackName = sorted[0][0];
   }
 
-  const crashed = dropPct > 30;
-  const held = dropPct > 0 && dropPct <= 30;
-  const concentrated = topTrackShare >= 55;
+  const fmtPeak = peakStreams >= 1_000_000 ? `${(peakStreams / 1_000_000).toFixed(1)}M`
+    : peakStreams >= 1_000 ? `${(peakStreams / 1_000).toFixed(0)}K` : `${peakStreams}`;
 
-  // ——— 1. OUTCOME — what happened vs what was expected ———
+  return {
+    peakStreams, peakDate, dropPct,
+    crashed: dropPct > 30, held: dropPct > 0 && dropPct <= 30,
+    hadPaid, totalSpend, fmtSpend, physicalTotal,
+    topTrackName, topTrackShare, concentrated: topTrackShare >= 55,
+    fmtPeak,
+  };
+}
+
+// ——— Team Push: single recommended action ———
+export function getTeamPush(sheet: CampaignSheetData, territory: Territory): string {
+  const albumDate = sheet.setup.release_date;
+  if (!albumDate) return "";
+  const a = analyseCampaign(sheet, territory);
+
+  // Post-release drop with no sustained driver
+  if (a.crashed && a.hadPaid) {
+    return `Extend campaign beyond release week — paid (${a.fmtSpend}) drove the spike but streaming dropped ${a.dropPct}% with no follow-through`;
+  }
+  if (a.crashed && !a.hadPaid) {
+    return `Add post-release driver — streams dropped ${a.dropPct}% after peak with no paid or editorial support in place`;
+  }
+  // Held but concentrated on one track
+  if (a.held && a.concentrated) {
+    return `Activate catalogue depth — ${a.topTrackName} carried ${a.topTrackShare}% of post-release streams, other tracks need support`;
+  }
+  // Held with paid — campaign worked, maintain
+  if (a.held && a.hadPaid) {
+    return `Maintain current approach — paid + editorial held streams within ${a.dropPct}% of peak, campaign is delivering`;
+  }
+  // Organic hold
+  if (a.held && !a.hadPaid) {
+    return `Protect the organic momentum — streaming held without paid support, consider targeted spend to accelerate`;
+  }
+  // Physical-dependent
+  if (a.physicalTotal > 0 && a.crashed) {
+    return `Build streaming strategy — physical delivered the chart result but streaming dropped ${a.dropPct}% post-release`;
+  }
+  return `Review post-release trajectory — peak at ${a.fmtPeak} streams, ${a.dropPct > 0 ? `${a.dropPct}% drop` : "holding steady"}`;
+}
+
+// 3 bullets: outcome, driver, gap. References real data.
+export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
+  const items: LearningItem[] = [];
+  const albumDate = sheet.setup.release_date;
+  if (!albumDate) return items;
+
+  const a = analyseCampaign(sheet, territory);
   const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
+
+  // ——— 1. OUTCOME vs EXPECTATION ———
   if (chart_result && chart_forecast) {
     const resNum = Number(chart_result.replace(/[^0-9]/g, ""));
     const foreNum = Number(chart_forecast.replace(/[^0-9]/g, ""));
     const beat = resNum && foreNum && resNum < foreNum;
-    const met = resNum && foreNum && resNum === foreNum;
     const missed = resNum && foreNum && resNum > foreNum;
-    const driver = outcome_driver || (physicalTotal > 0 ? "physical" : hadPaid ? "paid" : "organic");
+    const driver = outcome_driver || (a.physicalTotal > 0 ? "physical sales" : a.hadPaid ? "paid digital" : "organic streaming");
 
     if (beat) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${driver} closed the gap`, sentiment: "positive" });
-    } else if (met) {
-      items.push({ text: `Hit ${chart_result} as forecast — ${driver} delivered, nothing overperformed`, sentiment: "neutral" });
+      items.push({ text: `Charted ${chart_result} against a ${chart_forecast} forecast — ${driver} overdelivered`, sentiment: "positive" });
     } else if (missed) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${driver} wasn't enough`, sentiment: "negative" });
+      items.push({ text: `Charted ${chart_result} against a ${chart_forecast} forecast — ${driver} fell short`, sentiment: "negative" });
     } else {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — driven by ${driver}`, sentiment: "neutral" });
+      items.push({ text: `Charted ${chart_result} in line with ${chart_forecast} forecast — ${driver} delivered as expected`, sentiment: "neutral" });
     }
+  } else if (a.peakStreams > 0) {
+    // No forecast data — use peak + trajectory
+    items.push({ text: `Peaked at ${a.fmtPeak} daily streams${a.crashed ? `, then dropped ${a.dropPct}% within the first week` : a.held ? `, holding within ${a.dropPct}% post-release` : ""}`, sentiment: a.crashed ? "negative" : "neutral" });
   }
 
-  // ——— 2. DRIVER — the uncomfortable truth about what actually moved the number ———
-  if (hadPaid && crashed) {
-    items.push({ text: `£${fmtSpend} paid drove launch day, nothing held after — money in, spike out`, sentiment: "negative" });
-  } else if (hadPaid && held) {
-    items.push({ text: `Paid + editorial held the line post-release — campaign did its job`, sentiment: "positive" });
-  } else if (!hadPaid && physicalTotal > 0) {
-    items.push({ text: `Physical carried this — streaming didn't show up`, sentiment: "neutral" });
-  } else if (!hadPaid && crashed) {
-    items.push({ text: `No paid, no editorial safety net — dropped ${dropPct}% with nothing to catch it`, sentiment: "negative" });
-  } else if (!hadPaid && held) {
-    items.push({ text: `Organic hold without paid — rare, don't assume it repeats`, sentiment: "positive" });
+  // ——— 2. DRIVER — what moved the number, with data ———
+  if (a.hadPaid && a.crashed) {
+    items.push({ text: `${a.fmtSpend} digital spend (Marquee + Showcase) drove the release spike to ${a.fmtPeak} streams — but streaming fell ${a.dropPct}% once paid ended`, sentiment: "negative" });
+  } else if (a.hadPaid && a.held) {
+    items.push({ text: `${a.fmtSpend} digital spend combined with editorial support held streams within ${a.dropPct}% of the ${a.fmtPeak} peak post-release`, sentiment: "positive" });
+  } else if (!a.hadPaid && a.physicalTotal > 0) {
+    items.push({ text: `Physical sales (${a.physicalTotal >= 1000 ? `${(a.physicalTotal / 1000).toFixed(1)}K` : a.physicalTotal} units) were the primary chart driver — streaming peaked at ${a.fmtPeak} but didn't sustain`, sentiment: "neutral" });
+  } else if (!a.hadPaid && a.crashed) {
+    items.push({ text: `No paid support in place — streams peaked at ${a.fmtPeak} then dropped ${a.dropPct}% without a digital safety net`, sentiment: "negative" });
+  } else if (!a.hadPaid && a.held) {
+    items.push({ text: `Organic streaming held at ${a.fmtPeak} peak without paid — an unusual result worth protecting`, sentiment: "positive" });
   }
 
-  // ——— 3. GAP — what's missing, stated as a fact not advice ———
-  if (crashed && items.length < 3) {
-    items.push({ text: `Nothing drove streams after week 1`, sentiment: "negative" });
-  } else if (concentrated && items.length < 3) {
-    items.push({ text: `${topTrackName} was ${topTrackShare}% of post-release — catalogue didn't activate`, sentiment: "negative" });
+  // ——— 3. GAP — what was missing, referencing specific data ———
+  if (a.crashed && items.length < 3) {
+    items.push({ text: `No sustained streaming driver after release week — the ${a.fmtPeak} peak had no editorial, paid, or playlist follow-through to hold it`, sentiment: "negative" });
+  } else if (a.concentrated && items.length < 3) {
+    items.push({ text: `Post-release streaming concentrated on ${a.topTrackName} (${a.topTrackShare}% of total) — remaining catalogue tracks didn't activate`, sentiment: "negative" });
   }
 
   return items.slice(0, 3);

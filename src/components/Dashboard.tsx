@@ -8,7 +8,7 @@ import {
   getCampaignSummary, getTrackModeContext,
   buildUKTrackContext, buildUKMilestones, UKTrackContext,
   classifyMomentImpact, type ClassifiedMoment, type ImpactTier,
-  getCampaignLearningsFlat,
+  getTeamPush,
 } from "@/lib/transforms";
 import { getCategoryConfig, getAllCategories } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -35,7 +35,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [pinnedDate, setPinnedDate] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
   const [learningsExpanded, setLearningsExpanded] = useState(false);
-  const [timelineView, setTimelineView] = useState<"impact" | "timeline">("impact");
+  const [timelineView, setTimelineView] = useState<"impact" | "timeline">("timeline");
 
   const campaign: LoadedCampaign | undefined = campaigns[campaignIdx];
   const sheet = campaign?.sheet;
@@ -51,11 +51,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const ukTrackContext = useMemo(() => sheet ? buildUKTrackContext(sheet) : [], [sheet]);
   const ukMilestones = useMemo(() => sheet ? buildUKMilestones(sheet) : [], [sheet]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
-  const topLearning = useMemo(() => {
-    if (!sheet) return null;
-    const items = getCampaignLearningsFlat(sheet, territory);
-    return items.length > 0 ? items[0] : null;
-  }, [sheet, territory]);
+  const teamPush = useMemo(() => sheet ? getTeamPush(sheet, territory) : "", [sheet, territory]);
   const moments = useMemo(() => {
     if (!sheet) return [];
     const base = getAllMoments(sheet);
@@ -141,13 +137,13 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Top Learning — surfaced above the fold */}
-        {topLearning && (
+        {/* Team Push — recommended action above all KPIs */}
+        {teamPush && (
           <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-2.5">
             <div className="flex items-center gap-3 mb-1">
-              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80">Key Takeaway</p>
+              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80">Team Push</p>
             </div>
-            <p className="text-[12px] font-semibold text-white">{topLearning.text}</p>
+            <p className="text-[12px] font-semibold text-white">{teamPush}</p>
           </div>
         )}
 

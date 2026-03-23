@@ -75,7 +75,8 @@ export default function CampaignInsights({ sheet, territory }: Props) {
       </div>
       {hasSpend && (
         <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
-          <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">Campaign Spend</p>
+          <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">Digital Campaign Spend</p>
+          <p className="text-[9px] text-[#4B5563] -mt-0.5 mb-1">Marquee + Showcase</p>
           <p className="text-2xl font-bold text-[#FBBF24] tabular-nums">{fmtSpend(stats.totalSpend)}</p>
           {stats.efficiency > 0 && (
             <p className="text-[10px] text-[#4B5563] mt-1">
