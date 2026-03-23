@@ -8,7 +8,7 @@ import {
   getCampaignSummary, getTrackModeContext,
   buildUKTrackContext, buildUKMilestones, UKTrackContext,
   classifyMomentImpact, type ClassifiedMoment, type ImpactTier,
-  getTeamPush,
+  getTeamPush, type TeamPush,
 } from "@/lib/transforms";
 import { getCategoryConfig, getAllCategories } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -51,7 +51,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const ukTrackContext = useMemo(() => sheet ? buildUKTrackContext(sheet) : [], [sheet]);
   const ukMilestones = useMemo(() => sheet ? buildUKMilestones(sheet) : [], [sheet]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
-  const teamPush = useMemo(() => sheet ? getTeamPush(sheet, territory) : "", [sheet, territory]);
+  const teamPush = useMemo(() => sheet ? getTeamPush(sheet, territory) : null, [sheet, territory]);
   const moments = useMemo(() => {
     if (!sheet) return [];
     const base = getAllMoments(sheet);
@@ -137,13 +137,27 @@ export default function Dashboard({ initialData }: DashboardProps) {
       </header>
 
       <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
-        {/* Team Push — recommended action above all KPIs */}
+        {/* Team Push — forward-looking action plan */}
         {teamPush && (
-          <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-2.5">
-            <div className="flex items-center gap-3 mb-1">
-              <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80">Team Push</p>
+          <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-3">
+            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80 mb-2">Team Push</p>
+            <div className="space-y-1">
+              <p className="text-[12px] text-white">
+                <span className="font-bold text-[#FBBF24]">PUSH</span>
+                <span className="text-[#4B5563] mx-1.5">→</span>
+                <span className="font-semibold">{teamPush.push}</span>
+              </p>
+              <p className="text-[12px] text-[#D1D5DB]">
+                <span className="font-bold text-[#6B7280]">Support</span>
+                <span className="text-[#4B5563] mx-1.5">→</span>
+                {teamPush.support}
+              </p>
+              <p className="text-[12px] text-[#9CA3AF]">
+                <span className="font-bold text-[#6B7280]">Next</span>
+                <span className="text-[#4B5563] mx-1.5">→</span>
+                {teamPush.next}
+              </p>
             </div>
-            <p className="text-[12px] font-semibold text-white">{teamPush}</p>
           </div>
         )}
 

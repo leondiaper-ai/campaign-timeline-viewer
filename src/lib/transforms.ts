@@ -587,36 +587,86 @@ function analyseCampaign(sheet: CampaignSheetData, territory: Territory): Campai
   };
 }
 
-// ——— Team Push: single recommended action ———
-export function getTeamPush(sheet: CampaignSheetData, territory: Territory): string {
-  const albumDate = sheet.setup.release_date;
-  if (!albumDate) return "";
-  const a = analyseCampaign(sheet, territory);
+// ——— Team Push: forward-looking action plan ———
+export interface TeamPush {
+  push: string;    // "PUSH → 'Track' (Market focus)"
+  support: string; // "Support → next activation"
+  next: string;    // "Next → upcoming moment"
+}
 
-  // Post-release drop with no sustained driver
-  if (a.crashed && a.hadPaid) {
-    return `Extend campaign beyond release week — paid (${a.fmtSpend}) drove the spike but streaming dropped ${a.dropPct}% with no follow-through`;
+function fmtWeekOf(d: string): string {
+  const dt = new Date(d + "T00:00:00");
+  const day = dt.getDate();
+  const mon = dt.toLocaleDateString("en-GB", { month: "short" });
+  return `W/C ${mon} ${day}`;
+}
+
+export function getTeamPush(sheet: CampaignSheetData, territory: Territory): TeamPush | null {
+  const albumDate = sheet.setup.release_date;
+  if (!albumDate) return null;
+
+  const a = analyseCampaign(sheet, territory);
+  const today = new Date().toISOString().slice(0, 10);
+
+  // ——— Lead track ———
+  const leadTrack = a.topTrackName || sheet.setup.campaign_name || "lead single";
+
+  // ——— Market focus ———
+  const market = territory === "UK" ? "UK" : "UK + Global";
+
+  // ——— Future moments: sorted, key moments first ———
+  const allMoments = [...(sheet.moments || [])];
+  // Add paid campaigns as moments for scanning
+  if (sheet.paidCampaigns) {
+    for (const pc of sheet.paidCampaigns) {
+      if (pc.start_date) allMoments.push({ date: pc.start_date, moment_title: `${pc.platform} (${pc.territory})`, moment_type: "paid", is_key: true });
+    }
   }
-  if (a.crashed && !a.hadPaid) {
-    return `Add post-release driver — streams dropped ${a.dropPct}% after peak with no paid or editorial support in place`;
+  const futureMoments = allMoments
+    .filter(m => m.date > today)
+    .sort((x, y) => {
+      // Key moments first, then by date
+      if (x.is_key !== y.is_key) return x.is_key ? -1 : 1;
+      return x.date.localeCompare(y.date);
+    });
+
+  // Nearest future moment = support, second = next
+  const supportMoment = futureMoments[0] || null;
+  const nextMoment = futureMoments.length > 1 ? futureMoments[1] : null;
+
+  // ——— Recent past moments (for support if no future) ———
+  const recentPast = allMoments
+    .filter(m => m.date <= today && m.date >= albumDate && m.is_key)
+    .sort((x, y) => y.date.localeCompare(x.date));
+  const latestPast = recentPast[0] || null;
+
+  // ——— Build push line ———
+  const push = `'${leadTrack}' (${market} focus)`;
+
+  // ——— Build support line ———
+  let support = "";
+  if (supportMoment) {
+    support = `${supportMoment.moment_title} (${fmtWeekOf(supportMoment.date)})`;
+  } else if (latestPast) {
+    support = `${latestPast.moment_title} momentum (${fmtWeekOf(latestPast.date)})`;
+  } else if (a.hadPaid) {
+    support = "extend digital campaign post-release";
+  } else {
+    support = "add editorial or paid activation";
   }
-  // Held but concentrated on one track
-  if (a.held && a.concentrated) {
-    return `Activate catalogue depth — ${a.topTrackName} carried ${a.topTrackShare}% of post-release streams, other tracks need support`;
+
+  // ——— Build next line ———
+  let next = "";
+  if (nextMoment) {
+    next = `build into ${nextMoment.moment_title} (${fmtWeekOf(nextMoment.date)})`;
+  } else if (supportMoment && futureMoments.length === 1) {
+    // Only one future moment — next is about sustaining
+    next = "sustain post-moment with playlist + editorial push";
+  } else {
+    next = "identify next activation window";
   }
-  // Held with paid — campaign worked, maintain
-  if (a.held && a.hadPaid) {
-    return `Maintain current approach — paid + editorial held streams within ${a.dropPct}% of peak, campaign is delivering`;
-  }
-  // Organic hold
-  if (a.held && !a.hadPaid) {
-    return `Protect the organic momentum — streaming held without paid support, consider targeted spend to accelerate`;
-  }
-  // Physical-dependent
-  if (a.physicalTotal > 0 && a.crashed) {
-    return `Build streaming strategy — physical delivered the chart result but streaming dropped ${a.dropPct}% post-release`;
-  }
-  return `Review post-release trajectory — peak at ${a.fmtPeak} streams, ${a.dropPct > 0 ? `${a.dropPct}% drop` : "holding steady"}`;
+
+  return { push, support, next };
 }
 
 // 3 bullets: outcome, driver, gap. References real data.
