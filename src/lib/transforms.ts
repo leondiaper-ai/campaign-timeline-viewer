@@ -673,12 +673,8 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   // ——— Lead track: strongest post-release performer ———
   const leadTrack = a.topTrackName || sheet.setup.campaign_name || "lead single";
 
-  // ——— Market focus: infer from territory + paid data ———
-  let market = territory === "UK" ? "UK" : "Global";
-  // If paid campaigns target specific territories, reflect that
-  if (a.paidTerritories && a.paidTerritories.includes("+")) {
-    market = a.paidTerritories;
-  }
+  // ——— Market focus: use territory selection ———
+  const market = territory === "UK" ? "UK" : "UK + Global";
 
   // ——— Gather future moments (deduplicated) ———
   const allMoments = [...(sheet.moments || [])];
@@ -696,9 +692,9 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
     }
   }
 
-  // Future key moments, sorted by date
+  // Current + future key moments (includes today), sorted by date
   const futureMoments = allMoments
-    .filter(m => m.date > today && m.is_key)
+    .filter(m => m.date >= today && m.is_key)
     .sort((x, y) => x.date.localeCompare(y.date));
 
   // Deduplicate by date: keep highest-impact moment per date
@@ -713,9 +709,9 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   }
   const uniqueFuture = [...futureByDate.values()].sort((x, y) => x.date.localeCompare(y.date));
 
-  // Also scan all future (including non-key) for fallback
+  // Also scan all current + future (including non-key) for fallback
   const allFuture = allMoments
-    .filter(m => m.date > today)
+    .filter(m => m.date >= today)
     .sort((x, y) => x.date.localeCompare(y.date));
 
   const supportMoment = uniqueFuture[0] || allFuture[0] || null;
