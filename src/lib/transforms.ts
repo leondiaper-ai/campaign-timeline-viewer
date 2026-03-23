@@ -756,7 +756,7 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   return { push, support, next };
 }
 
-// 3 bullets: outcome, what worked, opportunity. Anchored to real moments.
+// 3 bullets: success → cause → gap (with tension). Punchy, repeatable in a meeting.
 export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
   const items: LearningItem[] = [];
   const albumDate = sheet.setup.release_date;
@@ -766,63 +766,52 @@ export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Te
   const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
   const fmtPhys = a.physicalTotal >= 1000 ? `${(a.physicalTotal / 1000).toFixed(1)}K` : `${a.physicalTotal}`;
 
-  // Build compact paid ref: "£16K Marquee (UK + DE)"
+  // Compact paid ref: "£16K Marquee (UK + DE)"
   const paidRef = a.hadPaid
     ? `${a.fmtSpend} ${a.paidPlatforms || "paid"}${a.paidTerritories ? ` (${a.paidTerritories})` : ""}`
     : "";
 
-  // ——— 1. OUTCOME — chart result + what delivered it ———
+  // ——— 1. SUCCESS — what drove the result ———
   if (chart_result && chart_forecast) {
     const resNum = Number(chart_result.replace(/[^0-9]/g, ""));
     const foreNum = Number(chart_forecast.replace(/[^0-9]/g, ""));
     const beat = resNum && foreNum && resNum < foreNum;
     const missed = resNum && foreNum && resNum > foreNum;
 
-    // Include release week streams if available
-    const rwRef = a.releaseWeekStreams ? ` on ${a.releaseWeekStreams} release-week streams` : "";
-
     if (beat && a.physicalTotal > 0) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast${rwRef} — physical (${fmtPhys} units) bridged the gap`, sentiment: "positive" });
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — physical (${fmtPhys} units) drove the overperformance`, sentiment: "positive" });
     } else if (beat) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast${rwRef} — driven by ${outcome_driver || "campaign execution"}`, sentiment: "positive" });
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${outcome_driver || "release-week momentum"} drove the beat`, sentiment: "positive" });
     } else if (missed) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast${rwRef} — strong release week, but not enough to close the gap`, sentiment: "negative" });
+      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — release week wasn't enough to close the gap`, sentiment: "negative" });
     } else {
-      items.push({ text: `${chart_result} as forecast${rwRef} — campaign delivered to target`, sentiment: "neutral" });
+      items.push({ text: `${chart_result} as forecast — campaign delivered to target`, sentiment: "neutral" });
     }
   } else if (a.releaseWeekStreams) {
-    items.push({ text: `${a.releaseWeekStreams} release-week streams${a.physicalTotal > 0 ? `, ${fmtPhys} physical units` : ""} — strong launch window`, sentiment: "positive" });
+    const physBit = a.physicalTotal > 0 ? ` + ${fmtPhys} physical` : "";
+    items.push({ text: `${a.releaseWeekStreams} release-week streams${physBit} — release week drove the campaign`, sentiment: "positive" });
   }
 
-  // ——— 2. WHAT WORKED — real moments that drove performance ———
+  // ——— 2. CAUSE — what created the peak ———
   if (a.hadPaid && a.keyEditorial) {
-    // Both paid and editorial
-    if (a.held) {
-      items.push({ text: `${paidRef} + ${a.keyEditorial} built momentum through release week and held post-release`, sentiment: "positive" });
-    } else {
-      items.push({ text: `${paidRef} + ${a.keyEditorial} amplified the release window — strong launch activation`, sentiment: "positive" });
-    }
+    items.push({ text: `${paidRef} + ${a.keyEditorial} created the peak`, sentiment: "positive" });
   } else if (a.hadPaid) {
-    if (a.held) {
-      items.push({ text: `${paidRef} sustained streaming beyond release week — paid working as both launch and hold`, sentiment: "positive" });
-    } else {
-      items.push({ text: `${paidRef} amplified the release spike — effective launch driver`, sentiment: "positive" });
-    }
+    items.push({ text: `${paidRef} created the peak — paid was the primary driver`, sentiment: "positive" });
   } else if (a.keyEditorial) {
-    items.push({ text: `${a.keyEditorial} was the key activation — editorial drove the streaming window`, sentiment: "positive" });
+    items.push({ text: `${a.keyEditorial} drove the streaming window — editorial was the engine`, sentiment: "positive" });
   } else if (a.physicalTotal > 0) {
-    items.push({ text: `Physical (${fmtPhys} units) was the primary driver — delivered the chart position`, sentiment: "positive" });
+    items.push({ text: `Physical (${fmtPhys} units) drove the chart position — no digital peak behind it`, sentiment: "neutral" });
   }
 
-  // ——— 3. OPPORTUNITY — framed constructively, referencing real gaps ———
+  // ——— 3. GAP — tension, what didn't continue ———
   if (a.crashed && a.concentrated && items.length < 3) {
-    items.push({ text: `Opportunity: ${a.topTrackName} carried ${a.topTrackShare}% post-release — activating deeper catalogue could extend the streaming window`, sentiment: "neutral" });
+    items.push({ text: `But no second wave — ${a.topTrackName} carried ${a.topTrackShare}% and nothing else picked up`, sentiment: "negative" });
   } else if (a.crashed && items.length < 3) {
-    items.push({ text: `Opportunity: no sustained driver after release week — playlist hold or editorial follow-through could extend the ${a.releaseWeekStreams || a.fmtPeak} peak`, sentiment: "neutral" });
+    items.push({ text: `But no second wave — streaming wasn't extended beyond release week`, sentiment: "negative" });
   } else if (a.concentrated && items.length < 3) {
-    items.push({ text: `Opportunity: ${a.topTrackName} led post-release (${a.topTrackShare}%) — wider catalogue activation could unlock more streaming depth`, sentiment: "neutral" });
+    items.push({ text: `But ${a.topTrackName} carried ${a.topTrackShare}% post-release — the rest of the catalogue wasn't activated`, sentiment: "negative" });
   } else if (a.held && items.length < 3) {
-    items.push({ text: `Opportunity: post-release held well — adding a second activation window could build on this momentum`, sentiment: "positive" });
+    items.push({ text: `Post-release held, but no follow-through moment — a second push wasn't deployed`, sentiment: "neutral" });
   }
 
   return items.slice(0, 3);
