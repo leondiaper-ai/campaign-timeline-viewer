@@ -146,6 +146,13 @@ export interface MailerRow {
   notes: string;
 }
 
+// ——— Tab: campaign_learnings (manual editorial learnings) ————
+export interface ManualLearning {
+  type: "worked" | "didnt" | "next";  // what worked / what didn't / what's next
+  text: string;
+  order: number;
+}
+
 // ——— Parsed Campaign Sheet ————————————————————————————————
 export interface CampaignSheetData {
   setup: CampaignSetup;
@@ -157,6 +164,7 @@ export interface CampaignSheetData {
   dailyTerritoryData: DailyTerritoryRow[];
   ukContext: UKContextRow[];
   paidCampaigns: PaidCampaignRow[];
+  learnings: ManualLearning[];
 }
 
 // ——— Registry ————————————————————————————————————————————

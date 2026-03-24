@@ -32,6 +32,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [territory, setTerritory] = useState<Territory>("global");
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>("campaign");
+  const [trackNormalized, setTrackNormalized] = useState(false);
   const [pinnedDate, setPinnedDate] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
   const [learningsExpanded, setLearningsExpanded] = useState(false);
@@ -188,7 +189,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
             chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
             ukMilestones={ukMilestones} territory={territory}
-            paidCampaigns={sheet.paidCampaigns} moments={moments} />
+            paidCampaigns={sheet.paidCampaigns} moments={moments}
+            trackNormalized={trackNormalized} onTrackNormalizedChange={setTrackNormalized} />
         </div>
 
         {/* Full Campaign Timeline — collapsed by default */}
@@ -293,7 +295,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
 
         {/* Learnings */}
-        <CampaignLearnings sheet={sheet} territory={territory} />
+        <CampaignLearnings sheet={sheet} />
         {/* UK Track Context (supporting layer — visible in global mode) */}
         {territory === "global" && ukTrackContext.length > 0 && (
           <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-5">

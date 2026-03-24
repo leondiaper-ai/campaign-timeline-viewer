@@ -622,64 +622,49 @@ function analyseCampaign(sheet: CampaignSheetData, territory: Territory): Campai
   };
 }
 
-// ——— Team Push: forward-looking action plan ———
+// ——— Team Push: dynamic from campaign_moments dates ———
 export interface TeamPush {
-  push: string;    // "PUSH → 'Track' (Market focus)"
-  support: string; // "Support → next activation"
-  next: string;    // "Next → upcoming moment"
+  push: string;    // Active moment (today within range)
+  support: string; // Next upcoming moment (7–14 days)
+  next: string;    // Following future moment
 }
 
-function fmtWeekOf(d: string): string {
+function fmtDateShort(d: string): string {
   const dt = new Date(d + "T00:00:00");
-  const day = dt.getDate();
-  const mon = dt.toLocaleDateString("en-GB", { month: "short" });
-  return `W/C ${mon} ${day}`;
+  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
 // Context tag for a moment based on its type
 function momentTag(m: Moment): string {
   const t = m.moment_type.toLowerCase();
   const title = m.moment_title.toLowerCase();
-  if (t === "live" || t === "tour" || title.includes("tour") || title.includes("concert") || title.includes("festival")) return "live driver";
+  if (t === "live" || t === "tour" || title.includes("tour") || title.includes("concert") || title.includes("festival")) return "live";
   if (title.includes("outstore") || title.includes("signing") || title.includes("meet")) return "fan moment";
-  if (t === "media" || t === "tv" || t === "radio" || title.includes("press") || title.includes("interview")) return "media window";
-  if (t === "editorial" || title.includes("playlist")) return "editorial push";
-  if (t === "music" || title.includes("single") || title.includes("release")) return "new music";
-  if (t === "marketing" || t === "marquee" || t === "paid" || t === "showcase") return "digital push";
-  if (t === "product" || title.includes("chart") || title.includes("merch") || title.includes("vinyl")) return "product moment";
+  if (t === "media" || t === "tv" || t === "radio" || title.includes("press") || title.includes("interview")) return "media";
+  if (t === "editorial" || title.includes("playlist")) return "editorial";
+  if (t === "music" || title.includes("single") || title.includes("release")) return "release";
+  if (t === "marketing" || t === "marquee" || t === "paid" || t === "showcase") return "digital";
+  if (t === "product" || title.includes("chart") || title.includes("merch") || title.includes("vinyl")) return "product";
   return "";
 }
 
-// Clean moment title for display: strip redundant prefixes, keep it short
+// Clean moment title for display
 function cleanTitle(m: Moment): string {
   let t = m.moment_title;
-  // Paid campaigns are already formatted well
   if (m.moment_type.toLowerCase() === "paid") return t;
-  // Truncate long titles
-  if (t.length > 35) {
+  if (t.length > 40) {
     const dash = t.indexOf(" - ");
     if (dash > 0 && dash < 30) t = t.slice(0, dash);
-    else t = t.slice(0, 32) + "…";
+    else t = t.slice(0, 37) + "…";
   }
   return t;
 }
 
 export function getTeamPush(sheet: CampaignSheetData, territory: Territory): TeamPush | null {
-  const albumDate = sheet.setup.release_date;
-  if (!albumDate) return null;
-
-  const a = analyseCampaign(sheet, territory);
   const today = new Date().toISOString().slice(0, 10);
 
-  // ——— Lead track: strongest post-release performer ———
-  const leadTrack = a.topTrackName || sheet.setup.campaign_name || "lead single";
-
-  // ——— Market focus: use territory selection ———
-  const market = territory === "UK" ? "UK" : "UK + Global";
-
-  // ——— Gather future moments (deduplicated) ———
+  // Gather all moments including paid campaigns
   const allMoments = [...(sheet.moments || [])];
-  // Add paid campaigns but deduplicate by date+platform
   if (sheet.paidCampaigns) {
     const seenPaid = new Set<string>();
     for (const pc of sheet.paidCampaigns) {
@@ -693,68 +678,56 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
     }
   }
 
-  // Current + future key moments (includes today), sorted by date
-  const futureMoments = allMoments
-    .filter(m => m.date >= today && m.is_key)
-    .sort((x, y) => x.date.localeCompare(y.date));
+  // Sort all by date
+  allMoments.sort((a, b) => a.date.localeCompare(b.date));
 
-  // Deduplicate by date: keep highest-impact moment per date
-  const futureByDate = new Map<string, Moment>();
-  for (const m of futureMoments) {
-    const ex = futureByDate.get(m.date);
-    if (!ex) { futureByDate.set(m.date, m); continue; }
-    // Prefer non-paid over paid, then by title length (more specific = better)
-    const exIsPaid = ex.moment_type.toLowerCase() === "paid";
-    const mIsPaid = m.moment_type.toLowerCase() === "paid";
-    if (exIsPaid && !mIsPaid) futureByDate.set(m.date, m);
-  }
-  const uniqueFuture = [...futureByDate.values()].sort((x, y) => x.date.localeCompare(y.date));
+  // Classify: active = today ± 1 day, upcoming = next 14 days, future = beyond
+  const activeMoments: Moment[] = [];
+  const upcomingMoments: Moment[] = [];
+  const futureMoments: Moment[] = [];
 
-  // Also scan all current + future (including non-key) for fallback
-  const allFuture = allMoments
-    .filter(m => m.date >= today)
-    .sort((x, y) => x.date.localeCompare(y.date));
+  const todayMs = new Date(today + "T00:00:00").getTime();
 
-  const supportMoment = uniqueFuture[0] || allFuture[0] || null;
-  const nextMoment = uniqueFuture.length > 1 ? uniqueFuture[1] : (allFuture.length > 1 ? allFuture[1] : null);
+  for (const m of allMoments) {
+    const mMs = new Date(m.date + "T00:00:00").getTime();
+    const daysAway = (mMs - todayMs) / (1000 * 60 * 60 * 24);
 
-  // ——— Recent past key moments (fallback if no future) ———
-  const recentPast = allMoments
-    .filter(m => m.date <= today && m.date >= albumDate && m.is_key)
-    .sort((x, y) => y.date.localeCompare(x.date));
-  const latestPast = recentPast[0] || null;
-
-  // ——— Build push line ———
-  const push = `'${leadTrack}' (${market} focus)`;
-
-  // ——— Build support line with context tag ———
-  let support = "";
-  if (supportMoment) {
-    const tag = momentTag(supportMoment);
-    const title = cleanTitle(supportMoment);
-    support = `${title} (${fmtWeekOf(supportMoment.date)})${tag ? ` — ${tag}` : ""}`;
-  } else if (latestPast) {
-    const tag = momentTag(latestPast);
-    support = `${cleanTitle(latestPast)} momentum${tag ? ` — ${tag}` : ""}`;
-  } else if (a.hadPaid) {
-    support = "extend digital campaign post-release — digital push";
-  } else {
-    support = "add editorial or paid activation — open window";
+    if (daysAway >= -1 && daysAway <= 1) {
+      activeMoments.push(m);
+    } else if (daysAway > 1 && daysAway <= 14) {
+      upcomingMoments.push(m);
+    } else if (daysAway > 14) {
+      futureMoments.push(m);
+    }
   }
 
-  // ——— Build next line with context tag ———
-  let next = "";
-  if (nextMoment) {
-    const tag = momentTag(nextMoment);
-    const title = cleanTitle(nextMoment);
-    next = `build into ${title} (${fmtWeekOf(nextMoment.date)})${tag ? ` — ${tag}` : ""}`;
-  } else if (supportMoment && uniqueFuture.length <= 1) {
-    next = "sustain post-moment with playlist + editorial push";
-  } else {
-    next = "identify next activation window";
-  }
+  // Pick best from each bucket (prefer is_key, then first by date)
+  const pick = (bucket: Moment[]): Moment | null => {
+    const keyed = bucket.filter(m => m.is_key);
+    return keyed[0] || bucket[0] || null;
+  };
 
-  return { push, support, next };
+  const active = pick(activeMoments);
+  const upcoming = pick(upcomingMoments);
+  const future = pick(futureMoments);
+
+  // Need at least one moment to show the panel
+  if (!active && !upcoming && !future) return null;
+
+  const fmtMoment = (m: Moment | null, prefix?: string): string => {
+    if (!m) return "no upcoming moments scheduled";
+    const tag = momentTag(m);
+    const title = cleanTitle(m);
+    const date = fmtDateShort(m.date);
+    const tagStr = tag ? ` [${tag}]` : "";
+    return `${prefix ? prefix + " " : ""}${title} — ${date}${tagStr}`;
+  };
+
+  return {
+    push: active ? fmtMoment(active) : fmtMoment(upcoming),
+    support: active ? fmtMoment(upcoming) : fmtMoment(future),
+    next: active ? fmtMoment(future) : (futureMoments[1] ? fmtMoment(futureMoments[1]) : "no further moments scheduled"),
+  };
 }
 
 // 3 bullets: success → cause → gap (with tension). Punchy, repeatable in a meeting.

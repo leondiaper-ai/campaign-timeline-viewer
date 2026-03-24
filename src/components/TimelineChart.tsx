@@ -50,6 +50,8 @@ interface Props {
   territory?: Territory;
   paidCampaigns?: PaidCampaignRow[];
   moments?: Moment[];
+  trackNormalized?: boolean;
+  onTrackNormalizedChange?: (v: boolean) => void;
 }
 
 // ——— Tooltip event priority (lower = higher priority) ———
@@ -290,6 +292,7 @@ export default function TimelineChart({
   highlightedDate, pinnedDate, handoverMoment, chartInsight, trackModeContext,
   chartMode, onChartModeChange, albumDate, ukMilestones, territory,
   paidCampaigns, moments: allMoments,
+  trackNormalized, onTrackNormalizedChange,
 }: Props) {
   const chartDates = useMemo(() => data.map(d => d.date).sort(), [data]);
   const moments = useMemo(() => layoutMoments(allMoments || [], chartDates), [allMoments, chartDates]);
@@ -298,6 +301,33 @@ export default function TimelineChart({
   const isCampaign = chartMode === "campaign";
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
   const isSparse = useMemo(() => data.filter(d => d.total_streams > 0).length <= 3, [data]);
+
+  // Normalized track data: each track indexed to 100 (its own peak)
+  const normalizedData = useMemo(() => {
+    if (!trackNormalized) return data;
+    // Find peak per track
+    const peaks = new Map<string, number>();
+    for (const dp of data) {
+      for (const tn of selectedTracks) {
+        const v = (dp as Record<string, unknown>)[tn];
+        if (typeof v === "number" && v > 0) {
+          peaks.set(tn, Math.max(peaks.get(tn) || 0, v));
+        }
+      }
+    }
+    // Normalize each point
+    return data.map(dp => {
+      const norm = { ...dp };
+      for (const tn of selectedTracks) {
+        const v = (dp as Record<string, unknown>)[tn];
+        const peak = peaks.get(tn) || 1;
+        if (typeof v === "number") {
+          (norm as Record<string, unknown>)[tn] = Math.round((v / peak) * 100);
+        }
+      }
+      return norm;
+    });
+  }, [data, selectedTracks, trackNormalized]);
 
   // Smart Y-axis domain for Tracks mode: prevent a single massive spike
   // from crushing all other track lines to invisible.
@@ -357,6 +387,12 @@ export default function TimelineChart({
           <button onClick={() => onChartModeChange("tracks")}
             className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${!isCampaign ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>Tracks</button>
         </div>
+        {!isCampaign && onTrackNormalizedChange && (
+          <button onClick={() => onTrackNormalizedChange(!trackNormalized)}
+            className={`px-2.5 py-1 text-[10px] font-medium rounded-md border transition-all ${trackNormalized ? "border-[#6C9EFF]/30 bg-[#6C9EFF]/10 text-[#6C9EFF]" : "border-[#1E2130] text-[#4B5563] hover:text-[#6B7280]"}`}>
+            Indexed
+          </button>
+        )}
         <span className="text-[10px] max-w-[420px] text-right">
           {isCampaign ? (
             paidCampaigns && paidCampaigns.length > 0 ? (
@@ -457,15 +493,15 @@ export default function TimelineChart({
         </div>
       )}
 
-      {/* ========= TRACKS MODE — narrative chart, real values ========= */}
+      {/* ========= TRACKS MODE — narrative chart ========= */}
       {!isCampaign && (
         <div className="w-full h-[420px]">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
+            <ComposedChart data={normalizedData} margin={{ top: 8, right: 24, left: 8, bottom: 8 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#151825" vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDate} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={{ stroke: "#151825" }} tickLine={false} dy={8} interval="preserveStartEnd" />
-              <YAxis tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
-                domain={trackYDomain as [number, number] | undefined} allowDataOverflow={!!trackYDomain} />
+              <YAxis tickFormatter={trackNormalized ? (v: number) => `${v}` : fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50}
+                domain={trackNormalized ? [0, 105] : (trackYDomain as [number, number] | undefined)} allowDataOverflow={!!trackYDomain || trackNormalized} />
               <Tooltip content={<TrackTip trackRoles={trackRoles} ukMilestones={ukMilestones} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
               {pinnedDate && <ReferenceLine x={pinnedDate} stroke="#FBBF24" strokeWidth={2.5} strokeOpacity={0.9} />}
               {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} stroke="#FBBF24" strokeWidth={2} strokeDasharray="4 4" />}

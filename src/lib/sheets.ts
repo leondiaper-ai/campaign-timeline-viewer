@@ -16,6 +16,7 @@ import {
   DailyTerritoryRow,
   UKContextRow,
   PaidCampaignRow,
+  ManualLearning,
 } from "@/types";
 
 // ——— Google Sheets Client ——————————————————————————————————
@@ -596,11 +597,38 @@ function validateSheetData(data: CampaignSheetData): ValidationWarning[] {
   return warnings;
 }
 
+/** Tab: campaign_learnings — manual editorial learnings (columns: campaign, type, text, order) */
+async function fetchLearnings(sheetId: string): Promise<ManualLearning[]> {
+  const data = await fetchWithHeaderSafe(sheetId, "campaign_learnings");
+  if (!data || data.rows.length === 0) return [];
+
+  const h = data.header;
+  const typeCol = Math.max(0, h.findIndex(c => c === "type"));
+  const textCol = Math.max(0, h.findIndex(c => c === "text"));
+  const orderCol = h.findIndex(c => c === "order");
+
+  return data.rows
+    .filter(r => r[textCol]?.trim())
+    .map(r => {
+      const rawType = (r[typeCol] || "").trim().toLowerCase();
+      const type: ManualLearning["type"] =
+        rawType === "worked" ? "worked" :
+        rawType === "didnt" || rawType === "didn't" ? "didnt" :
+        "next";
+      return {
+        type,
+        text: r[textCol].trim(),
+        order: orderCol >= 0 ? safeNumber(r[orderCol]) : 0,
+      };
+    })
+    .sort((a, b) => a.order - b.order);
+}
+
 // ——— Full Campaign Loader ——————————————————————————————————
 export async function fetchCampaignSheetData(
   sheetId: string
 ): Promise<CampaignSheetData> {
-  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns] =
+  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns, learnings] =
     await Promise.all([
       fetchCampaignSetup(sheetId),
       fetchTracks(sheetId),
@@ -611,9 +639,10 @@ export async function fetchCampaignSheetData(
       fetchTrackDailyImportTerritory(sheetId),
       fetchTrackUKContext(sheetId),
       fetchPaidCampaigns(sheetId),
+      fetchLearnings(sheetId),
     ]);
 
-  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns, learnings };
 
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {
