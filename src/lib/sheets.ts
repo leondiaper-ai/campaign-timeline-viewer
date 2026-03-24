@@ -402,40 +402,11 @@ async function fetchMoments(sheetId: string): Promise<Moment[]> {
   return [];
 }
 
-/** Tab: territory_master (preferred) → track_daily_import → track_metrics — per-track streams (global rows) */
+/** Tab: track_daily_import — per-track global streams (columns: date, track_name, streams) */
 async function fetchTrackDailyImport(sheetId: string): Promise<DailyTrackRow[]> {
-  // 1. Preferred: territory_master (normalized, deduplicated)
-  const masterData = await fetchWithHeaderSafe(sheetId, "territory_master");
-  if (masterData && masterData.rows.length > 0) {
-    const mh = masterData.header;
-    const mDateCol = Math.max(0, mh.findIndex(c => c === "date"));
-    const mTrackCol = Math.max(0, mh.findIndex(c => c.includes("track")));
-    const mTerrCol = mh.findIndex(c => c.includes("territory"));
-    const mStreamsCol = Math.max(0, mh.findIndex(c => c.includes("streams")));
-
-    const result = masterData.rows
-      .filter((r) => {
-        const date = (r[mDateCol] || "").trim();
-        const terr = mTerrCol >= 0 ? cleanTerritory(r[mTerrCol]) : "global";
-        return isValidDate(date) && terr === "global" && safeNumber(r[mStreamsCol]) > 0;
-      })
-      .map((r) => ({
-        date: r[mDateCol].trim(),
-        track_name: normalizeQuotes((r[mTrackCol] || "").trim()),
-        global_streams: safeNumber(r[mStreamsCol]),
-      }))
-      .filter((r) => r.track_name.length > 0);
-
-    if (result.length > 0) {
-      console.log(`[CTV] fetchTrackDailyImport: ${result.length} global rows from territory_master`);
-      return result;
-    }
-  }
-
-  // 2. Legacy: track_daily_import tab
-  const legacyRows = await fetchRowsSafe(sheetId, "track_daily_import");
-  if (legacyRows.length > 0) {
-    return legacyRows
+  const rows = await fetchRowsSafe(sheetId, "track_daily_import");
+  if (rows.length > 0) {
+    return rows
       .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
       .map((r) => ({
         date: r[0].trim(),
@@ -445,7 +416,7 @@ async function fetchTrackDailyImport(sheetId: string): Promise<DailyTrackRow[]> 
       .filter((r) => r.global_streams > 0);
   }
 
-  // 3. Fallback: track_metrics — extract global rows
+  // Fallback: track_metrics — extract global rows
   const data = await fetchWithHeaderSafe(sheetId, "track_metrics");
   if (!data || data.rows.length === 0) return [];
 
@@ -469,43 +440,11 @@ async function fetchTrackDailyImport(sheetId: string): Promise<DailyTrackRow[]> 
     .filter((r) => r.track_name.length > 0);
 }
 
-/** Tab: territory_master (preferred) → track_daily_import_territory → track_metrics — per-track territory streams */
+/** Tab: track_daily_import_territory — per-track territory streams (columns: date, track_name, territory, streams) */
 async function fetchTrackDailyImportTerritory(sheetId: string): Promise<DailyTerritoryRow[]> {
-  // 1. Preferred: territory_master (normalized, deduplicated)
-  const masterData = await fetchWithHeaderSafe(sheetId, "territory_master");
-  if (masterData && masterData.rows.length > 0) {
-    const mh = masterData.header;
-    const mDateCol = Math.max(0, mh.findIndex(c => c === "date"));
-    const mTrackCol = Math.max(0, mh.findIndex(c => c.includes("track")));
-    const mTerrCol = mh.findIndex(c => c.includes("territory"));
-    const mStreamsCol = Math.max(0, mh.findIndex(c => c.includes("streams")));
-
-    if (mTerrCol >= 0) {
-      const result = masterData.rows
-        .filter((r) => {
-          const date = (r[mDateCol] || "").trim();
-          const terr = cleanTerritory(r[mTerrCol]);
-          return isValidDate(date) && terr !== "global" && safeNumber(r[mStreamsCol]) > 0;
-        })
-        .map((r) => ({
-          date: r[mDateCol].trim(),
-          track_name: normalizeQuotes((r[mTrackCol] || "").trim()),
-          territory: cleanTerritory(r[mTerrCol]),
-          streams: safeNumber(r[mStreamsCol]),
-        }))
-        .filter((r) => r.track_name.length > 0);
-
-      if (result.length > 0) {
-        console.log(`[CTV] fetchTrackDailyImportTerritory: ${result.length} territory rows from territory_master`);
-        return result;
-      }
-    }
-  }
-
-  // 2. Legacy: track_daily_import_territory tab
-  const legacyRows = await fetchRowsSafe(sheetId, "track_daily_import_territory");
-  if (legacyRows.length > 0) {
-    return legacyRows
+  const rows = await fetchRowsSafe(sheetId, "track_daily_import_territory");
+  if (rows.length > 0) {
+    return rows
       .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
       .map((r) => ({
         date: r[0].trim(),
@@ -516,7 +455,7 @@ async function fetchTrackDailyImportTerritory(sheetId: string): Promise<DailyTer
       .filter((r) => r.streams > 0);
   }
 
-  // 3. Fallback: track_metrics — extract non-global rows as territory data
+  // Fallback: track_metrics — extract non-global rows as territory data
   const data = await fetchWithHeaderSafe(sheetId, "track_metrics");
   if (!data || data.rows.length === 0) return [];
 
@@ -708,34 +647,3 @@ export async function fetchActiveCampaigns(): Promise<RegistryEntry[]> {
   return all.filter((e) => e.status === "active");
 }
 
-// ——— Debug: raw territory tab inspection ——————————————————
-export async function debugTerritoryData(sheetId: string) {
-  const raw = await fetchRowsSafe(sheetId, "track_daily_import_territory");
-  // Return first 10 raw rows + parsed rows + summary stats
-  const parsed = raw
-    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
-    .map((r) => ({
-      date: r[0].trim(),
-      track_name: r[1].trim(),
-      raw_territory: r[2] || "(empty)",
-      normalized_territory: cleanTerritory(r[2]),
-      streams: safeNumber(r[3]),
-    }));
-
-  const ukRows = parsed.filter(r => r.normalized_territory === "UK");
-  const globalRows = parsed.filter(r => r.normalized_territory === "global");
-  const ukDates = [...new Set(ukRows.map(r => r.date))].sort();
-  const rawTerritoryValues = [...new Set(parsed.map(r => r.raw_territory))];
-
-  return {
-    total_raw_rows: raw.length,
-    total_parsed_rows: parsed.length,
-    raw_territory_values_found: rawTerritoryValues,
-    uk_row_count: ukRows.length,
-    global_row_count: globalRows.length,
-    uk_date_range: ukDates.length > 0 ? { first: ukDates[0], last: ukDates[ukDates.length - 1], count: ukDates.length } : null,
-    first_10_raw_rows: raw.slice(0, 10),
-    first_10_uk_rows: ukRows.slice(0, 10),
-    last_10_uk_rows: ukRows.slice(-10),
-  };
-}
