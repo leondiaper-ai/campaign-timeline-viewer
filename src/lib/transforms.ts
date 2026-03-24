@@ -622,16 +622,18 @@ function analyseCampaign(sheet: CampaignSheetData, territory: Territory): Campai
   };
 }
 
-// ——— Team Push: dynamic from campaign_moments dates ———
+// ——— Team Push: track priority → current support → future milestone ———
 export interface TeamPush {
-  push: string;    // Active moment (today within range)
-  support: string; // Next upcoming moment (7–14 days)
-  next: string;    // Following future moment
+  push: string;    // Track-led strategic priority (never an event)
+  support: string; // Nearest active/imminent support moment
+  next: string;    // Next meaningful future milestone
 }
 
-function fmtDateShort(d: string): string {
+function fmtWeekOf(d: string): string {
   const dt = new Date(d + "T00:00:00");
-  return dt.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const day = dt.getDate();
+  const mon = dt.toLocaleDateString("en-GB", { month: "short" });
+  return `W/C ${mon} ${day}`;
 }
 
 // Context tag for a moment based on its type
@@ -661,9 +663,18 @@ function cleanTitle(m: Moment): string {
 }
 
 export function getTeamPush(sheet: CampaignSheetData, territory: Territory): TeamPush | null {
+  const albumDate = sheet.setup.release_date;
+  if (!albumDate) return null;
+
+  const a = analyseCampaign(sheet, territory);
   const today = new Date().toISOString().slice(0, 10);
 
-  // Gather all moments including paid campaigns
+  // ——— 1. PUSH: track-led strategic priority (never an event) ———
+  const focusTrack = a.topTrackName || sheet.setup.campaign_name || "lead single";
+  const market = territory === "UK" ? "UK" : "UK + Global";
+  const push = `'${focusTrack}' (${market} focus)`;
+
+  // ——— Gather all moments for Support + Next ———
   const allMoments = [...(sheet.moments || [])];
   if (sheet.paidCampaigns) {
     const seenPaid = new Set<string>();
@@ -678,56 +689,56 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
     }
   }
 
-  // Sort all by date
-  allMoments.sort((a, b) => a.date.localeCompare(b.date));
+  // Current + future moments (today or later), sorted by date, deduplicated by date
+  const futureMoments = allMoments
+    .filter(m => m.date >= today)
+    .sort((x, y) => x.date.localeCompare(y.date));
 
-  // Classify: active = today ± 1 day, upcoming = next 14 days, future = beyond
-  const activeMoments: Moment[] = [];
-  const upcomingMoments: Moment[] = [];
-  const futureMoments: Moment[] = [];
-
-  const todayMs = new Date(today + "T00:00:00").getTime();
-
-  for (const m of allMoments) {
-    const mMs = new Date(m.date + "T00:00:00").getTime();
-    const daysAway = (mMs - todayMs) / (1000 * 60 * 60 * 24);
-
-    if (daysAway >= -1 && daysAway <= 1) {
-      activeMoments.push(m);
-    } else if (daysAway > 1 && daysAway <= 14) {
-      upcomingMoments.push(m);
-    } else if (daysAway > 14) {
-      futureMoments.push(m);
-    }
+  const futureByDate = new Map<string, Moment>();
+  for (const m of futureMoments) {
+    const ex = futureByDate.get(m.date);
+    if (!ex) { futureByDate.set(m.date, m); continue; }
+    // Prefer key moments, then non-paid over paid
+    if (m.is_key && !ex.is_key) futureByDate.set(m.date, m);
+    else if (ex.moment_type.toLowerCase() === "paid" && m.moment_type.toLowerCase() !== "paid") futureByDate.set(m.date, m);
   }
+  const uniqueFuture = [...futureByDate.values()].sort((x, y) => x.date.localeCompare(y.date));
 
-  // Pick best from each bucket (prefer is_key, then first by date)
-  const pick = (bucket: Moment[]): Moment | null => {
-    const keyed = bucket.filter(m => m.is_key);
-    return keyed[0] || bucket[0] || null;
-  };
+  // Also include all future (including non-key) as fallback
+  const allFuture = allMoments
+    .filter(m => m.date >= today)
+    .sort((x, y) => x.date.localeCompare(y.date));
 
-  const active = pick(activeMoments);
-  const upcoming = pick(upcomingMoments);
-  const future = pick(futureMoments);
-
-  // Need at least one moment to show the panel
-  if (!active && !upcoming && !future) return null;
-
-  const fmtMoment = (m: Moment | null, prefix?: string): string => {
-    if (!m) return "no upcoming moments scheduled";
+  const fmtMomentLine = (m: Moment): string => {
     const tag = momentTag(m);
     const title = cleanTitle(m);
-    const date = fmtDateShort(m.date);
-    const tagStr = tag ? ` [${tag}]` : "";
-    return `${prefix ? prefix + " " : ""}${title} — ${date}${tagStr}`;
+    const tagStr = tag ? ` — ${tag}` : "";
+    return `${title} (${fmtWeekOf(m.date)})${tagStr}`;
   };
 
-  return {
-    push: active ? fmtMoment(active) : fmtMoment(upcoming),
-    support: active ? fmtMoment(upcoming) : fmtMoment(future),
-    next: active ? fmtMoment(future) : (futureMoments[1] ? fmtMoment(futureMoments[1]) : "no further moments scheduled"),
-  };
+  // ——— 2. SUPPORT: nearest active or imminent moment ———
+  const supportMoment = uniqueFuture[0] || allFuture[0] || null;
+  let support: string;
+  if (supportMoment) {
+    support = fmtMomentLine(supportMoment);
+  } else if (a.hadPaid) {
+    support = "extend digital campaign post-release — digital push";
+  } else {
+    support = "add editorial or paid activation — open window";
+  }
+
+  // ——— 3. NEXT: following future milestone after support ———
+  const nextMoment = uniqueFuture.length > 1 ? uniqueFuture[1] : (allFuture.length > 1 ? allFuture[1] : null);
+  let next: string;
+  if (nextMoment) {
+    next = `build into ${fmtMomentLine(nextMoment)}`;
+  } else if (supportMoment) {
+    next = "sustain post-moment with playlist + editorial push";
+  } else {
+    next = "identify next activation window";
+  }
+
+  return { push, support, next };
 }
 
 // 3 bullets: success → cause → gap (with tension). Punchy, repeatable in a meeting.
