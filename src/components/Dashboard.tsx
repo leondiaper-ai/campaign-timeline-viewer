@@ -32,7 +32,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const [territory, setTerritory] = useState<Territory>("global");
   const [highlightedDate, setHighlightedDate] = useState<string | null>(null);
   const [chartMode, setChartMode] = useState<ChartMode>("campaign");
-  const [trackNormalized, setTrackNormalized] = useState(false);
   const [pinnedDate, setPinnedDate] = useState<string | null>(null);
   const [logExpanded, setLogExpanded] = useState(false);
   const [learningsExpanded, setLearningsExpanded] = useState(false);
@@ -46,6 +45,15 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const allTrackNames = useMemo(() => sheet ? getAllTrackNames(sheet) : [], [sheet]);
   const trackRoles = useMemo(() => sheet ? inferTrackRoles(sheet, territory) : [], [sheet, territory]);
   const chartData = useMemo(() => sheet ? buildChartData(sheet, territory, allTrackNames) : [], [sheet, territory, allTrackNames]);
+
+  // Default tracks view: show only key narrative tracks (not all 13)
+  const DEFAULT_VISIBLE = ["Death Of Love", "I Had a Dream", "Doesn't Just Happen", "Trying Times"];
+  const visibleTracks = useMemo(() => {
+    // Use defaults if they exist in the data, otherwise fall back to key roles
+    const matched = DEFAULT_VISIBLE.filter(t => allTrackNames.includes(t));
+    if (matched.length >= 2) return matched;
+    return trackRoles.filter(r => r.opacity >= 0.5).map(r => r.track_name).slice(0, 4);
+  }, [allTrackNames, trackRoles]);
   const handoverMoment = useMemo(() => sheet ? detectHandoverMoment(sheet, territory) : null, [sheet, territory]);
   const chartInsight = useMemo(() => sheet ? getChartInsight(sheet, territory) : null, [sheet, territory]);
   const trackModeContext = useMemo(() => sheet ? getTrackModeContext(sheet, territory) : null, [sheet, territory]);
@@ -183,14 +191,13 @@ export default function Dashboard({ initialData }: DashboardProps) {
               </div>
             );
           })()}
-          <TimelineChart data={chartData} selectedTracks={allTrackNames} trackRoles={trackRoles}
+          <TimelineChart data={chartData} selectedTracks={visibleTracks} trackRoles={trackRoles}
             visibleEventDates={keyMomentDates} highlightedDate={effectiveHighlight}
             pinnedDate={pinnedDate}
             handoverMoment={handoverMoment} chartInsight={chartInsight} trackModeContext={trackModeContext}
             chartMode={chartMode} onChartModeChange={setChartMode} albumDate={albumDate}
             ukMilestones={ukMilestones} territory={territory}
-            paidCampaigns={sheet.paidCampaigns} moments={moments}
-            trackNormalized={trackNormalized} onTrackNormalizedChange={setTrackNormalized} />
+            paidCampaigns={sheet.paidCampaigns} moments={moments} />
         </div>
 
         {/* Full Campaign Timeline — collapsed by default */}

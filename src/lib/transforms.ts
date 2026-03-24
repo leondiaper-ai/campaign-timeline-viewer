@@ -502,17 +502,6 @@ export function getTopImpactMoment(sheet: CampaignSheetData, territory: Territor
 }
 
 
-// ——— Campaign Learnings (flat, outcome-first) ——————————————
-export interface LearningItem {
-  text: string;
-  sentiment: "positive" | "neutral" | "negative";
-}
-
-// Legacy types kept for backward compat
-export type LearningGroup = "music" | "campaign" | "commercial" | "takeaway";
-export interface GroupedLearnings { music: LearningItem[]; campaign: LearningItem[]; commercial: LearningItem[]; takeaway: LearningItem[]; }
-export interface CampaignLearning { dateLabel: string; eventType: string; text: string; phase: "pre" | "peak" | "post"; }
-export function getCampaignLearnings(): CampaignLearning[] { return []; }
 
 // ——— Shared campaign analysis data ———
 interface CampaignAnalysis {
@@ -741,67 +730,6 @@ export function getTeamPush(sheet: CampaignSheetData, territory: Territory): Tea
   return { push, support, next };
 }
 
-// 3 bullets: success → cause → gap (with tension). Punchy, repeatable in a meeting.
-export function getCampaignLearningsFlat(sheet: CampaignSheetData, territory: Territory): LearningItem[] {
-  const items: LearningItem[] = [];
-  const albumDate = sheet.setup.release_date;
-  if (!albumDate) return items;
-
-  const a = analyseCampaign(sheet, territory);
-  const { chart_result, chart_forecast, outcome_driver } = sheet.setup;
-  const fmtPhys = a.physicalTotal >= 1000 ? `${(a.physicalTotal / 1000).toFixed(1)}K` : `${a.physicalTotal}`;
-
-  // Compact paid ref: "$16K Marquee (UK + DE)"
-  const paidRef = a.hadPaid
-    ? `${a.fmtSpend} ${a.paidPlatforms || "paid"}${a.paidTerritories ? ` (${a.paidTerritories})` : ""}`
-    : "";
-
-  // ——— 1. SUCCESS — what drove the result ———
-  if (chart_result && chart_forecast) {
-    const resNum = Number(chart_result.replace(/[^0-9]/g, ""));
-    const foreNum = Number(chart_forecast.replace(/[^0-9]/g, ""));
-    const beat = resNum && foreNum && resNum < foreNum;
-    const missed = resNum && foreNum && resNum > foreNum;
-
-    if (beat && a.physicalTotal > 0) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — physical (${fmtPhys} units) drove the overperformance`, sentiment: "positive" });
-    } else if (beat) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — ${outcome_driver || "release-week momentum"} drove the beat`, sentiment: "positive" });
-    } else if (missed) {
-      items.push({ text: `${chart_result} vs ${chart_forecast} forecast — release week wasn't enough to close the gap`, sentiment: "negative" });
-    } else {
-      items.push({ text: `${chart_result} as forecast — campaign delivered to target`, sentiment: "neutral" });
-    }
-  } else if (a.releaseWeekStreams) {
-    const physBit = a.physicalTotal > 0 ? ` + ${fmtPhys} physical` : "";
-    items.push({ text: `${a.releaseWeekStreams} release-week streams${physBit} — release week drove the campaign`, sentiment: "positive" });
-  }
-
-  // ——— 2. CAUSE — what created the peak ———
-  if (a.hadPaid && a.keyEditorial) {
-    items.push({ text: `${paidRef} + ${a.keyEditorial} created the peak`, sentiment: "positive" });
-  } else if (a.hadPaid) {
-    items.push({ text: `${paidRef} created the peak — paid was the primary driver`, sentiment: "positive" });
-  } else if (a.keyEditorial) {
-    items.push({ text: `${a.keyEditorial} drove the streaming window — editorial was the engine`, sentiment: "positive" });
-  } else if (a.physicalTotal > 0) {
-    items.push({ text: `Physical (${fmtPhys} units) drove the chart position — no digital peak behind it`, sentiment: "neutral" });
-  }
-
-  // ——— 3. GAP — tension, what didn't continue ———
-  if (a.crashed && a.concentrated && items.length < 3) {
-    items.push({ text: `But no second wave — ${a.topTrackName} carried ${a.topTrackShare}% and nothing else picked up`, sentiment: "negative" });
-  } else if (a.crashed && items.length < 3) {
-    items.push({ text: `But no second wave — streaming wasn't extended beyond release week`, sentiment: "negative" });
-  } else if (a.concentrated && items.length < 3) {
-    items.push({ text: `But ${a.topTrackName} carried ${a.topTrackShare}% post-release — the rest of the catalogue wasn't activated`, sentiment: "negative" });
-  } else if (a.held && items.length < 3) {
-    items.push({ text: `Post-release held, but no follow-through moment — a second push wasn't deployed`, sentiment: "neutral" });
-  }
-
-  return items.slice(0, 3);
-}
-
 // ——— Paid Role: qualitative insight for spend card ———
 export function getPaidRole(sheet: CampaignSheetData, territory: Territory): string {
   const albumDate = sheet.setup.release_date;
@@ -814,15 +742,6 @@ export function getPaidRole(sheet: CampaignSheetData, territory: Territory): str
   return "Paid amplified the launch";
 }
 
-// Legacy wrapper — returns GroupedLearnings by distributing flat items
-export function getGroupedLearnings(sheet: CampaignSheetData, territory: Territory): GroupedLearnings {
-  const flat = getCampaignLearningsFlat(sheet, territory);
-  const result: GroupedLearnings = { music: [], campaign: [], commercial: [], takeaway: [] };
-  // Put all items in takeaway for backward compat
-  result.takeaway = flat;
-  return result;
-}
-
 // ——— Inline Chart Insight (1 sentence) ——————————————————————
 export function getChartInsight(sheet: CampaignSheetData, territory: Territory): string | null {
   const roles = inferTrackRoles(sheet, territory);
@@ -831,52 +750,6 @@ export function getChartInsight(sheet: CampaignSheetData, territory: Territory):
   return `Post-album, "\u200B${breakout.track_name}" is the only track holding meaningful volume`;
 }
 
-// ——— Normalized Track Data (each track 0–100% of its peak) ——
-export interface NormalizedPoint {
-  date: string;
-  [key: string]: number | string | null;
-}
-
-export function buildNormalizedTrackData(
-  sheet: CampaignSheetData, territory: Territory, trackNames: string[]
-): NormalizedPoint[] {
-  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return [];
-  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
-
-  // Build raw track data by date
-  const trackByDate = new Map<string, Map<string, number>>();
-  sheet.weeklyData.filter(r => r.track_name !== "TOTAL" && trackNames.includes(r.track_name))
-    .forEach(r => {
-      if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
-      trackByDate.get(r.track_name)!.set(r.week_start_date, r[streamKey]);
-    });
-
-  // Find peak per track
-  const peaks = new Map<string, number>();
-  trackByDate.forEach((dates, tn) => {
-    let peak = 0;
-    dates.forEach(v => { if (v > peak) peak = v; });
-    peaks.set(tn, peak || 1); // avoid /0
-  });
-
-  // Collect all dates
-  const allDates = new Set<string>();
-  trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
-  const sorted = [...allDates].sort();
-
-  return sorted.map(date => {
-    const point: NormalizedPoint = { date };
-    trackNames.forEach(tn => {
-      const raw = trackByDate.get(tn)?.get(date);
-      if (raw == null) {
-        point[tn] = null;
-      } else {
-        point[tn] = Math.round((raw / peaks.get(tn)!) * 100);
-      }
-    });
-    return point;
-  });
-}
 
 // ——— Track Role Labels ——————————————————————————————————————
 const ROLE_LABELS: Record<string, string> = {
