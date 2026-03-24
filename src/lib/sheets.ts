@@ -219,7 +219,7 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
     };
   }
 
-  // Legacy positional format
+  // Legacy positional format (use col() for newer fields that may exist as named headers)
   return {
     campaign_name: normalizeQuotes((r[0] || "Untitled Campaign").trim()),
     artist_name: (r[1] || "Unknown Artist").trim(),
@@ -229,9 +229,9 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
     chart_result: (r[5] || "").trim(),
     chart_forecast: (r[6] || "").trim(),
     outcome_driver: (r[7] || "").trim(),
-    team_push_push: "",
-    team_push_support: "",
-    team_push_next: "",
+    team_push_push: col("team_push_push"),
+    team_push_support: col("team_push_support"),
+    team_push_next: col("team_push_next"),
   };
 }
 
