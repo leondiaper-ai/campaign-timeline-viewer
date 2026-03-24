@@ -185,6 +185,9 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
       chart_result: "",
       chart_forecast: "",
       outcome_driver: "",
+      team_push_push: "",
+      team_push_support: "",
+      team_push_next: "",
     };
   }
   const h = data.header;
@@ -210,6 +213,9 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
       chart_result: col("chart_result"),
       chart_forecast: col("chart_forecast"),
       outcome_driver: col("outcome_driver"),
+      team_push_push: col("team_push_push"),
+      team_push_support: col("team_push_support"),
+      team_push_next: col("team_push_next"),
     };
   }
 
@@ -223,6 +229,9 @@ async function fetchCampaignSetup(sheetId: string): Promise<CampaignSetup> {
     chart_result: (r[5] || "").trim(),
     chart_forecast: (r[6] || "").trim(),
     outcome_driver: (r[7] || "").trim(),
+    team_push_push: "",
+    team_push_support: "",
+    team_push_next: "",
   };
 }
 

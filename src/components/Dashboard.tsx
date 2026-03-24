@@ -8,7 +8,6 @@ import {
   getCampaignSummary, getTrackModeContext,
   buildUKTrackContext, buildUKMilestones, UKTrackContext,
   classifyMomentImpact, type ClassifiedMoment, type ImpactTier,
-  getTeamPush, type TeamPush,
 } from "@/lib/transforms";
 import { getCategoryConfig, getAllCategories } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
@@ -60,7 +59,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
   const ukTrackContext = useMemo(() => sheet ? buildUKTrackContext(sheet) : [], [sheet]);
   const ukMilestones = useMemo(() => sheet ? buildUKMilestones(sheet) : [], [sheet]);
   const summary = useMemo(() => sheet ? getCampaignSummary(sheet, territory) : "", [sheet, territory]);
-  const teamPush = useMemo(() => sheet ? getTeamPush(sheet, territory) : null, [sheet, territory]);
+  const teamPush = useMemo(() => {
+    if (!sheet) return null;
+    const { team_push_push, team_push_support, team_push_next } = sheet.setup;
+    if (!team_push_push && !team_push_support && !team_push_next) return null;
+    return { push: team_push_push, support: team_push_support, next: team_push_next };
+  }, [sheet]);
   const moments = useMemo(() => {
     if (!sheet) return [];
     const base = getAllMoments(sheet);
@@ -150,21 +154,27 @@ export default function Dashboard({ initialData }: DashboardProps) {
           <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-3">
             <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80 mb-2">Team Push</p>
             <div className="space-y-1">
-              <p className="text-[12px] text-white">
-                <span className="font-bold text-[#FBBF24]">PUSH</span>
-                <span className="text-[#4B5563] mx-1.5">→</span>
-                <span className="font-semibold">{teamPush.push}</span>
-              </p>
-              <p className="text-[12px] text-[#D1D5DB]">
-                <span className="font-bold text-[#6B7280]">Support</span>
-                <span className="text-[#4B5563] mx-1.5">→</span>
-                {teamPush.support}
-              </p>
-              <p className="text-[12px] text-[#9CA3AF]">
-                <span className="font-bold text-[#6B7280]">Next</span>
-                <span className="text-[#4B5563] mx-1.5">→</span>
-                {teamPush.next}
-              </p>
+              {teamPush.push && (
+                <p className="text-[12px] text-white">
+                  <span className="font-bold text-[#FBBF24]">PUSH</span>
+                  <span className="text-[#4B5563] mx-1.5">→</span>
+                  <span className="font-semibold">{teamPush.push}</span>
+                </p>
+              )}
+              {teamPush.support && (
+                <p className="text-[12px] text-[#D1D5DB]">
+                  <span className="font-bold text-[#6B7280]">Support</span>
+                  <span className="text-[#4B5563] mx-1.5">→</span>
+                  {teamPush.support}
+                </p>
+              )}
+              {teamPush.next && (
+                <p className="text-[12px] text-[#9CA3AF]">
+                  <span className="font-bold text-[#6B7280]">Next</span>
+                  <span className="text-[#4B5563] mx-1.5">→</span>
+                  {teamPush.next}
+                </p>
+              )}
             </div>
           </div>
         )}

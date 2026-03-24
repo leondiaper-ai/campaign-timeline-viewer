@@ -35,6 +35,9 @@ export interface CampaignSetup {
   chart_result: string;   // e.g. "Top 3", "#1"
   chart_forecast: string; // e.g. "Top 10", "Top 20"
   outcome_driver: string; // e.g. "physical sales", "streaming"
+  team_push_push: string;    // e.g. "Doesn't Just Happen (UK focus)"
+  team_push_support: string; // e.g. "US Tour Starts (W/C May 27) — live"
+  team_push_next: string;    // e.g. "build into US Tour Ends (W/C Jun 12) — live"
 }
 
 // ——— Tab 2: tracks (one row per track) ———————————————————
