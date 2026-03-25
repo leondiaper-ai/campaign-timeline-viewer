@@ -295,6 +295,22 @@ function buildChartFromDailyData(
     && sheet.dailyTerritoryData
     && sheet.dailyTerritoryData.length > 0;
 
+  // Release-level territory data: preferred source for Campaign tab total_streams
+  // when viewing a non-global territory. Falls back to summing track-level data.
+  const hasReleaseTerr = territory !== "global"
+    && sheet.dailyReleaseTerritoryData
+    && sheet.dailyReleaseTerritoryData.length > 0
+    && sheet.dailyReleaseTerritoryData.some(r => r.territory === territory);
+
+  const releaseTotalByDate = new Map<string, number>();
+  if (hasReleaseTerr) {
+    sheet.dailyReleaseTerritoryData
+      .filter(r => r.territory === territory)
+      .forEach(r => {
+        releaseTotalByDate.set(r.date, (releaseTotalByDate.get(r.date) || 0) + r.streams);
+      });
+  }
+
   // Build track data: track -> date -> streams
   const trackByDate = new Map<string, Map<string, number>>();
 
@@ -329,9 +345,10 @@ function buildChartFromDailyData(
   const physicalByDate = new Map<string, number>();
   sheet.physicalData.forEach(r => physicalByDate.set(r.week_start_date, r.units));
 
-  // All dates across all tracks
+  // All dates across all tracks + release-level data
   const allDates = new Set<string>();
   trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
+  releaseTotalByDate.forEach((_, d) => allDates.add(d));
   // Add moment dates as ghost points — but only when we have enough real data
   // to avoid drowning sparse territory data in null-filled dates
   if (!hasTerrData || allDates.size >= 3) {
@@ -344,12 +361,17 @@ function buildChartFromDailyData(
   const smoothedTracks = smoothTrackData(trackByDate, sorted);
 
   const result: ChartDataPoint[] = sorted.map(date => {
-    // Total = sum of RAW track streams on this date (not smoothed)
+    // Total: prefer release-level data (actual album streams) over track-level sum
     let total = 0;
-    selectedTracks.forEach(tn => {
-      const val = trackByDate.get(tn)?.get(date);
-      if (val) total += val;
-    });
+    if (hasReleaseTerr && releaseTotalByDate.has(date)) {
+      total = releaseTotalByDate.get(date)!;
+    } else {
+      // Fallback: sum of RAW track streams on this date (not smoothed)
+      selectedTracks.forEach(tn => {
+        const val = trackByDate.get(tn)?.get(date);
+        if (val) total += val;
+      });
+    }
 
     const point: ChartDataPoint = {
       date,

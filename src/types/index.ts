@@ -97,6 +97,14 @@ export interface DailyTerritoryRow {
   streams: number;
 }
 
+// ——— Tab: release_daily_import_territory (release-level territory streams) ——
+export interface DailyReleaseTerritoryRow {
+  date: string;           // YYYY-MM-DD
+  release_name: string;
+  territory: Territory;
+  streams: number;
+}
+
 // ——— Tab: track_uk_context (manual UK context) ——————————
 export interface UKContextRow {
   track_name: string;
@@ -165,6 +173,7 @@ export interface CampaignSheetData {
   moments: Moment[];
   dailyTrackData: DailyTrackRow[];
   dailyTerritoryData: DailyTerritoryRow[];
+  dailyReleaseTerritoryData: DailyReleaseTerritoryRow[];
   ukContext: UKContextRow[];
   paidCampaigns: PaidCampaignRow[];
   learnings: ManualLearning[];

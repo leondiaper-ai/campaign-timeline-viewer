@@ -14,6 +14,7 @@ import {
   ValidationWarning,
   DailyTrackRow,
   DailyTerritoryRow,
+  DailyReleaseTerritoryRow,
   UKContextRow,
   PaidCampaignRow,
   ManualLearning,
@@ -492,6 +493,21 @@ async function fetchTrackDailyImportTerritory(sheetId: string): Promise<DailyTer
     .filter((r) => r.track_name.length > 0);
 }
 
+/** Tab: release_daily_import_territory — release-level territory streams (columns: date, release_name, territory, streams) */
+async function fetchReleaseDailyImportTerritory(sheetId: string): Promise<DailyReleaseTerritoryRow[]> {
+  const rows = await fetchRowsSafe(sheetId, "release_daily_import_territory");
+  if (rows.length === 0) return [];
+  return rows
+    .filter((r) => r[0] && isValidDate(r[0]) && r[1]?.trim() && !isMetadataRow(r[0]))
+    .map((r) => ({
+      date: r[0].trim(),
+      release_name: normalizeQuotes(r[1].trim()),
+      territory: cleanTerritory(r[2]),
+      streams: safeNumber(r[3]),
+    }))
+    .filter((r) => r.streams > 0);
+}
+
 /** Tab: track_uk_context — manual UK context */
 async function fetchTrackUKContext(sheetId: string): Promise<UKContextRow[]> {
   const rows = await fetchRowsSafe(sheetId, "track_uk_context");
@@ -637,7 +653,7 @@ async function fetchLearnings(sheetId: string): Promise<ManualLearning[]> {
 export async function fetchCampaignSheetData(
   sheetId: string
 ): Promise<CampaignSheetData> {
-  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns, learnings] =
+  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, dailyReleaseTerritoryData, ukContext, paidCampaigns, learnings] =
     await Promise.all([
       fetchCampaignSetup(sheetId),
       fetchTracks(sheetId),
@@ -646,12 +662,13 @@ export async function fetchCampaignSheetData(
       fetchMoments(sheetId),
       fetchTrackDailyImport(sheetId),
       fetchTrackDailyImportTerritory(sheetId),
+      fetchReleaseDailyImportTerritory(sheetId),
       fetchTrackUKContext(sheetId),
       fetchPaidCampaigns(sheetId),
       fetchLearnings(sheetId),
     ]);
 
-  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, ukContext, paidCampaigns, learnings };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, dailyReleaseTerritoryData, ukContext, paidCampaigns, learnings };
 
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {
