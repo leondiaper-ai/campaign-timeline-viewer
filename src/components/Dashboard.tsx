@@ -211,14 +211,14 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
 
         {/* Full Campaign Timeline — collapsed by default */}
-        <div className="bg-[#131620] rounded-xl border border-[#1E2130]">
+        <div className="bg-[#131620] rounded-xl border border-[#1E2D44] shadow-[0_0_15px_rgba(59,130,246,0.08)] hover:shadow-[0_0_20px_rgba(59,130,246,0.12)] transition-shadow duration-300">
           <button onClick={() => setLogExpanded(e => !e)}
             className="w-full flex items-center justify-between px-5 py-4 text-left group">
             <div className="flex items-center gap-3">
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280]">
-                Full Campaign Timeline <span className="text-[#4B5563] font-normal ml-1">({moments.length} events)</span>
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8B9CC7]">
+                Full Campaign Timeline <span className="text-[#5B6B8A] font-normal ml-1">({moments.length} events)</span>
               </h3>
-              {!logExpanded && <span className="text-[10px] text-[#4B5563] group-hover:text-[#6B7280] transition-colors">Expand to view full campaign history</span>}
+              {!logExpanded && <span className="text-[10px] text-[#5B6B8A] group-hover:text-[#8B9CC7] transition-colors">Expand to view full campaign history</span>}
             </div>
             <div className="flex items-center gap-2">
               {pinnedDate && logExpanded && <span onClick={(e) => { e.stopPropagation(); setPinnedDate(null); }} className="text-[10px] text-[#6B7280] hover:text-white underline underline-offset-2 cursor-pointer">Clear selection</span>}
