@@ -132,16 +132,11 @@ export interface PaidCampaignRow {
   notes: string;
 }
 
-// ——— FUTURE: D2C Sales Moments (not yet active) ———————————
-// Will be surfaced once real data is available in sheet
+// ——— Tab: d2c_sales (weekly D2C snapshots) ————————————————
 export interface D2CSalesRow {
-  date: string;           // YYYY-MM-DD
-  product: string;        // "Vinyl", "CD", "Merch Bundle" etc
-  units: number;
-  revenue: number;
-  source: string;         // "Store", "Outstore", "Amazon" etc
-  territory: string;
-  notes: string;
+  date: string;              // YYYY-MM-DD (snapshot date)
+  global_d2c_sales: number;  // cumulative global D2C units
+  uk_d2c_sales: number;      // cumulative UK D2C units
 }
 
 // ——— FUTURE: Mailer Performance (not yet active) ——————————
@@ -177,6 +172,7 @@ export interface CampaignSheetData {
   ukContext: UKContextRow[];
   paidCampaigns: PaidCampaignRow[];
   learnings: ManualLearning[];
+  d2cSales: D2CSalesRow[];
 }
 
 // ——— Registry ————————————————————————————————————————————

@@ -12,6 +12,7 @@ import {
 import { getCategoryConfig, getAllCategories } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
 import CampaignLearnings from "./CampaignLearnings";
+import D2COwnership from "./D2COwnership";
 import TimelineChart, { ChartMode } from "./TimelineChart";
 
 function fmtDate(d: string): string {
@@ -85,6 +86,42 @@ export default function Dashboard({ initialData }: DashboardProps) {
             });
           }
         }
+      }
+    }
+    // Generate D2C sales moments from d2c_sales tab
+    if (sheet.d2cSales && sheet.d2cSales.length > 0) {
+      const d2c = sheet.d2cSales;
+      for (let i = 0; i < d2c.length; i++) {
+        const row = d2c[i];
+        const ukShare = row.global_d2c_sales > 0
+          ? ((row.uk_d2c_sales / row.global_d2c_sales) * 100).toFixed(1)
+          : "0";
+        // Generate contextual framing
+        let title = "";
+        if (i === 0) {
+          title = `D2C snapshot: ${row.global_d2c_sales.toLocaleString()} global, UK ${ukShare}%`;
+        } else {
+          const prev = d2c[i - 1];
+          const globalGrowth = row.global_d2c_sales - prev.global_d2c_sales;
+          const ukGrowth = row.uk_d2c_sales - prev.uk_d2c_sales;
+          const prevUkShare = prev.global_d2c_sales > 0
+            ? (prev.uk_d2c_sales / prev.global_d2c_sales) * 100
+            : 0;
+          const shareUp = parseFloat(ukShare) > prevUkShare;
+          if (shareUp && ukGrowth > 0) {
+            title = `D2C: UK share strengthening (${ukShare}%), +${ukGrowth.toLocaleString()} UK sales`;
+          } else if (globalGrowth > 0) {
+            title = `D2C: +${globalGrowth.toLocaleString()} global sales, UK ${ukShare}%`;
+          } else {
+            title = `D2C snapshot: ${row.global_d2c_sales.toLocaleString()} global, UK ${ukShare}%`;
+          }
+        }
+        base.push({
+          date: row.date,
+          moment_title: title,
+          moment_type: "product",
+          is_key: false,
+        });
       }
     }
     return base.sort((a, b) => a.date.localeCompare(b.date));
@@ -181,6 +218,9 @@ export default function Dashboard({ initialData }: DashboardProps) {
 
         {/* Stats */}
         <CampaignInsights sheet={sheet} territory={territory} />
+
+        {/* D2C Ownership — compact supporting signal */}
+        <D2COwnership sheet={sheet} />
 
         {/* Chart */}
         <div ref={chartRef} className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5 scroll-mt-4">

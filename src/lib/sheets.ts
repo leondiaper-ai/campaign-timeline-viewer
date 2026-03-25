@@ -18,6 +18,7 @@ import {
   UKContextRow,
   PaidCampaignRow,
   ManualLearning,
+  D2CSalesRow,
 } from "@/types";
 
 // ——— Google Sheets Client ——————————————————————————————————
@@ -649,11 +650,27 @@ async function fetchLearnings(sheetId: string): Promise<ManualLearning[]> {
     .sort((a, b) => a.order - b.order);
 }
 
+/** Tab: d2c_sales — weekly D2C snapshots (columns: date, global_d2c_sales, uk_d2c_sales) */
+async function fetchD2CSales(sheetId: string): Promise<D2CSalesRow[]> {
+  const rows = await fetchRowsSafe(sheetId, "d2c_sales");
+  if (rows.length === 0) return [];
+
+  return rows
+    .filter((r) => r[0] && isValidDate(r[0]) && !isMetadataRow(r[0]))
+    .map((r) => ({
+      date: r[0].trim(),
+      global_d2c_sales: safeNumber(r[1]),
+      uk_d2c_sales: safeNumber(r[2]),
+    }))
+    .filter((r) => r.global_d2c_sales > 0)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
 // ——— Full Campaign Loader ——————————————————————————————————
 export async function fetchCampaignSheetData(
   sheetId: string
 ): Promise<CampaignSheetData> {
-  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, dailyReleaseTerritoryData, ukContext, paidCampaigns, learnings] =
+  const [setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, dailyReleaseTerritoryData, ukContext, paidCampaigns, learnings, d2cSales] =
     await Promise.all([
       fetchCampaignSetup(sheetId),
       fetchTracks(sheetId),
@@ -666,9 +683,10 @@ export async function fetchCampaignSheetData(
       fetchTrackUKContext(sheetId),
       fetchPaidCampaigns(sheetId),
       fetchLearnings(sheetId),
+      fetchD2CSales(sheetId),
     ]);
 
-  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, dailyReleaseTerritoryData, ukContext, paidCampaigns, learnings };
+  const data: CampaignSheetData = { setup, tracks, weeklyData, physicalData, moments, dailyTrackData, dailyTerritoryData, dailyReleaseTerritoryData, ukContext, paidCampaigns, learnings, d2cSales };
 
   const warnings = validateSheetData(data);
   if (warnings.length > 0) {
