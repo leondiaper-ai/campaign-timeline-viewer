@@ -3,10 +3,10 @@ import NewCampaignDashboard from "@/components/NewCampaignDashboard";
 
 export const revalidate = 300;
 
-const NEW_CAMPAIGN_SHEET_ID = "1xbWrRHoCmSi1mq_Wt4wqfV4JSH1kDVRWnYD1uQ5oRJo";
+const NEW_CAMPAIGN_SHEET_ID = "1WokPfbrbXLC5zHdh1eua-nUThQHnQSi-3tlnXBrGlhA";
 
 export const metadata = {
-  title: "New Campaign — Campaign Timeline Viewer",
+  title: "K Trap – Trapo 2 — Campaign Timeline Viewer",
 };
 
 export default async function NewCampaignPage() {
