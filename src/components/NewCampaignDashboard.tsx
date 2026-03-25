@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useRef } from "react";
 import Link from "next/link";
-import { CampaignSheetData, Moment, ChartDataPoint } from "@/types";
+import { CampaignSheetData, Moment, ChartDataPoint, Territory } from "@/types";
 import { buildChartData, getAllTrackNames, getAllMoments, inferTrackRoles } from "@/lib/transforms";
 import TimelineChart, { ChartMode } from "./TimelineChart";
 import CampaignInsights from "./CampaignInsights";
@@ -65,6 +65,7 @@ interface Props {
 
 export default function NewCampaignDashboard({ sheet }: Props) {
   const [chartMode, setChartMode] = useState<ChartMode>("campaign");
+  const [territory, setTerritory] = useState<Territory>(sheet.setup.default_territory || "global");
   const chartRef = useRef<HTMLDivElement>(null);
 
   const setup = sheet.setup;
@@ -89,11 +90,11 @@ export default function NewCampaignDashboard({ sheet }: Props) {
     return hasStreams || hasDaily;
   }, [sheet]);
 
-  const trackRoles = useMemo(() => hasRealData ? inferTrackRoles(sheet, "UK") : [], [sheet, hasRealData]);
+  const trackRoles = useMemo(() => hasRealData ? inferTrackRoles(sheet, territory) : [], [sheet, hasRealData, territory]);
   const chartData = useMemo(() => {
-    if (hasRealData) return buildChartData(sheet, "UK", allTrackNames);
+    if (hasRealData) return buildChartData(sheet, territory, allTrackNames);
     return buildEmptyChartData(moments);
-  }, [sheet, hasRealData, allTrackNames, moments]);
+  }, [sheet, hasRealData, allTrackNames, moments, territory]);
 
   const keyMomentDates = useMemo(() => new Set(moments.filter(m => m.is_key).map(m => m.date)), [moments]);
   const albumDate = setup.release_date || moments.find(m => m.moment_title.toLowerCase().includes("album"))?.date;
@@ -124,7 +125,15 @@ export default function NewCampaignDashboard({ sheet }: Props) {
                 : <> · Release date TBC</>}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1 bg-[#161922] rounded-lg p-0.5 border border-[#2A2D3E]">
+              {(["global", "UK"] as Territory[]).map(t => (
+                <button key={t} onClick={() => setTerritory(t)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${territory === t ? "bg-[#6C9EFF]/15 text-[#6C9EFF] shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
+                  {t === "global" ? "Global" : "UK"}
+                </button>
+              ))}
+            </div>
             <span className={`px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] rounded-full border ${
               isPreRelease
                 ? "bg-[#A78BFA]/10 text-[#A78BFA] border-[#A78BFA]/20"
@@ -161,7 +170,7 @@ export default function NewCampaignDashboard({ sheet }: Props) {
 
         {/* ——— KPI Cards — real data when available, intentional empty states otherwise ——— */}
         {hasKPIs ? (
-          <CampaignInsights sheet={sheet} territory="UK" />
+          <CampaignInsights sheet={sheet} territory={territory} />
         ) : (
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
@@ -197,7 +206,7 @@ export default function NewCampaignDashboard({ sheet }: Props) {
             onChartModeChange={setChartMode}
             albumDate={albumDate}
             ukMilestones={[]}
-            territory="UK"
+            territory={territory}
             paidCampaigns={sheet.paidCampaigns || []}
             moments={moments}
           />
