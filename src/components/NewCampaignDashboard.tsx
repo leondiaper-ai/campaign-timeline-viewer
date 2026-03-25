@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useRef } from "react";
+import Link from "next/link";
 import { CampaignSheetData, Moment, ChartDataPoint } from "@/types";
 import { buildChartData, getAllTrackNames, getAllMoments, inferTrackRoles } from "@/lib/transforms";
 import TimelineChart, { ChartMode } from "./TimelineChart";
@@ -118,7 +119,9 @@ export default function NewCampaignDashboard({ sheet }: Props) {
       {/* ——— Header — reads from sheet setup ——— */}
       <header className="border-b border-[#1E2130] px-6 py-4">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
-          <div>
+          <div className="flex items-center gap-3">
+            <Link href="/" className="text-[#4B5563] hover:text-[#6C9EFF] transition-colors text-sm">← All Campaigns</Link>
+            <span className="text-[#2A2D3E]">|</span>
             <h1 className="text-lg font-semibold">
               {setup.artist_name}
               <span className="text-[#4B5563] font-normal"> — {setup.campaign_name}</span>

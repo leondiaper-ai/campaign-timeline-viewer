@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useCallback, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { AppData, LoadedCampaign, Territory, Moment, PaidCampaignRow } from "@/types";
 import {
   buildChartData, getAllTrackNames, getAllMoments,
@@ -26,7 +27,13 @@ function fmtShort(d: string): string {
 
 interface DashboardProps { initialData: AppData; }
 
+// Campaigns with dedicated pages — dropdown navigates instead of switching state
+const CAMPAIGN_ROUTES: Record<string, string> = {
+  "k-trap-trapo-2": "/campaign/new",
+};
+
 export default function Dashboard({ initialData }: DashboardProps) {
+  const router = useRouter();
   const campaigns = initialData.campaigns;
   const [campaignIdx, setCampaignIdx] = useState(0);
   const [territory, setTerritory] = useState<Territory>("global");
@@ -148,7 +155,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
     }
   }, [pinnedDate]);
   const effectiveHighlight = pinnedDate || highlightedDate;
-  const handleCampaignChange = useCallback((idx: number) => { setCampaignIdx(idx); setHighlightedDate(null); setPinnedDate(null); setChartMode("campaign"); }, []);
+  const handleCampaignChange = useCallback((idx: number) => {
+    const selected = campaigns[idx];
+    const route = selected ? CAMPAIGN_ROUTES[selected.campaign_id] : undefined;
+    if (route) { router.push(route); return; }
+    setCampaignIdx(idx); setHighlightedDate(null); setPinnedDate(null); setChartMode("campaign");
+  }, [campaigns, router]);
 
   if (!campaign || !sheet) {
     return (<div className="min-h-screen bg-[#0D1117] flex items-center justify-center"><p className="text-[#6B7280] text-lg">No active campaigns found.</p></div>);
