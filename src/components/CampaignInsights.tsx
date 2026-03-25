@@ -23,20 +23,37 @@ export default function CampaignInsights({ sheet, territory }: Props) {
 
   const stats = useMemo(() => {
     const isUK = territory === "UK";
-    const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
-    let totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
-    // Fallback to daily data when weekly totals are zero
-    if (totalStreams === 0) {
-      if (isUK && sheet.dailyTerritoryData && sheet.dailyTerritoryData.length > 0) {
-        totalStreams = sheet.dailyTerritoryData
-          .filter((r) => r.territory === "UK")
-          .reduce((sum, r) => sum + r.streams, 0);
-      } else if (!isUK && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
-        totalStreams = sheet.dailyTrackData.reduce((sum: number, r: any) => sum + r.global_streams, 0);
+
+    // Preferred: release-level territory data (same source the chart uses)
+    const hasReleaseTerr = territory !== "global"
+      && sheet.dailyReleaseTerritoryData
+      && sheet.dailyReleaseTerritoryData.length > 0
+      && sheet.dailyReleaseTerritoryData.some(r => r.territory === territory);
+
+    let totalStreams = 0;
+
+    if (hasReleaseTerr) {
+      // Sum release-level daily streams for this territory — matches chart exactly
+      totalStreams = sheet.dailyReleaseTerritoryData
+        .filter(r => r.territory === territory)
+        .reduce((sum, r) => sum + r.streams, 0);
+    } else {
+      // Fallback chain: weekly totals → track-level daily → global daily
+      const totalRows = sheet.weeklyData.filter((r) => r.track_name === "TOTAL");
+      totalStreams = totalRows.reduce((sum, r) => sum + r[streamKey], 0);
+      if (totalStreams === 0) {
+        if (isUK && sheet.dailyTerritoryData && sheet.dailyTerritoryData.length > 0) {
+          totalStreams = sheet.dailyTerritoryData
+            .filter((r) => r.territory === "UK")
+            .reduce((sum, r) => sum + r.streams, 0);
+        } else if (!isUK && sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+          totalStreams = sheet.dailyTrackData.reduce((sum: number, r: any) => sum + r.global_streams, 0);
+        }
       }
     }
+
     const totalPhysical = sheet.physicalData.reduce((sum, r) => sum + r.units, 0);
-    const uk = getUKTotals(sheet);
+    const uk = getUKTotals(sheet, territory);
 
     // Paid campaign spend
     const pcs = sheet.paidCampaigns || [];

@@ -894,14 +894,34 @@ export function buildUKMilestones(sheet: CampaignSheetData): UKMilestone[] {
   return milestones.sort((a, b) => a.date.localeCompare(b.date));
 }
 
-// UK totals for KPI cards
-export function getUKTotals(sheet: CampaignSheetData): { ukStreams: number; ukPhysical: number; ukShare: number } {
-  if (!sheet.weeklyData || sheet.weeklyData.length === 0) return { ukStreams: 0, ukPhysical: 0, ukShare: 0 };
-  const totalRows = sheet.weeklyData.filter(r => r.track_name === "TOTAL");
-  const ukStreams = totalRows.reduce((s, r) => s + r.streams_uk, 0);
-  const glStreams = totalRows.reduce((s, r) => s + r.streams_global, 0);
+// UK totals for KPI cards — prefers release-level data when available
+export function getUKTotals(sheet: CampaignSheetData, _territory?: Territory): { ukStreams: number; ukPhysical: number; ukShare: number } {
+  const hasReleaseUK = sheet.dailyReleaseTerritoryData
+    && sheet.dailyReleaseTerritoryData.length > 0
+    && sheet.dailyReleaseTerritoryData.some(r => r.territory === "UK");
+
+  let ukStreams = 0;
+  let glStreams = 0;
+
+  if (hasReleaseUK) {
+    ukStreams = sheet.dailyReleaseTerritoryData
+      .filter(r => r.territory === "UK")
+      .reduce((s, r) => s + r.streams, 0);
+    // Global: sum daily track data if available, else weekly
+    if (sheet.dailyTrackData && sheet.dailyTrackData.length > 0) {
+      glStreams = sheet.dailyTrackData.reduce((s, r) => s + r.global_streams, 0);
+    } else {
+      const totalRows = sheet.weeklyData.filter(r => r.track_name === "TOTAL");
+      glStreams = totalRows.reduce((s, r) => s + r.streams_global, 0);
+    }
+  } else {
+    if (!sheet.weeklyData || sheet.weeklyData.length === 0) return { ukStreams: 0, ukPhysical: 0, ukShare: 0 };
+    const totalRows = sheet.weeklyData.filter(r => r.track_name === "TOTAL");
+    ukStreams = totalRows.reduce((s, r) => s + r.streams_uk, 0);
+    glStreams = totalRows.reduce((s, r) => s + r.streams_global, 0);
+  }
+
   const ukShare = glStreams > 0 ? Math.round((ukStreams / glStreams) * 100) : 0;
-  // Physical doesn't have UK split in schema, so use total
   const ukPhysical = sheet.physicalData.reduce((s, r) => s + r.units, 0);
   return { ukStreams, ukPhysical, ukShare };
 }
