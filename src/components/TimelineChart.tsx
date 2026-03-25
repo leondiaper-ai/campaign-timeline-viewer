@@ -415,7 +415,8 @@ export default function TimelineChart({
       {/* Campaign mode: moment labels above chart */}
       {isCampaign && moments.length > 0 && (
         <div className="relative w-full mb-1" style={{ height: 44 }}>
-          <div className="absolute inset-0 flex items-end">
+          {/* Pad left/right to match chart plot area (left margin 8 + YAxis 50 = 58px, right margin) */}
+          <div className="absolute inset-0 flex items-end" style={{ left: 58, right: hasPhysical ? 60 : 24 }}>
             {moments.map((m, i) => {
               const dates = data.map(d => d.date).sort();
               const idx = dates.indexOf(m.date);
@@ -426,7 +427,7 @@ export default function TimelineChart({
                 : [];
               return (
                 <div key={i} className={`absolute flex flex-col items-center ${pcs.length > 0 ? "group" : ""}`}
-                  style={{ left: `${4 + pct * 0.88}%`, bottom: m.row === 0 ? 20 : 2, transform: "translateX(-50%)" }}>
+                  style={{ left: `${pct}%`, bottom: m.row === 0 ? 20 : 2, transform: "translateX(-50%)" }}>
                   <span className={`text-[10px] font-bold uppercase tracking-wide whitespace-nowrap px-1.5 ${pcs.length > 0 ? "cursor-pointer" : ""}`} style={{ color: m.color }}>{m.label}</span>
                   <div className="w-px h-2 mt-0.5" style={{ backgroundColor: m.color, opacity: 0.5 }} />
                   {pcs.length > 0 && (

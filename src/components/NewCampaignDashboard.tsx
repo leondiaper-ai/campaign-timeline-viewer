@@ -174,7 +174,7 @@ export default function NewCampaignDashboard({ sheet }: Props) {
         ) : (
           <div className="grid grid-cols-3 gap-3">
             <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4">
-              <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">UK Streams</p>
+              <p className="text-[10px] font-bold text-[#6B7280] uppercase tracking-[0.15em] mb-1">{territory === "UK" ? "UK Streams" : "Global Streams"}</p>
               <p className="text-lg font-semibold text-[#6C9EFF]/40 tabular-nums">&mdash;</p>
               <p className="text-[10px] text-[#4B5563] mt-1">Tracking from release</p>
             </div>
