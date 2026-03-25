@@ -219,7 +219,7 @@ export default function Dashboard({ initialData }: DashboardProps) {
         {/* Stats */}
         <CampaignInsights sheet={sheet} territory={territory} />
 
-        {/* D2C summary line — lightweight narrative text above chart */}
+        {/* D2C headline — 2-line compact summary above chart */}
         {sheet.d2cSales && sheet.d2cSales.length >= 2 && (() => {
           const first = sheet.d2cSales[0];
           const latest = sheet.d2cSales[sheet.d2cSales.length - 1];
@@ -227,17 +227,22 @@ export default function Dashboard({ initialData }: DashboardProps) {
             ? Math.round((first.uk_d2c_sales / first.global_d2c_sales) * 1000) / 10 : 0;
           const latestShare = latest.global_d2c_sales > 0
             ? Math.round((latest.uk_d2c_sales / latest.global_d2c_sales) * 1000) / 10 : 0;
-          const growing = latestShare > firstShare;
+          const rising = latestShare > firstShare;
+          const fmtK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toLocaleString();
           return (
-            <p className="text-[11px] text-[#9CA3AF] flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
-              <span>
-                {growing
-                  ? `UK D2C ownership strengthening (${firstShare}% → ${latestShare}%)`
-                  : `UK D2C share: ${latestShare}%`}
-                <span className="text-[#4B5563] ml-1">· {latest.global_d2c_sales.toLocaleString()} global sales</span>
-              </span>
-            </p>
+            <div className="flex items-start gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#A78BFA] mt-[5px] flex-shrink-0" />
+              <div className="leading-tight">
+                <p className="text-[12px] text-[#D1D5DB] font-medium">
+                  D2C: {fmtK(latest.global_d2c_sales)} global · {fmtK(latest.uk_d2c_sales)} UK
+                </p>
+                <p className="text-[11px] text-[#6B7280]">
+                  {rising
+                    ? `UK share rising (${firstShare}% → ${latestShare}%)`
+                    : `UK share: ${latestShare}%`}
+                </p>
+              </div>
+            </div>
           );
         })()}
 
