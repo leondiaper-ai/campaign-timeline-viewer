@@ -499,14 +499,14 @@ export default function TimelineChart({
               {/* Phase background shading */}
               {phases && (
                 <>
-                  <ReferenceArea x1={phases.first} x2={phases.albumDate} fill="#6B728006" label={{ value: "PRE-RELEASE", position: "insideTopLeft", fill: "#4B5563", fontSize: 9, fontWeight: 700 }} />
-                  <ReferenceArea x1={phases.albumDate} x2={phases.postStart} fill="#6C9EFF08" label={{ value: "RELEASE", position: "insideTop", fill: "#6C9EFF", fontSize: 9, fontWeight: 700 }} />
-                  <ReferenceArea x1={phases.postStart} x2={phases.last} fill="#FBBF2406" label={{ value: "POST-RELEASE", position: "insideTopRight", fill: "#FBBF24", fontSize: 9, fontWeight: 700 }} />
+                  <ReferenceArea x1={phases.first} x2={phases.albumDate} fill="#6B72800A" label={{ value: "PRE-RELEASE", position: "insideTopLeft", fill: "#4B5563", fontSize: 9, fontWeight: 700 }} />
+                  <ReferenceArea x1={phases.albumDate} x2={phases.postStart} fill="#6C9EFF10" label={{ value: "RELEASE", position: "insideTop", fill: "#6C9EFF", fontSize: 9, fontWeight: 700 }} />
+                  <ReferenceArea x1={phases.postStart} x2={phases.last} fill="#FBBF240A" label={{ value: "POST-RELEASE", position: "insideTopRight", fill: "#FBBF24", fontSize: 9, fontWeight: 700 }} />
                 </>
               )}
 
               {/* Album release marker */}
-              {albumDate && <ReferenceLine x={albumDate} stroke="#8B5CF6" strokeWidth={1.5} strokeDasharray="4 4" strokeOpacity={0.5}
+              {albumDate && <ReferenceLine x={albumDate} stroke="#8B5CF6" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.7}
                 label={{ value: "Album Release", position: "insideTopLeft", fill: "#8B5CF6", fontSize: 9, fontWeight: 600, offset: 4 }} />}
 
               {/* DJH handover annotation */}
