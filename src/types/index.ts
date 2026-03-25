@@ -207,8 +207,12 @@ export interface ChartDataPoint {
   cumulative_streams: number;
   prev_week_streams: number | null;
   events: Moment[];
+  // D2C snapshot data (only on dates with D2C imports)
+  d2c_global?: number;
+  d2c_uk?: number;
+  d2c_uk_share?: number;
   // Dynamic track keys: [trackName]: number | null
-  [key: string]: number | string | null | Moment[];
+  [key: string]: number | string | number | null | Moment[] | undefined;
 }
 
 // ——— Validation ————————————————————————————————————————

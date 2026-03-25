@@ -345,10 +345,17 @@ function buildChartFromDailyData(
   const physicalByDate = new Map<string, number>();
   sheet.physicalData.forEach(r => physicalByDate.set(r.week_start_date, r.units));
 
+  // D2C data by date
+  const d2cByDate = new Map<string, { global: number; uk: number }>();
+  if (sheet.d2cSales && sheet.d2cSales.length > 0) {
+    sheet.d2cSales.forEach(r => d2cByDate.set(r.date, { global: r.global_d2c_sales, uk: r.uk_d2c_sales }));
+  }
+
   // All dates across all tracks + release-level data
   const allDates = new Set<string>();
   trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
   releaseTotalByDate.forEach((_, d) => allDates.add(d));
+  d2cByDate.forEach((_, d) => allDates.add(d));
   // Add moment dates as ghost points — but only when we have enough real data
   // to avoid drowning sparse territory data in null-filled dates
   if (!hasTerrData || allDates.size >= 3) {
@@ -373,6 +380,7 @@ function buildChartFromDailyData(
       });
     }
 
+    const d2c = d2cByDate.get(date);
     const point: ChartDataPoint = {
       date,
       total_streams: total,
@@ -380,6 +388,9 @@ function buildChartFromDailyData(
       cumulative_streams: 0,
       prev_week_streams: null,
       events: momentsByDate.get(date) || [],
+      d2c_global: d2c?.global,
+      d2c_uk: d2c?.uk,
+      d2c_uk_share: d2c && d2c.global > 0 ? Math.round((d2c.uk / d2c.global) * 1000) / 10 : undefined,
     };
 
     // Track values: use smoothed data for display
@@ -437,14 +448,22 @@ function buildChartFromWeeklyData(
     momentsByDate.set(m.date, existing);
   });
 
+  // D2C data by date
+  const d2cByDateW = new Map<string, { global: number; uk: number }>();
+  if (sheet.d2cSales && sheet.d2cSales.length > 0) {
+    sheet.d2cSales.forEach(r => d2cByDateW.set(r.date, { global: r.global_d2c_sales, uk: r.uk_d2c_sales }));
+  }
+
   const allDates = new Set<string>();
   totalByDate.forEach((_, d) => allDates.add(d));
   trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
   physicalByDate.forEach((_, d) => allDates.add(d));
+  d2cByDateW.forEach((_, d) => allDates.add(d));
   sheet.moments.forEach(m => allDates.add(m.date));
   const sorted = [...allDates].sort();
 
   const result: ChartDataPoint[] = sorted.map(date => {
+    const d2c = d2cByDateW.get(date);
     const point: ChartDataPoint = {
       date,
       total_streams: totalByDate.get(date) ?? 0,
@@ -452,6 +471,9 @@ function buildChartFromWeeklyData(
       cumulative_streams: 0,
       prev_week_streams: null,
       events: momentsByDate.get(date) || [],
+      d2c_global: d2c?.global,
+      d2c_uk: d2c?.uk,
+      d2c_uk_share: d2c && d2c.global > 0 ? Math.round((d2c.uk / d2c.global) * 1000) / 10 : undefined,
     };
     selectedTracks.forEach(tn => {
       const trackDates = trackByDate.get(tn);

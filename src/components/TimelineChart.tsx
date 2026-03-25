@@ -11,6 +11,7 @@ import { TrackWithRole, HandoverMoment, UKMilestone } from "@/lib/transforms";
 
 const TOTAL_COLOR = "#6C9EFF";
 const PHYSICAL_COLOR = "#4ADE80";
+const D2C_COLOR = "#A78BFA";
 
 function fmt(v: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
@@ -123,6 +124,26 @@ function CampTip({ active, payload, label, territory }: any) {
         <div className="flex items-center justify-between gap-4 mb-1">
           <span className="text-xs text-[#9CA3AF]">{isUK ? "UK Physical" : "Physical"}</span>
           <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.physical_units)}</span>
+        </div>
+      )}
+      {dp.d2c_global > 0 && (
+        <div className="mt-1.5 pt-1.5 border-t border-[#2A2D3E]/50">
+          <div className="flex items-center justify-between gap-4 mb-0.5">
+            <span className="text-xs" style={{ color: D2C_COLOR }}>D2C Global</span>
+            <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.d2c_global)}</span>
+          </div>
+          {dp.d2c_uk > 0 && (
+            <div className="flex items-center justify-between gap-4 mb-0.5">
+              <span className="text-xs" style={{ color: D2C_COLOR }}>D2C UK</span>
+              <span className="text-xs font-semibold text-white tabular-nums">{fmt(dp.d2c_uk)}</span>
+            </div>
+          )}
+          {dp.d2c_uk_share > 0 && (
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-xs text-[#6B7280]">UK Share</span>
+              <span className="text-xs font-medium tabular-nums" style={{ color: D2C_COLOR }}>{dp.d2c_uk_share}%</span>
+            </div>
+          )}
         </div>
       )}
       {sorted.length > 0 && (
@@ -295,6 +316,8 @@ export default function TimelineChart({
   const moments = useMemo(() => layoutMoments(allMoments || [], chartDates), [allMoments, chartDates]);
   const hasPhysical = useMemo(() => data.some(d => d.physical_units > 0), [data]);
   const physicalMax = useMemo(() => hasPhysical ? Math.max(...data.map(d => d.physical_units || 0)) : 0, [data, hasPhysical]);
+  const hasD2C = useMemo(() => data.some(d => (d.d2c_global ?? 0) > 0), [data]);
+  const d2cMax = useMemo(() => hasD2C ? Math.max(...data.map(d => d.d2c_global ?? 0)) : 0, [data, hasD2C]);
   const isCampaign = chartMode === "campaign";
   const phases = useMemo(() => getPhases(data, albumDate), [data, albumDate]);
   const isSparse = useMemo(() => data.filter(d => d.total_streams > 0).length <= 3, [data]);
@@ -436,6 +459,7 @@ export default function TimelineChart({
               <YAxis yAxisId="s" tickFormatter={fmt} tick={{ fontSize: 10, fill: "#4B5563" }} axisLine={false} tickLine={false} width={50} />
               {hasPhysical && <YAxis yAxisId="p" orientation="right" tickFormatter={fmt} tick={{ fontSize: 10, fill: PHYSICAL_COLOR }} axisLine={false} tickLine={false} width={50}
                 domain={[0, Math.ceil(physicalMax * 3)]} />}
+              {hasD2C && <YAxis yAxisId="d2c" orientation="right" hide domain={[0, Math.ceil(d2cMax * 3.5)]} />}
               <Tooltip content={<CampTip territory={territory} />} cursor={{ stroke: "#3A3D4E", strokeDasharray: "4 4" }} />
 
               {/* Pre-release phase shading */}
@@ -452,6 +476,7 @@ export default function TimelineChart({
                 dot={isSparse ? { r: 4, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 } : false}
                 activeDot={{ r: 5, fill: TOTAL_COLOR, stroke: "#0D1117", strokeWidth: 2 }} name="Total Streams" />
               {hasPhysical && <Bar yAxisId="p" dataKey="physical_units" fill={`${PHYSICAL_COLOR}40`} stroke={PHYSICAL_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="Physical" barSize={20} />}
+              {hasD2C && <Bar yAxisId="d2c" dataKey="d2c_global" fill={`${D2C_COLOR}30`} stroke={D2C_COLOR} strokeWidth={1} radius={[3, 3, 0, 0]} name="D2C" barSize={14} />}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -518,6 +543,7 @@ export default function TimelineChart({
           <>
             <LI color={TOTAL_COLOR} label={territory === "UK" ? "UK Streams" : "Global Streams"} type="line" bold />
             {hasPhysical && <LI color={PHYSICAL_COLOR} label={territory === "UK" ? "UK Physical" : "Physical"} type="bar" />}
+            {hasD2C && <LI color={D2C_COLOR} label="D2C Sales" type="bar" />}
           </>
         ) : (
           keyTracks

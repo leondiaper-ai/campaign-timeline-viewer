@@ -12,7 +12,7 @@ import {
 import { getCategoryConfig, getAllCategories } from "@/lib/event-categories";
 import CampaignInsights from "./CampaignInsights";
 import CampaignLearnings from "./CampaignLearnings";
-import D2COwnership from "./D2COwnership";
+// D2COwnership card removed — D2C now integrated into timeline chart
 import TimelineChart, { ChartMode } from "./TimelineChart";
 
 function fmtDate(d: string): string {
@@ -219,8 +219,27 @@ export default function Dashboard({ initialData }: DashboardProps) {
         {/* Stats */}
         <CampaignInsights sheet={sheet} territory={territory} />
 
-        {/* D2C Ownership — compact supporting signal */}
-        <D2COwnership sheet={sheet} />
+        {/* D2C summary line — lightweight narrative text above chart */}
+        {sheet.d2cSales && sheet.d2cSales.length >= 2 && (() => {
+          const first = sheet.d2cSales[0];
+          const latest = sheet.d2cSales[sheet.d2cSales.length - 1];
+          const firstShare = first.global_d2c_sales > 0
+            ? Math.round((first.uk_d2c_sales / first.global_d2c_sales) * 1000) / 10 : 0;
+          const latestShare = latest.global_d2c_sales > 0
+            ? Math.round((latest.uk_d2c_sales / latest.global_d2c_sales) * 1000) / 10 : 0;
+          const growing = latestShare > firstShare;
+          return (
+            <p className="text-[11px] text-[#9CA3AF] flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#A78BFA]" />
+              <span>
+                {growing
+                  ? `UK D2C ownership strengthening (${firstShare}% → ${latestShare}%)`
+                  : `UK D2C share: ${latestShare}%`}
+                <span className="text-[#4B5563] ml-1">· {latest.global_d2c_sales.toLocaleString()} global sales</span>
+              </span>
+            </p>
+          );
+        })()}
 
         {/* Chart */}
         <div ref={chartRef} className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5 scroll-mt-4">
