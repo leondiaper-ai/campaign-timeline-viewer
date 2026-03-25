@@ -17,7 +17,8 @@ const FALLBACK_MOMENTS: Moment[] = [
   { date: "2026-06-16", moment_title: "Album Release", moment_type: "music", is_key: true },
 ];
 
-// Build empty chart data from moments when no real streaming data exists
+// Build empty chart data from moments when no real streaming data exists.
+// Uses daily points so the categorical x-axis spacing matches real calendar gaps.
 function buildEmptyChartData(moments: Moment[]): ChartDataPoint[] {
   if (moments.length === 0) return [];
   const dates = moments.map(m => m.date).sort();
@@ -42,19 +43,9 @@ function buildEmptyChartData(moments: Moment[]): ChartDataPoint[] {
       cumulative_streams: 0, prev_week_streams: null,
       events: momentsByDate.get(d) || [],
     });
-    current.setDate(current.getDate() + 7);
+    current.setDate(current.getDate() + 1);
   }
-  // Ensure moment dates are included
-  moments.forEach(m => {
-    if (!points.some(p => p.date === m.date)) {
-      points.push({
-        date: m.date, total_streams: 0, physical_units: 0,
-        cumulative_streams: 0, prev_week_streams: null,
-        events: momentsByDate.get(m.date) || [],
-      });
-    }
-  });
-  return points.sort((a, b) => a.date.localeCompare(b.date));
+  return points;
 }
 
 function fmtDate(d: string): string {
