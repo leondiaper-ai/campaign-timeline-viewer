@@ -196,6 +196,96 @@ export function buildChartData(
   return buildChartFromWeeklyData(sheet, territory, selectedTracks);
 }
 
+// ——— Track Stream Smoothing ———————————————————————————————
+// Cleans and smooths per-track daily stream data for chart display.
+// 1. Fills full date range (null before first data, forward-fill single gaps, null for >2 day gaps)
+// 2. 3-day rolling average
+// 3. Spike control: limit day-to-day drops to -35%
+function smoothTrackData(
+  trackByDate: Map<string, Map<string, number>>,
+  allDates: string[]
+): Map<string, Map<string, number | null>> {
+  const result = new Map<string, Map<string, number | null>>();
+
+  trackByDate.forEach((dateMap, trackName) => {
+    const smoothed = new Map<string, number | null>();
+
+    // Find first and last dates with actual data for this track
+    const trackDates = [...dateMap.keys()].sort();
+    if (trackDates.length === 0) {
+      result.set(trackName, smoothed);
+      return;
+    }
+    const firstDate = trackDates[0];
+
+    // Step 1: Fill date range with gap rules
+    const filled: (number | null)[] = [];
+    const filledDates: string[] = [];
+
+    for (const date of allDates) {
+      filledDates.push(date);
+      if (date < firstDate) {
+        // Before first available data → null
+        filled.push(null);
+      } else if (dateMap.has(date)) {
+        filled.push(dateMap.get(date)!);
+      } else {
+        // Missing date after track started — check gap size
+        filled.push(null); // placeholder, will forward-fill below
+      }
+    }
+
+    // Forward-fill single-day gaps only (gaps >2 days stay null)
+    for (let i = 1; i < filled.length; i++) {
+      if (filled[i] === null && filledDates[i] >= firstDate) {
+        // Count consecutive nulls from here
+        let gapLen = 0;
+        for (let j = i; j < filled.length && filled[j] === null; j++) gapLen++;
+        if (gapLen <= 2 && i > 0 && filled[i - 1] !== null) {
+          // Forward fill single/double gaps
+          for (let j = 0; j < gapLen && i + j < filled.length; j++) {
+            filled[i + j] = filled[i - 1];
+          }
+        }
+      }
+    }
+
+    // Step 2: 3-day rolling average
+    const averaged: (number | null)[] = [];
+    for (let i = 0; i < filled.length; i++) {
+      if (filled[i] === null) {
+        averaged.push(null);
+        continue;
+      }
+      const vals: number[] = [];
+      for (let j = Math.max(0, i - 1); j <= Math.min(filled.length - 1, i + 1); j++) {
+        if (filled[j] !== null) vals.push(filled[j]!);
+      }
+      averaged.push(vals.length > 0 ? Math.round(vals.reduce((a, b) => a + b, 0) / vals.length) : null);
+    }
+
+    // Step 3: Spike control — limit day-to-day drops to -35%
+    const controlled: (number | null)[] = [...averaged];
+    for (let i = 1; i < controlled.length; i++) {
+      if (controlled[i] === null || controlled[i - 1] === null) continue;
+      const prev = controlled[i - 1]!;
+      const curr = controlled[i]!;
+      if (prev > 0 && curr < prev * 0.65) {
+        controlled[i] = Math.round(prev * 0.65);
+      }
+    }
+
+    // Write to output map
+    for (let i = 0; i < filledDates.length; i++) {
+      smoothed.set(filledDates[i], controlled[i]);
+    }
+
+    result.set(trackName, smoothed);
+  });
+
+  return result;
+}
+
 // ——— Daily data chart builder (preferred) ————————————————
 function buildChartFromDailyData(
   sheet: CampaignSheetData, territory: Territory, selectedTracks: string[]
@@ -250,8 +340,11 @@ function buildChartFromDailyData(
 
   const sorted = [...allDates].sort();
 
+  // Smooth per-track data for display (gap filling, rolling avg, spike control)
+  const smoothedTracks = smoothTrackData(trackByDate, sorted);
+
   const result: ChartDataPoint[] = sorted.map(date => {
-    // Total = sum of all track streams on this date
+    // Total = sum of RAW track streams on this date (not smoothed)
     let total = 0;
     selectedTracks.forEach(tn => {
       const val = trackByDate.get(tn)?.get(date);
@@ -267,10 +360,10 @@ function buildChartFromDailyData(
       events: momentsByDate.get(date) || [],
     };
 
-    // Track values: null if no data for that date
+    // Track values: use smoothed data for display
     selectedTracks.forEach(tn => {
-      const val = trackByDate.get(tn)?.get(date);
-      point[tn] = val ?? null;
+      const smoothed = smoothedTracks.get(tn)?.get(date);
+      point[tn] = smoothed ?? null;
     });
 
     return point;
