@@ -9,6 +9,11 @@ function fmt(v: number): string {
   if (v >= 1_000) return `${(v / 1_000).toFixed(0)}K`;
   return v.toLocaleString();
 }
+function fmtK(v: number): string {
+  if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
+  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}K`;
+  return v.toLocaleString();
+}
 function fmtSpend(v: number): string {
   if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
@@ -59,7 +64,18 @@ export default function CampaignInsights({ sheet, territory }: Props) {
     const pcs = sheet.paidCampaigns || [];
     const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
 
-    return { totalStreams, totalPhysical, uk, totalSpend };
+    // D2C data for UK Physical card
+    const d2c = sheet.d2cSales && sheet.d2cSales.length >= 2 ? (() => {
+      const first = sheet.d2cSales[0];
+      const latest = sheet.d2cSales[sheet.d2cSales.length - 1];
+      const firstShare = first.global_d2c_sales > 0
+        ? Math.round((first.uk_d2c_sales / first.global_d2c_sales) * 1000) / 10 : 0;
+      const latestShare = latest.global_d2c_sales > 0
+        ? Math.round((latest.uk_d2c_sales / latest.global_d2c_sales) * 1000) / 10 : 0;
+      return { global: latest.global_d2c_sales, uk: latest.uk_d2c_sales, firstShare, latestShare, rising: latestShare > firstShare };
+    })() : null;
+
+    return { totalStreams, totalPhysical, uk, totalSpend, d2c };
   }, [sheet, streamKey, territory]);
 
 
@@ -86,6 +102,18 @@ export default function CampaignInsights({ sheet, territory }: Props) {
         <p className="text-2xl font-bold text-[#4ADE80] tabular-nums">
           {stats.totalPhysical > 0 ? fmt(stats.totalPhysical) : "\u2014"}
         </p>
+        {stats.d2c && (
+          <div className="mt-1.5 leading-tight">
+            <p className="text-[10px] text-[#9CA3AF]">
+              {fmtK(stats.d2c.uk)} direct (D2C) · {fmtK(stats.d2c.global)} global
+            </p>
+            <p className="text-[10px] text-[#4B5563]">
+              {stats.d2c.rising
+                ? `UK share rising (${stats.d2c.firstShare}% → ${stats.d2c.latestShare}%)`
+                : `UK share: ${stats.d2c.latestShare}%`}
+            </p>
+          </div>
+        )}
       </div>
       {hasSpend && (
         <div className="bg-[#161922] rounded-xl border border-[#2A2D3E] p-4 group relative">

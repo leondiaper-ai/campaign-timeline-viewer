@@ -219,33 +219,6 @@ export default function Dashboard({ initialData }: DashboardProps) {
         {/* Stats */}
         <CampaignInsights sheet={sheet} territory={territory} />
 
-        {/* D2C headline — 2-line compact summary above chart */}
-        {sheet.d2cSales && sheet.d2cSales.length >= 2 && (() => {
-          const first = sheet.d2cSales[0];
-          const latest = sheet.d2cSales[sheet.d2cSales.length - 1];
-          const firstShare = first.global_d2c_sales > 0
-            ? Math.round((first.uk_d2c_sales / first.global_d2c_sales) * 1000) / 10 : 0;
-          const latestShare = latest.global_d2c_sales > 0
-            ? Math.round((latest.uk_d2c_sales / latest.global_d2c_sales) * 1000) / 10 : 0;
-          const rising = latestShare > firstShare;
-          const fmtK = (v: number) => v >= 1000 ? `${(v / 1000).toFixed(1)}K` : v.toLocaleString();
-          return (
-            <div className="flex items-start gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#A78BFA] mt-[5px] flex-shrink-0" />
-              <div className="leading-tight">
-                <p className="text-[12px] text-[#D1D5DB] font-medium">
-                  D2C: {fmtK(latest.global_d2c_sales)} global · {fmtK(latest.uk_d2c_sales)} UK
-                </p>
-                <p className="text-[11px] text-[#6B7280]">
-                  {rising
-                    ? `UK share rising (${firstShare}% → ${latestShare}%)`
-                    : `UK share: ${latestShare}%`}
-                </p>
-              </div>
-            </div>
-          );
-        })()}
-
         {/* Chart */}
         <div ref={chartRef} className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5 scroll-mt-4">
           {/* Pinned moment context label */}
