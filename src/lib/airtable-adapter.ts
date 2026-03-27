@@ -27,30 +27,3 @@ import type {
   D2CSalesRow,
   Territory,
 } from "@/types";
-
-import type {
-  AirtableCampaignData,
-  AirtableCampaign,
-  AirtableEvent,
-  AirtableDailyMetric,
-  AirtableTrackMetric,
-} from "./airtable-schema";
-// ═══════════════════════════════════════════════════════════════
-// MAIN ADAPTER: Airtable → CampaignSheetData
-// ═══════════════════════════════════════════════════════════════
-
-export function airtableToCampaignSheet(data: AirtableCampaignData): CampaignSheetData {
-  const { campaign, events, dailyMetrics, trackMetrics } = data;
-  return {
-    setup: campaignToSetup(campaign),
-    tracks: campaignToTracks(campaign),
-    weeklyData: dailyMetricsToWeeklyData(dailyMetrics),
-    physicalData: dailyMetricsToPhysicalData(dailyMetrics),
-    moments: eventsToMoments(events),
-    dailyTrackData: trackMetricsToDailyTrackData(trackMetrics),
-    dailyTerritoryData: trackMetricsToDailyTerritoryData(trackMetrics),
-    dailyReleaseTerritoryData: dailyMetricsToReleaseTerritoryData(dailyMetrics),
-    ukContext: [], // Derived from track metrics at query time; no longer a separate tab
-    paidCampaigns: eventsToPaidCampaigns(events),
-    learnings: campaignToLearnings(campaign),
-    d2cSales: dailyMetricsToD2CSales(dailyMetrics),(����)�
