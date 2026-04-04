@@ -19,6 +19,29 @@
   --accent-pink: #F472B6;
   --accent-cyan: #22D3EE;
   --accent-rose: #FB7185;
+
+  /* Shared design tokens (aligned with landing page) */
+  --paper: #FAF7F2;
+  --cream: #F6F1E7;
+  --ink: #0E0E0E;
+  --signal: #FF4A1C;
+  --electric: #2C25FF;
+  --mint: #1FBE7A;
+  --sun: #FFD24C;
+  --blush: #FFD3C9;
+}
+
+/* Shared editorial utilities — used by ToolIntro / DecisionCard */
+.headline {
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.92;
+}
+.eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-weight: 600;
 }
 body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
