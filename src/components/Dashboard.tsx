@@ -163,33 +163,33 @@ export default function Dashboard({ initialData }: DashboardProps) {
   }, [campaigns, router]);
 
   if (!campaign || !sheet) {
-    return (<div className="min-h-screen bg-[#0D1117] flex items-center justify-center"><p className="text-[#6B7280] text-lg">No active campaigns found.</p></div>);
+    return (<div className="min-h-screen bg-paper flex items-center justify-center"><p className="text-ink/40 text-lg">No active campaigns found.</p></div>);
   }
 
   return (
-    <div className="min-h-screen bg-[#0D1117] text-white">
-      <header className="border-b border-[#1E2130] px-6 py-4">
+    <div className="min-h-screen bg-paper text-ink">
+      <header className="border-b border-ink/8 px-6 py-5">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
             {campaigns.length > 1 ? (
-              <select className="bg-[#161922] border border-[#2A2D3E] rounded-lg px-3 py-1.5 text-sm font-medium text-white"
+              <select className="bg-cream border border-ink/10 rounded-full px-4 py-2 text-sm font-bold text-ink"
                 value={campaignIdx} onChange={e => handleCampaignChange(Number(e.target.value))}>
                 {campaigns.map((c, i) => (<option key={c.campaign_id} value={i}>{c.sheet.setup.artist_name} — {c.sheet.setup.campaign_name}</option>))}
               </select>
             ) : (
               <div>
-                <h1 className="text-lg font-semibold">{sheet.setup.artist_name}<span className="text-[#6B7280] font-normal"> — {sheet.setup.campaign_name}</span></h1>
-                <p className="text-[11px] text-[#4B5563] mt-0.5">
+                <h1 className="text-xl font-extrabold tracking-tight">{sheet.setup.artist_name}<span className="text-ink/40 font-medium"> — {sheet.setup.campaign_name}</span></h1>
+                <p className="text-[11px] text-ink/40 mt-0.5">
                   <span className="capitalize">{sheet.setup.campaign_type}</span>
                   {sheet.setup.release_date && <> · Released {fmtDate(sheet.setup.release_date)}</>}
                 </p>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-1 bg-[#161922] rounded-lg p-0.5 border border-[#2A2D3E]">
+          <div className="flex items-center gap-0.5 bg-cream rounded-full p-1 border border-ink/10">
             {(["global", "UK"] as Territory[]).map(t => (
               <button key={t} onClick={() => setTerritory(t)}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${territory === t ? "bg-[#6C9EFF]/15 text-[#6C9EFF] shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
+                className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all ${territory === t ? "bg-ink text-paper shadow-sm" : "text-ink/40 hover:text-ink/70"}`}>
                 {t === "global" ? "Global" : "UK"}
               </button>
             ))}
@@ -197,30 +197,30 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
       </header>
 
-      <main className="max-w-[1400px] mx-auto px-6 py-6 space-y-5">
+      <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
         {/* Team Push — forward-looking action plan */}
         {teamPush && (
-          <div className="bg-[#131620] rounded-xl border border-[#FBBF24]/10 px-4 py-3">
-            <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80 mb-2">Team Push</p>
+          <div className="rounded-2xl bg-cream border border-ink/8 px-5 py-4">
+            <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-sun mb-2">Team Push</p>
             <div className="space-y-1">
               {teamPush.push && (
-                <p className="text-[12px] text-white">
-                  <span className="font-bold text-[#FBBF24]">PUSH</span>
-                  <span className="text-[#4B5563] mx-1.5">→</span>
+                <p className="text-[12px] text-ink">
+                  <span className="font-bold text-sun">PUSH</span>
+                  <span className="text-ink/30 mx-1.5">→</span>
                   <span className="font-semibold">{teamPush.push}</span>
                 </p>
               )}
               {teamPush.support && (
-                <p className="text-[12px] text-[#D1D5DB]">
-                  <span className="font-bold text-[#6B7280]">Support</span>
-                  <span className="text-[#4B5563] mx-1.5">→</span>
+                <p className="text-[12px] text-ink/70">
+                  <span className="font-bold text-ink/40">Support</span>
+                  <span className="text-ink/30 mx-1.5">→</span>
                   {teamPush.support}
                 </p>
               )}
               {teamPush.next && (
-                <p className="text-[12px] text-[#9CA3AF]">
-                  <span className="font-bold text-[#6B7280]">Next</span>
-                  <span className="text-[#4B5563] mx-1.5">→</span>
+                <p className="text-[12px] text-ink/50">
+                  <span className="font-bold text-ink/40">Next</span>
+                  <span className="text-ink/30 mx-1.5">→</span>
                   {teamPush.next}
                 </p>
               )}
@@ -232,21 +232,21 @@ export default function Dashboard({ initialData }: DashboardProps) {
         <CampaignInsights sheet={sheet} territory={territory} />
 
         {/* Chart */}
-        <div ref={chartRef} className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5 scroll-mt-4">
+        <div ref={chartRef} className="rounded-3xl bg-paper border border-ink/8 p-6 md:p-8 scroll-mt-4 shadow-[8px_8px_0_0_rgba(14,14,14,0.06)]">
           {/* Pinned moment context label */}
           {pinnedDate && (() => {
             const pm = moments.find(m => m.date === pinnedDate);
             const pc = classified.find(c => c.moment.date === pinnedDate);
             if (!pm) return null;
             return (
-              <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#FBBF24] animate-pulse" />
-                  <span className="text-[11px] font-medium text-white">{pm.moment_title}</span>
-                  {pc?.context && <span className="text-[10px] text-[#9CA3AF]">→ {pc.context.charAt(0).toLowerCase()}{pc.context.slice(1)}</span>}
-                  <span className="text-[10px] text-[#4B5563]">{fmtShort(pinnedDate)}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-signal animate-pulse" />
+                  <span className="text-[11px] font-medium text-ink">{pm.moment_title}</span>
+                  {pc?.context && <span className="text-[10px] text-ink/50">→ {pc.context.charAt(0).toLowerCase()}{pc.context.slice(1)}</span>}
+                  <span className="text-[10px] text-ink/30">{fmtShort(pinnedDate)}</span>
                 </div>
-                <button onClick={() => setPinnedDate(null)} className="text-[9px] text-[#4B5563] hover:text-[#9CA3AF] transition-colors">Clear</button>
+                <button onClick={() => setPinnedDate(null)} className="text-[9px] text-ink/30 hover:text-ink/60 transition-colors">Clear</button>
               </div>
             );
           })()}
@@ -260,39 +260,31 @@ export default function Dashboard({ initialData }: DashboardProps) {
         </div>
 
         {/* Full Campaign Timeline — collapsed by default */}
-        <div className="bg-[#131620] rounded-xl border border-[#1E2D44] shadow-[0_0_15px_rgba(59,130,246,0.08)] hover:shadow-[0_0_20px_rgba(59,130,246,0.12)] transition-shadow duration-300">
+        <div className="rounded-2xl bg-cream border border-ink/8">
           <button onClick={() => setLogExpanded(e => !e)}
-            className="w-full flex items-center justify-between px-5 py-4 text-left group">
+            className="w-full flex items-center justify-between px-6 py-4 text-left group">
             <div className="flex items-center gap-3">
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#8B9CC7]">
-                Full Campaign Timeline <span className="text-[#5B6B8A] font-normal ml-1">({moments.length} events)</span>
+              <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40">
+                Full Campaign Timeline <span className="text-ink/25 font-normal ml-1">({moments.length} events)</span>
               </h3>
-              {!logExpanded && <span className="text-[10px] text-[#5B6B8A] group-hover:text-[#8B9CC7] transition-colors">Expand to view full campaign history</span>}
+              {!logExpanded && <span className="text-[10px] text-ink/25 group-hover:text-ink/50 transition-colors">Expand to view full campaign history</span>}
             </div>
             <div className="flex items-center gap-2">
-              {pinnedDate && logExpanded && <span onClick={(e) => { e.stopPropagation(); setPinnedDate(null); }} className="text-[10px] text-[#6B7280] hover:text-white underline underline-offset-2 cursor-pointer">Clear selection</span>}
-              <svg className={`w-4 h-4 text-[#4B5563] transition-transform ${logExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              {pinnedDate && logExpanded && <span onClick={(e) => { e.stopPropagation(); setPinnedDate(null); }} className="text-[10px] text-ink/40 hover:text-ink underline underline-offset-2 cursor-pointer">Clear selection</span>}
+              <svg className={`w-4 h-4 text-ink/30 transition-transform ${logExpanded ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" /></svg>
             </div>
           </button>
 
           {logExpanded && (
-            <div className="px-5 pb-5">
-              {/* View Toggle + Legend */}
+            <div className="px-6 pb-5">
+              {/* View Toggle */}
               <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-1 bg-[#0D1117] rounded-lg p-0.5 w-fit">
+                <div className="flex items-center gap-0.5 bg-paper rounded-full p-0.5 border border-ink/8 w-fit">
                   {(["impact", "timeline"] as const).map(v => (
                     <button key={v} onClick={() => setTimelineView(v)}
-                      className={`px-3 py-1 text-[10px] font-medium rounded-md transition-all ${timelineView === v ? "bg-[#1E2130] text-white shadow-sm" : "text-[#6B7280] hover:text-[#9CA3AF]"}`}>
+                      className={`px-3 py-1 text-[10px] font-bold rounded-full transition-all ${timelineView === v ? "bg-ink text-paper shadow-sm" : "text-ink/40 hover:text-ink/70"}`}>
                       {v === "impact" ? "Impact View" : "Timeline View"}
                     </button>
-                  ))}
-                </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  {Object.entries(getAllCategories()).map(([key, cfg]) => (
-                    <div key={key} className="flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: cfg.color }} />
-                      <span className="text-[9px] text-[#6B7280]">{cfg.label}</span>
-                    </div>
                   ))}
                 </div>
               </div>
@@ -302,8 +294,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
                   {/* Moment Drivers */}
                   {drivers.length > 0 && (
                     <div>
-                      <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24] mb-2 pb-1 border-b border-[#1E2130]">
-                        Moment Drivers <span className="text-[#4B5563] font-normal ml-1">({drivers.length})</span>
+                      <h4 className="text-[9px] font-bold uppercase tracking-[0.18em] text-sun mb-2 pb-1 border-b border-ink/8">
+                        Moment Drivers <span className="text-ink/25 font-normal ml-1">({drivers.length})</span>
                       </h4>
                       <div className="space-y-0.5">
                         {drivers.map((c, i) => <TieredMomentRow key={`d${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
@@ -315,8 +307,8 @@ export default function Dashboard({ initialData }: DashboardProps) {
                   {/* Supporting Activity */}
                   {supporting.length > 0 && (
                     <div>
-                      <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-2 pb-1 border-b border-[#1E2130]">
-                        Supporting Activity <span className="text-[#4B5563] font-normal ml-1">({supporting.length})</span>
+                      <h4 className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-2 pb-1 border-b border-ink/8">
+                        Supporting Activity <span className="text-ink/25 font-normal ml-1">({supporting.length})</span>
                       </h4>
                       <div className="space-y-0.5">
                         {supporting.map((c, i) => <TieredMomentRow key={`s${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
@@ -330,16 +322,16 @@ export default function Dashboard({ initialData }: DashboardProps) {
                     <div>
                       {!showBackground ? (
                         <button onClick={() => setShowBackground(true)}
-                          className="text-[10px] text-[#4B5563] hover:text-[#6B7280] transition-colors">
+                          className="text-[10px] text-ink/30 hover:text-ink/50 transition-colors">
                           + {background.length} additional activit{background.length === 1 ? "y" : "ies"}
                         </button>
                       ) : (
                         <>
-                          <div className="flex items-center justify-between mb-2 pb-1 border-b border-[#1E2130]">
-                            <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#4B5563]">
+                          <div className="flex items-center justify-between mb-2 pb-1 border-b border-ink/8">
+                            <h4 className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/30">
                               Background Activity <span className="font-normal ml-1">({background.length})</span>
                             </h4>
-                            <button onClick={() => setShowBackground(false)} className="text-[9px] text-[#4B5563] hover:text-[#6B7280] transition-colors">Collapse</button>
+                            <button onClick={() => setShowBackground(false)} className="text-[9px] text-ink/30 hover:text-ink/50 transition-colors">Collapse</button>
                           </div>
                           <div className="space-y-0.5">
                             {background.map((c, i) => <TieredMomentRow key={`b${i}`} classified={c} pinnedDate={pinnedDate} effectiveHighlight={effectiveHighlight}
@@ -364,32 +356,32 @@ export default function Dashboard({ initialData }: DashboardProps) {
         <CampaignLearnings sheet={sheet} />
         {/* UK Track Context (supporting layer — visible in global mode) */}
         {territory === "global" && ukTrackContext.length > 0 && (
-          <div className="bg-[#131620] rounded-xl border border-[#1E2130] p-5">
-            <h3 className="text-[10px] font-bold uppercase tracking-[0.15em] text-[#6B7280] mb-3">
+          <div className="rounded-2xl bg-cream border border-ink/8 p-5">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
               UK Context
-              <span className="text-[#4B5563] font-normal ml-2">Supporting data — not rendered as daily lines</span>
+              <span className="text-ink/25 font-normal ml-2">Supporting data</span>
             </h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
-                  <tr className="border-b border-[#1E2130]">
-                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4">Track</th>
-                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4 text-right">UK Streams</th>
-                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4 text-right">Global</th>
-                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2 pr-4 text-right">UK Share</th>
-                    <th className="text-[9px] font-bold uppercase tracking-wider text-[#4B5563] pb-2">Note</th>
+                  <tr className="border-b border-ink/10">
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-ink/30 pb-2 pr-4">Track</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-ink/30 pb-2 pr-4 text-right">UK Streams</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-ink/30 pb-2 pr-4 text-right">Global</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-ink/30 pb-2 pr-4 text-right">UK Share</th>
+                    <th className="text-[9px] font-bold uppercase tracking-wider text-ink/30 pb-2">Note</th>
                   </tr>
                 </thead>
                 <tbody>
                   {ukTrackContext.map((row: UKTrackContext, i: number) => (
-                    <tr key={i} className="border-b border-[#1E2130]/50">
-                      <td className="text-[11px] text-white font-medium py-2 pr-4">{row.track_name}</td>
-                      <td className="text-[11px] text-[#D1D5DB] tabular-nums py-2 pr-4 text-right">{row.uk_streams >= 1_000_000 ? `${(row.uk_streams/1_000_000).toFixed(1)}M` : row.uk_streams >= 1_000 ? `${(row.uk_streams/1_000).toFixed(0)}K` : row.uk_streams}</td>
-                      <td className="text-[11px] text-[#9CA3AF] tabular-nums py-2 pr-4 text-right">{row.global_streams >= 1_000_000 ? `${(row.global_streams/1_000_000).toFixed(1)}M` : row.global_streams >= 1_000 ? `${(row.global_streams/1_000).toFixed(0)}K` : row.global_streams}</td>
+                    <tr key={i} className="border-b border-ink/6">
+                      <td className="text-[11px] text-ink font-medium py-2 pr-4">{row.track_name}</td>
+                      <td className="text-[11px] text-ink/70 tabular-nums py-2 pr-4 text-right">{row.uk_streams >= 1_000_000 ? `${(row.uk_streams/1_000_000).toFixed(1)}M` : row.uk_streams >= 1_000 ? `${(row.uk_streams/1_000).toFixed(0)}K` : row.uk_streams}</td>
+                      <td className="text-[11px] text-ink/50 tabular-nums py-2 pr-4 text-right">{row.global_streams >= 1_000_000 ? `${(row.global_streams/1_000_000).toFixed(1)}M` : row.global_streams >= 1_000 ? `${(row.global_streams/1_000).toFixed(0)}K` : row.global_streams}</td>
                       <td className="text-[11px] tabular-nums py-2 pr-4 text-right">
-                        <span className={`${row.uk_share_pct >= 15 ? "text-emerald-400 font-semibold" : "text-[#6B7280]"}`}>{row.uk_share_pct}%</span>
+                        <span className={`${row.uk_share_pct >= 15 ? "text-mint font-semibold" : "text-ink/40"}`}>{row.uk_share_pct}%</span>
                       </td>
-                      <td className="text-[10px] text-[#6B7280] py-2">{row.note}</td>
+                      <td className="text-[10px] text-ink/40 py-2">{row.note}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -415,17 +407,17 @@ function TieredMomentRow({ classified, pinnedDate, effectiveHighlight, onHover, 
   return (
     <div onClick={() => onClick(moment.date)}
       className={`flex items-start gap-2 px-2 py-1.5 rounded-lg transition-all cursor-pointer ${
-        isPinned ? "bg-white/8 ring-1 ring-white/10" : effectiveHighlight === moment.date ? "bg-white/5" : "hover:bg-white/[0.03]"
+        isPinned ? "bg-ink/5 ring-1 ring-ink/10" : effectiveHighlight === moment.date ? "bg-ink/[0.03]" : "hover:bg-ink/[0.02]"
       }`}
       onMouseEnter={() => onHover(moment.date)} onMouseLeave={() => onHover(null)}>
       <span className={`${isDriver ? "w-2 h-2" : "w-1.5 h-1.5"} rounded-full mt-1 flex-shrink-0`} style={{ backgroundColor: cat.color, opacity: isBg ? 0.4 : 1 }} />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
-          <span className={`text-[11px] leading-tight ${isDriver ? "font-semibold text-white" : isBg ? "font-normal text-[#6B7280]" : "font-medium text-[#D1D5DB]"}`}>{moment.moment_title}</span>
+          <span className={`text-[11px] leading-tight ${isDriver ? "font-semibold text-ink" : isBg ? "font-normal text-ink/40" : "font-medium text-ink/70"}`}>{moment.moment_title}</span>
         </div>
         <div className="flex items-center gap-1.5">
-          <span className={`text-[9px] ${isBg ? "text-[#374151]" : "text-[#4B5563]"}`}>{fmtShort(moment.date)} · {cat.label}</span>
-          {context && <span className={`text-[9px] ${isDriver ? "text-[#FBBF24]/70" : "text-[#4B5563]"}`}>— {context}</span>}
+          <span className={`text-[9px] ${isBg ? "text-ink/20" : "text-ink/30"}`}>{fmtShort(moment.date)} · {cat.label}</span>
+          {context && <span className={`text-[9px] ${isDriver ? "text-sun" : "text-ink/30"}`}>— {context}</span>}
         </div>
       </div>
     </div>
@@ -435,9 +427,9 @@ function TieredMomentRow({ classified, pinnedDate, effectiveHighlight, onHover, 
 // ——— Chronological Timeline View ———————————————————————————
 type Phase = "pre" | "release" | "post";
 const PHASE_META: Record<Phase, { label: string; color: string }> = {
-  pre:     { label: "Pre-Release",   color: "#6C9EFF" },
-  release: { label: "Release Week",  color: "#FBBF24" },
-  post:    { label: "Post-Release",  color: "#10B981" },
+  pre:     { label: "Pre-Release",   color: "#2C25FF" },
+  release: { label: "Release Week",  color: "#FF4A1C" },
+  post:    { label: "Post-Release",  color: "#1FBE7A" },
 };
 const PHASE_ORDER: Phase[] = ["pre", "release", "post"];
 
@@ -579,9 +571,9 @@ function ChronologicalTimeline({ moments, classified, albumDate, paidCampaigns, 
         const meta = PHASE_META[phase];
         return (
           <div key={phase}>
-            <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] mb-2 pb-1 border-b border-[#1E2130]"
+            <h4 className="text-[9px] font-bold uppercase tracking-[0.18em] mb-2 pb-1 border-b border-ink/8"
               style={{ color: meta.color }}>
-              {meta.label} <span className="text-[#4B5563] font-normal ml-1">({items.length})</span>
+              {meta.label} <span className="text-ink/25 font-normal ml-1">({items.length})</span>
             </h4>
             <div className="space-y-0.5">
               {items.map((nm, i) => {
@@ -590,19 +582,19 @@ function ChronologicalTimeline({ moments, classified, albumDate, paidCampaigns, 
                   <div key={`${phase}${i}`}
                     onClick={() => onClick(nm.date)}
                     className={`flex items-start gap-2.5 px-2 py-1.5 rounded-lg transition-all cursor-pointer ${
-                      isPinned ? "bg-white/8 ring-1 ring-white/10" : effectiveHighlight === nm.date ? "bg-white/5" : "hover:bg-white/[0.03]"
+                      isPinned ? "bg-ink/5 ring-1 ring-ink/10" : effectiveHighlight === nm.date ? "bg-ink/[0.03]" : "hover:bg-ink/[0.02]"
                     }`}
                     onMouseEnter={() => onHover(nm.date)} onMouseLeave={() => onHover(null)}>
-                    <span className={`text-[10px] tabular-nums flex-shrink-0 mt-px ${nm.isKey ? "text-[#9CA3AF] font-medium" : "text-[#4B5563]"}`} style={{ minWidth: "3.2rem" }}>
+                    <span className={`text-[10px] tabular-nums flex-shrink-0 mt-px ${nm.isKey ? "text-ink/50 font-medium" : "text-ink/30"}`} style={{ minWidth: "3.2rem" }}>
                       {fmtShort(nm.date)}
                     </span>
-                    <span className="text-[#4B5563] text-[10px] mt-px flex-shrink-0">—</span>
+                    <span className="text-ink/25 text-[10px] mt-px flex-shrink-0">—</span>
                     <div className="flex-1 min-w-0">
-                      <span className={`text-[11px] leading-tight ${nm.isKey ? "font-semibold text-white" : "font-normal text-[#D1D5DB]"}`}>
+                      <span className={`text-[11px] leading-tight ${nm.isKey ? "font-semibold text-ink" : "font-normal text-ink/70"}`}>
                         {nm.label}
                       </span>
                       {nm.context && (
-                        <span className={`text-[10px] ml-1.5 ${nm.isKey ? "text-[#9CA3AF]" : "text-[#4B5563]"}`}>
+                        <span className={`text-[10px] ml-1.5 ${nm.isKey ? "text-ink/50" : "text-ink/30"}`}>
                           {nm.context}
                         </span>
                       )}

@@ -3,24 +3,7 @@
 @tailwind utilities;
 
 :root {
-  --bg-primary: #0F1117;
-  --bg-card: #161922;
-  --bg-card-hover: #1C1F2E;
-  --bg-surface: #1E2130;
-  --border: #2A2D3E;
-  --border-light: #353849;
-  --text-primary: #F1F2F6;
-  --text-secondary: #9BA1B0;
-  --text-muted: #5F6578;
-  --accent-blue: #6C9EFF;
-  --accent-green: #4ADE80;
-  --accent-purple: #A78BFA;
-  --accent-amber: #FBBF24;
-  --accent-pink: #F472B6;
-  --accent-cyan: #22D3EE;
-  --accent-rose: #FB7185;
-
-  /* Shared design tokens (aligned with landing page) */
+  /* Design system tokens (aligned with microsite) */
   --paper: #FAF7F2;
   --cream: #F6F1E7;
   --ink: #0E0E0E;
@@ -29,6 +12,14 @@
   --mint: #1FBE7A;
   --sun: #FFD24C;
   --blush: #FFD3C9;
+
+  /* Legacy references (kept for any remaining usage) */
+  --bg-primary: #FAF7F2;
+  --bg-card: #F6F1E7;
+  --border: rgba(14,14,14,0.1);
+  --text-primary: #0E0E0E;
+  --text-secondary: rgba(14,14,14,0.6);
+  --text-muted: rgba(14,14,14,0.4);
 }
 
 /* Shared editorial utilities — used by ToolIntro / DecisionCard */
@@ -47,16 +38,17 @@ body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  background-color: var(--paper);
+  color: var(--ink);
 }
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background-color: var(--border); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background-color: var(--border-light); }
-.recharts-cartesian-grid line { stroke: var(--border) !important; }
-.recharts-text { fill: var(--text-muted) !important; }
+::-webkit-scrollbar-thumb { background-color: rgba(14,14,14,0.15); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background-color: rgba(14,14,14,0.25); }
+/* Recharts overrides for paper palette */
+.recharts-cartesian-grid line { stroke: rgba(14,14,14,0.06) !important; }
+.recharts-text { fill: rgba(14,14,14,0.4) !important; }
 .event-row { transition: background-color 0.15s ease, opacity 0.15s ease; }
-.event-row:hover { background-color: var(--bg-card-hover); }
+.event-row:hover { background-color: rgba(14,14,14,0.03); }
 @keyframes marker-pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.6); opacity: 0.7; } }
 .marker-highlight { animation: marker-pulse 1s ease-in-out infinite; }
