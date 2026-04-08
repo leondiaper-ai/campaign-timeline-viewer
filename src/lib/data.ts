@@ -24,10 +24,28 @@ export async function getCampaignData(): Promise<AppData> {
     !!process.env.AIRTABLE_BASE_ID && !!process.env.AIRTABLE_API_KEY;
 
   try {
+    let data: AppData;
     if (useAirtable) {
-      return await getCampaignDataFromAirtable();
+      data = await getCampaignDataFromAirtable();
+    } else {
+      data = await getCampaignDataFromSheets();
     }
-    return await getCampaignDataFromSheets();
+
+    // If no campaign has key track roles (lead_single, second_single, focus_track),
+    // the Tracks view won't work. Fall back to curated demo campaigns.
+    const KEY_ROLES = ["lead_single", "second_single", "focus_track"];
+    const hasKeyTracks = data.campaigns.some(c =>
+      c.sheet.tracks && c.sheet.tracks.length > 0 &&
+      c.sheet.tracks.some(t => KEY_ROLES.includes(t.track_role)) &&
+      c.sheet.weeklyData && c.sheet.weeklyData.length >= 8
+    );
+
+    if (!hasKeyTracks) {
+      console.warn("[CTV] No campaign has key track roles with enough data. Using demo campaigns.");
+      return getDemoCampaigns();
+    }
+
+    return data;
   } catch (err) {
     console.warn("[CTV] Data fetch failed, falling back to demo campaigns:", err instanceof Error ? err.message : err);
     return getDemoCampaigns();
@@ -84,7 +102,7 @@ async function getCampaignDataFromAirtable(): Promise<AppData> {
 
 /** Check if the returned data is demo data (used for UI labeling) */
 export function isDemoData(data: AppData): boolean {
-  const demoIds = new Set(["k-trap-album-2026", "james-blake-trying-times", "k-trap-trapo-2"]);
+  const demoIds = new Set(["k-trap-album-2026", "james-blake-trying-times"]);
   return data.campaigns.length > 0 && data.campaigns.every(c => demoIds.has(c.campaign_id));
 }
 

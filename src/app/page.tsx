@@ -2,7 +2,7 @@ import { getCampaignData, isDemoData } from "@/lib/data";
 import Dashboard from "@/components/Dashboard";
 import ToolIntro from "@/components/shared/ToolIntro";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export default async function Home() {
   const data = await getCampaignData();

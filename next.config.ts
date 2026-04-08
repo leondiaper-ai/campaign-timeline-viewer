@@ -1,4 +1,4 @@
-// Build trigger: 2026-03-13T22:27:33.927Z
+// Build trigger: 2026-04-08T14:06:00.000Z
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {

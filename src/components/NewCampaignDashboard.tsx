@@ -194,21 +194,14 @@ export default function NewCampaignDashboard({ sheet }: Props) {
         <div ref={chartRef} className="bg-[#131620] rounded-2xl border border-[#1E2130] p-5">
           <TimelineChart
             data={chartData}
-            selectedTracks={hasRealData ? allTrackNames : []}
-            trackRoles={trackRoles}
-            visibleEventDates={keyMomentDates}
+            moments={moments}
             highlightedDate={null}
             pinnedDate={null}
-            handoverMoment={null}
-            chartInsight={null}
-            trackModeContext={null}
+            albumDate={albumDate}
+            territory={territory}
             chartMode={chartMode}
             onChartModeChange={setChartMode}
-            albumDate={albumDate}
-            ukMilestones={[]}
-            territory={territory}
-            paidCampaigns={sheet.paidCampaigns || []}
-            moments={moments}
+            tracks={sheet.tracks}
           />
           {!hasRealData && (
             <p className="text-[10px] text-[#4B5563] text-center mt-3 italic">

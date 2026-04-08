@@ -1,7 +1,7 @@
 import { fetchCampaignSheetData } from "@/lib/sheets";
 import NewCampaignDashboard from "@/components/NewCampaignDashboard";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 const NEW_CAMPAIGN_SHEET_ID = "1WokPfbrbXLC5zHdh1eua-nUThQHnQSi-3tlnXBrGlhA";
 

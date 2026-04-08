@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCampaignData } from "@/lib/data";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {

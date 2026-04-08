@@ -311,12 +311,20 @@ function buildChartFromDailyData(
       });
   }
 
+  // Build weekly TOTAL lookup — authoritative source for campaign-level total_streams
+  // This preserves the curated stream shapes from demo/sheet data rather than
+  // deriving totals from track-level sums (which differ due to noise + rounding).
+  const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
+  const weeklyTotalByDate = new Map<string, number>();
+  if (sheet.weeklyData && sheet.weeklyData.length > 0) {
+    sheet.weeklyData.filter(r => r.track_name === "TOTAL")
+      .forEach(r => weeklyTotalByDate.set(r.week_start_date, r[streamKey]));
+  }
+
   // Build track data: track -> date -> streams
   const trackByDate = new Map<string, Map<string, number>>();
 
   if (hasTerrData) {
-    // Strict territory filtering — only territory-specific rows, no global fallback.
-    // If UK data is missing for a date, that date shows as a gap (null), not global.
     sheet.dailyTerritoryData
       .filter(r => r.territory === territory)
       .forEach(r => {
@@ -325,13 +333,20 @@ function buildChartFromDailyData(
         trackByDate.get(r.track_name)!.set(r.date, r.streams);
       });
   } else {
-    // Use global daily data
     sheet.dailyTrackData.forEach(r => {
       if (!selectedTracks.includes(r.track_name)) return;
       if (!trackByDate.has(r.track_name)) trackByDate.set(r.track_name, new Map());
       trackByDate.get(r.track_name)!.set(r.date, r.global_streams);
     });
   }
+
+  // Detect data granularity: if track dates match weekly dates, data is weekly
+  // and smoothing/ghost dates should be skipped (it would distort the shape)
+  const trackDates = new Set<string>();
+  trackByDate.forEach(dates => dates.forEach((_, d) => trackDates.add(d)));
+  const weeklyDates = new Set(weeklyTotalByDate.keys());
+  const isWeeklyGranularity = trackDates.size > 0 && weeklyDates.size > 0 &&
+    [...trackDates].every(d => weeklyDates.has(d));
 
   // Build moments lookup
   const momentsByDate = new Map<string, Moment[]>();
@@ -351,29 +366,34 @@ function buildChartFromDailyData(
     sheet.d2cSales.forEach(r => d2cByDate.set(r.date, { global: r.global_d2c_sales, uk: r.uk_d2c_sales }));
   }
 
-  // All dates across all tracks + release-level data
+  // All dates: use track data dates as the backbone.
+  // Only inject moment dates as ghost points for truly daily data (not weekly).
+  // Ghost dates on weekly data create zero-stream gaps that flatten the graph.
   const allDates = new Set<string>();
   trackByDate.forEach(dates => dates.forEach((_, d) => allDates.add(d)));
   releaseTotalByDate.forEach((_, d) => allDates.add(d));
   d2cByDate.forEach((_, d) => allDates.add(d));
-  // Add moment dates as ghost points — but only when we have enough real data
-  // to avoid drowning sparse territory data in null-filled dates
-  if (!hasTerrData || allDates.size >= 3) {
+  if (!isWeeklyGranularity && (!hasTerrData || allDates.size >= 3)) {
     sheet.moments.forEach(m => allDates.add(m.date));
   }
 
   const sorted = [...allDates].sort();
 
-  // Smooth per-track data for display (gap filling, rolling avg, spike control)
-  const smoothedTracks = smoothTrackData(trackByDate, sorted);
+  // Only smooth per-track data for truly daily granularity.
+  // Weekly data is already clean — smoothing would apply rolling averages and
+  // spike control that distort the curated shapes.
+  const smoothedTracks = isWeeklyGranularity ? null : smoothTrackData(trackByDate, sorted);
 
   const result: ChartDataPoint[] = sorted.map(date => {
-    // Total: prefer release-level data (actual album streams) over track-level sum
+    // Total: 1st choice = release territory data, 2nd = weekly TOTAL rows,
+    // 3rd = sum of raw track streams
     let total = 0;
     if (hasReleaseTerr && releaseTotalByDate.has(date)) {
       total = releaseTotalByDate.get(date)!;
+    } else if (weeklyTotalByDate.has(date)) {
+      // Use the authoritative weekly total — preserves curated stream shapes
+      total = weeklyTotalByDate.get(date)!;
     } else {
-      // Fallback: sum of RAW track streams on this date (not smoothed)
       selectedTracks.forEach(tn => {
         const val = trackByDate.get(tn)?.get(date);
         if (val) total += val;
@@ -393,10 +413,15 @@ function buildChartFromDailyData(
       d2c_uk_share: d2c && d2c.global > 0 ? Math.round((d2c.uk / d2c.global) * 1000) / 10 : undefined,
     };
 
-    // Track values: use smoothed data for display
+    // Track values: use smoothed data for daily, raw data for weekly
     selectedTracks.forEach(tn => {
-      const smoothed = smoothedTracks.get(tn)?.get(date);
-      point[tn] = smoothed ?? null;
+      if (smoothedTracks) {
+        const smoothed = smoothedTracks.get(tn)?.get(date);
+        point[tn] = smoothed ?? null;
+      } else {
+        const raw = trackByDate.get(tn)?.get(date);
+        point[tn] = raw ?? null;
+      }
     });
 
     return point;
