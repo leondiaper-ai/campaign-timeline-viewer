@@ -1,25 +1,37 @@
 import { AppData } from "@/types";
 import { fetchActiveCampaigns, fetchCampaignSheetData } from "./sheets";
 import { fetchFromAirtable } from "./airtable-loader";
+import { getDemoCampaigns, shouldUseDemoData } from "./demo-campaigns";
 
 /**
  * Primary data loader.
  *
  * Strategy:
- *   1. If AIRTABLE_BASE_ID + AIRTABLE_API_KEY are set → fetch from Airtable
- *   2. Otherwise → fetch from Google Sheets (original behavior)
+ *   1. If no API keys configured → use demo campaigns (curated scenarios)
+ *   2. If AIRTABLE_BASE_ID + AIRTABLE_API_KEY are set → fetch from Airtable
+ *   3. Otherwise → fetch from Google Sheets (original behavior)
+ *   4. If Sheets/Airtable fail → fall back to demo campaigns
  *
  * Either way, returns AppData with CampaignSheetData — the UI doesn't change.
  */
 export async function getCampaignData(): Promise<AppData> {
+  // No API keys → demo mode
+  if (shouldUseDemoData()) {
+    return getDemoCampaigns();
+  }
+
   const useAirtable =
     !!process.env.AIRTABLE_BASE_ID && !!process.env.AIRTABLE_API_KEY;
 
-  if (useAirtable) {
-    return getCampaignDataFromAirtable();
+  try {
+    if (useAirtable) {
+      return await getCampaignDataFromAirtable();
+    }
+    return await getCampaignDataFromSheets();
+  } catch (err) {
+    console.warn("[CTV] Data fetch failed, falling back to demo campaigns:", err instanceof Error ? err.message : err);
+    return getDemoCampaigns();
   }
-
-  return getCampaignDataFromSheets();
 }
 
 /** Fetch all campaigns from Google Sheets (original path) */
@@ -68,6 +80,12 @@ async function getCampaignDataFromAirtable(): Promise<AppData> {
     })
   );
   return { campaigns };
+}
+
+/** Check if the returned data is demo data (used for UI labeling) */
+export function isDemoData(data: AppData): boolean {
+  const demoIds = new Set(["k-trap-album-2026", "james-blake-trying-times", "k-trap-trapo-2"]);
+  return data.campaigns.length > 0 && data.campaigns.every(c => demoIds.has(c.campaign_id));
 }
 
 // Daily data pipeline v2

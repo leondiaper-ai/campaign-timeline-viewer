@@ -25,14 +25,14 @@ function fmtShort(d: string): string {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-interface DashboardProps { initialData: AppData; }
+interface DashboardProps { initialData: AppData; isDemo?: boolean; }
 
 // Campaigns with dedicated pages — dropdown navigates instead of switching state
 const CAMPAIGN_ROUTES: Record<string, string> = {
-  "k-trap-trapo-2": "/campaign/new",
+  // Demo campaigns stay in the main dropdown — no redirects needed
 };
 
-export default function Dashboard({ initialData }: DashboardProps) {
+export default function Dashboard({ initialData, isDemo }: DashboardProps) {
   const router = useRouter();
   const campaigns = initialData.campaigns;
   const [campaignIdx, setCampaignIdx] = useState(0);
@@ -171,6 +171,9 @@ export default function Dashboard({ initialData }: DashboardProps) {
       <header className="border-b border-ink/8 px-6 py-5">
         <div className="max-w-[1400px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-4">
+            {isDemo && (
+              <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-sun bg-sun/10 px-2.5 py-1 rounded-full">Demo</span>
+            )}
             {campaigns.length > 1 ? (
               <select className="bg-cream border border-ink/10 rounded-full px-4 py-2 text-sm font-bold text-ink"
                 value={campaignIdx} onChange={e => handleCampaignChange(Number(e.target.value))}>

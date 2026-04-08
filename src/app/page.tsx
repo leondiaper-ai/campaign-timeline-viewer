@@ -1,4 +1,4 @@
-import { getCampaignData } from "@/lib/data";
+import { getCampaignData, isDemoData } from "@/lib/data";
 import Dashboard from "@/components/Dashboard";
 import ToolIntro from "@/components/shared/ToolIntro";
 
@@ -6,6 +6,7 @@ export const revalidate = 300;
 
 export default async function Home() {
   const data = await getCampaignData();
+  const isDemo = isDemoData(data);
   return (
     <>
       {/* Editorial intro — bridges landing page → tool */}
@@ -20,9 +21,9 @@ export default async function Home() {
         ctaHref="#tool"
       />
 
-      {/* Existing dashboard — unchanged core logic */}
+      {/* Dashboard — uses demo data when no API keys present */}
       <div id="tool" className="scroll-mt-16">
-        <Dashboard initialData={data} />
+        <Dashboard initialData={data} isDemo={isDemo} />
       </div>
     </>
   );
