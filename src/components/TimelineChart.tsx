@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import {
   ResponsiveContainer, ComposedChart, Line, Area, Bar,
-  XAxis, YAxis, Tooltip, ReferenceLine, ReferenceArea,
+  XAxis, YAxis, Tooltip, ReferenceLine, ReferenceArea, ReferenceDot,
 } from "recharts";
 import { ChartDataPoint, Moment, Territory, Track } from "@/types";
 
@@ -248,6 +248,43 @@ function getPhases(data: ChartDataPoint[], albumDate?: string) {
   return { first, albumDate, postStart: post.length > 1 ? post[1] : post[0] || last, last };
 }
 
+// ── Focus window around a pinned date (±3 days, snapped to chart categories) ──
+function getFocusWindow(
+  pinnedDate: string | null | undefined,
+  chartDates: string[],
+): { x1: string; x2: string } | null {
+  if (!pinnedDate || chartDates.length === 0) return null;
+  const sorted = [...chartDates].sort();
+  const pinMs = new Date(pinnedDate).getTime();
+  const WINDOW_MS = 3 * 86400000;
+  const inRange = sorted.filter((d) => {
+    const t = new Date(d).getTime();
+    return Math.abs(t - pinMs) <= WINDOW_MS;
+  });
+  if (inRange.length >= 2) {
+    return { x1: inRange[0], x2: inRange[inRange.length - 1] };
+  }
+  // Sparse data fallback: use the pinned category plus one neighbour on each side.
+  const snappedIdx = sorted.indexOf(pinnedDate);
+  if (snappedIdx >= 0) {
+    return {
+      x1: sorted[Math.max(0, snappedIdx - 1)],
+      x2: sorted[Math.min(sorted.length - 1, snappedIdx + 1)],
+    };
+  }
+  // Last resort: nearest single category.
+  let nearest = sorted[0];
+  let bestDiff = Math.abs(new Date(nearest).getTime() - pinMs);
+  for (const d of sorted) {
+    const diff = Math.abs(new Date(d).getTime() - pinMs);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      nearest = d;
+    }
+  }
+  return { x1: nearest, x2: nearest };
+}
+
 // ════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ════════════════════════════════════════════════════════════════
@@ -263,6 +300,37 @@ export default function TimelineChart({
   const hasPhysical = useMemo(() => data.some(d => (d.physical_units || 0) > 0), [data]);
   const physicalPeak = useMemo(() => Math.max(...data.map(d => d.physical_units || 0)), [data]);
   const isCampaign = chartMode === "campaign";
+
+  // ── Focus interaction state ──
+  const focusWindow = useMemo(
+    () => getFocusWindow(pinnedDate, chartDates),
+    [pinnedDate, chartDates],
+  );
+  const isFocused = !!pinnedDate;
+  // Snap pinned date to the nearest chart category for ReferenceDot/ReferenceLine
+  const snappedPinned = useMemo(() => {
+    if (!pinnedDate || chartDates.length === 0) return null;
+    if (chartDates.includes(pinnedDate)) return pinnedDate;
+    return snapToChartDate(pinnedDate, chartDates);
+  }, [pinnedDate, chartDates]);
+  // Stream value at pinned date for the data-point marker
+  const pinnedStreamValue = useMemo(() => {
+    if (!snappedPinned) return null;
+    const row = data.find((d) => d.date === snappedPinned);
+    return row?.total_streams ?? null;
+  }, [snappedPinned, data]);
+  // Label for the vertical line (e.g. "Album Release")
+  const pinnedLabel = useMemo(() => {
+    if (!pinnedDate || !allMoments) return null;
+    const exact = allMoments.find((m) => m.date === pinnedDate);
+    if (exact) return trunc(exact.moment_title, 22);
+    return null;
+  }, [pinnedDate, allMoments]);
+  // Series opacities — dim the rest of the chart when focused
+  const seriesStrokeOpacity = isFocused ? 0.3 : 1;
+  const seriesFillOpacity = isFocused ? 0.4 : 1;
+  const FOCUS_FILL = "rgba(255,74,28,0.10)";
+  const FOCUS_STROKE = "rgba(255,74,28,0.35)";
 
   // Key tracks: max 3, only lead/second/focus roles
   const keyTracks = useMemo(() => {
@@ -332,9 +400,48 @@ export default function TimelineChart({
                   label={{ value: "POST-RELEASE", position: "insideTopRight", fill: INK_50, fontSize: 9, fontWeight: 700 }} />
               )}
 
-              {/* Pinned / highlighted moment — bold solid red line */}
-              {pinnedDate && <ReferenceLine x={pinnedDate} yAxisId="s" stroke="#FF4A1C" strokeWidth={3} strokeOpacity={1}
-                label={{ value: "◆", position: "top", fill: "#FF4A1C", fontSize: 14, fontWeight: 900, offset: 6 }} />}
+              {/* Focus window — subtle shaded band around the pinned moment (±3 days) */}
+              {focusWindow && (
+                <ReferenceArea
+                  x1={focusWindow.x1}
+                  x2={focusWindow.x2}
+                  yAxisId="s"
+                  fill={FOCUS_FILL}
+                  stroke={FOCUS_STROKE}
+                  strokeOpacity={0.6}
+                  strokeDasharray="2 3"
+                  ifOverflow="extendDomain"
+                />
+              )}
+              {/* Pinned / highlighted moment — bold solid red line with moment title label */}
+              {snappedPinned && (
+                <ReferenceLine
+                  x={snappedPinned}
+                  yAxisId="s"
+                  stroke="#FF4A1C"
+                  strokeWidth={3.5}
+                  strokeOpacity={1}
+                  label={
+                    pinnedLabel
+                      ? {
+                          value: pinnedLabel,
+                          position: "top",
+                          fill: "#FF4A1C",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          offset: 10,
+                        }
+                      : {
+                          value: "◆",
+                          position: "top",
+                          fill: "#FF4A1C",
+                          fontSize: 14,
+                          fontWeight: 900,
+                          offset: 6,
+                        }
+                  }
+                />
+              )}
               {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#0E0E0E" strokeWidth={1.5} strokeDasharray="4 4" strokeOpacity={0.3} />}
 
               {/* Key moment markers — colour-coded dashed lines with top labels */}
@@ -370,13 +477,28 @@ export default function TimelineChart({
                 />
               )}
 
-              {/* Stream line + fill */}
-              <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={STREAM_FILL} stroke="none" />
+              {/* Stream line + fill — dimmed when a moment is focused */}
+              <Area yAxisId="s" type="monotone" dataKey="total_streams" fill={STREAM_FILL} stroke="none"
+                fillOpacity={seriesFillOpacity} />
               <Line yAxisId="s" type="monotone" dataKey="total_streams"
-                stroke={STREAM_COLOR} strokeWidth={3.5}
+                stroke={STREAM_COLOR} strokeWidth={3.5} strokeOpacity={seriesStrokeOpacity}
                 dot={isSparse ? { r: 5, fill: STREAM_COLOR, stroke: "#FAF7F2", strokeWidth: 2 } : false}
                 activeDot={{ r: 6, fill: STREAM_COLOR, stroke: "#FAF7F2", strokeWidth: 2 }}
                 name="Streams" />
+
+              {/* Bright data-point marker on the line at the pinned date */}
+              {snappedPinned && pinnedStreamValue != null && pinnedStreamValue > 0 && (
+                <ReferenceDot
+                  x={snappedPinned}
+                  y={pinnedStreamValue}
+                  yAxisId="s"
+                  r={7}
+                  fill="#FF4A1C"
+                  stroke="#FAF7F2"
+                  strokeWidth={3}
+                  ifOverflow="extendDomain"
+                />
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
@@ -410,16 +532,74 @@ export default function TimelineChart({
               )}
 
               {albumDate && <ReferenceLine x={albumDate} stroke="#FF4A1C" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.5} />}
-              {pinnedDate && <ReferenceLine x={pinnedDate} stroke="#FF4A1C" strokeWidth={3} strokeOpacity={1}
-                label={{ value: "◆", position: "top", fill: "#FF4A1C", fontSize: 14, fontWeight: 900, offset: 6 }} />}
+
+              {/* Focus window around the pinned moment */}
+              {focusWindow && (
+                <ReferenceArea
+                  x1={focusWindow.x1}
+                  x2={focusWindow.x2}
+                  fill={FOCUS_FILL}
+                  stroke={FOCUS_STROKE}
+                  strokeOpacity={0.6}
+                  strokeDasharray="2 3"
+                  ifOverflow="extendDomain"
+                />
+              )}
+              {/* Pinned moment — bold line with moment title label */}
+              {snappedPinned && (
+                <ReferenceLine
+                  x={snappedPinned}
+                  stroke="#FF4A1C"
+                  strokeWidth={3.5}
+                  strokeOpacity={1}
+                  label={
+                    pinnedLabel
+                      ? {
+                          value: pinnedLabel,
+                          position: "top",
+                          fill: "#FF4A1C",
+                          fontSize: 10,
+                          fontWeight: 800,
+                          offset: 10,
+                        }
+                      : {
+                          value: "◆",
+                          position: "top",
+                          fill: "#FF4A1C",
+                          fontSize: 14,
+                          fontWeight: 900,
+                          offset: 6,
+                        }
+                  }
+                />
+              )}
 
               {keyTracks.map(t => (
                 <Line key={t.name} type="monotone" dataKey={t.name}
-                  stroke={t.color} strokeWidth={2.5} strokeOpacity={0.9}
+                  stroke={t.color} strokeWidth={2.5} strokeOpacity={isFocused ? 0.3 : 0.9}
                   dot={isSparse ? { r: 4, fill: t.color, stroke: "#FAF7F2", strokeWidth: 2 } : false}
                   activeDot={{ r: 5, fill: t.color, stroke: "#FAF7F2", strokeWidth: 2 }}
                   connectNulls={false} name={t.name} />
               ))}
+
+              {/* Per-track data-point markers at the pinned date */}
+              {snappedPinned && keyTracks.map((t) => {
+                const row = data.find((d) => d.date === snappedPinned) as any;
+                const val = row ? row[t.name] : null;
+                if (val == null || val <= 0) return null;
+                return (
+                  <ReferenceDot
+                    key={`dot-${t.name}`}
+                    x={snappedPinned}
+                    y={val}
+                    r={6}
+                    fill="#FF4A1C"
+                    stroke="#FAF7F2"
+                    strokeWidth={2.5}
+                    ifOverflow="extendDomain"
+                  />
+                );
+              })}
             </ComposedChart>
           </ResponsiveContainer>
         </div>
