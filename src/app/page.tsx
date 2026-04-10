@@ -14,18 +14,18 @@ export default async function Home() {
         number="02"
         accent="sun"
         name="Campaign Timeline Viewer"
-        purpose="See what actually drove the campaign — and what to do next."
+        purpose="Understand what actually drove the campaign."
         inputs={[
           "Weekly streams (global + UK)",
           "Release moments & key dates",
           "Paid, editorial & D2C activity",
         ]}
         outputs={[
-          "What actually drove the spike",
-          "Where momentum is cooling",
-          "What to do next",
+          "What drove each spike",
+          "How releases, paid & editorial played in",
+          "Where momentum shifted",
         ]}
-        ctaLabel="View timeline"
+        ctaLabel="See the demo"
         ctaHref="#tool"
         footer={
           <div className="rounded-2xl border border-black/10 bg-[#F6F1E7] px-5 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">

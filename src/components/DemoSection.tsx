@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import type { LoadedCampaign, Territory } from "@/types";
 import {
   buildChartData,
@@ -8,7 +9,6 @@ import {
   getAllMoments,
 } from "@/lib/transforms";
 import ProgressiveDemoChart from "./ProgressiveDemoChart";
-import CampaignExplorer from "./CampaignExplorer";
 
 interface Props {
   campaign: LoadedCampaign;
@@ -23,17 +23,15 @@ interface LayerState {
 const INITIAL: LayerState = { streams: false, moments: false, activity: false };
 
 /**
- * DemoSection — progressive build experience.
+ * DemoSection — progressive build experience on the marketing page.
  *
- * Starts empty. User adds layers one at a time (streams → moments → activity)
- * to see how the campaign is actually composed. Once all three are on, a tiny
- * insight strip appears and the user can "View full campaign" to load the
- * complete interactive dashboard.
+ * Scope is deliberately limited: empty → streams → moments → activity →
+ * light insights → CTA. The CTA is a hard route to /app/timeline where the
+ * real working tool lives.
  */
 export default function DemoSection({ campaign }: Props) {
   const sheet = campaign.sheet;
   const [layers, setLayers] = useState<LayerState>(INITIAL);
-  const [viewFull, setViewFull] = useState(false);
 
   const territory: Territory = sheet.setup.default_territory || "global";
 
@@ -52,42 +50,6 @@ export default function DemoSection({ campaign }: Props) {
   const allOn = layers.streams && layers.moments && layers.activity;
   const anyOn = layers.streams || layers.moments || layers.activity;
 
-  // ── Full view (after "View full campaign" click) ──
-  if (viewFull) {
-    return (
-      <section className="space-y-5">
-        <div className="flex items-baseline justify-between gap-4 flex-wrap">
-          <div>
-            <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-sun mb-1.5">
-              Demo
-            </div>
-            <h2 className="text-xl font-extrabold tracking-tight text-ink">
-              Example campaign —{" "}
-              <span className="text-ink/50 font-medium">full view</span>
-            </h2>
-            <p className="text-[12px] text-ink/40 mt-1">
-              {sheet.setup.artist_name} · {sheet.setup.campaign_name}
-            </p>
-          </div>
-          <button
-            onClick={() => {
-              setViewFull(false);
-              reset();
-            }}
-            className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/40 hover:text-ink transition-colors"
-          >
-            ← Back to build
-          </button>
-        </div>
-        <CampaignExplorer
-          campaign={campaign}
-          helperText="Click moments to see how activity impacted performance"
-        />
-      </section>
-    );
-  }
-
-  // ── Progressive build view ──
   return (
     <section className="space-y-5">
       {/* Header */}
@@ -154,11 +116,12 @@ export default function DemoSection({ campaign }: Props) {
 
       {/* Light insights — appear once all 3 layers are on */}
       {allOn && (
-        <div className="flex flex-wrap gap-x-6 gap-y-2 px-1 text-[11px] text-ink/55 transition-opacity">
+        <div className="flex flex-wrap gap-x-6 gap-y-2 px-1 text-[11px] text-ink/55">
           <div className="flex items-center gap-2">
             <span className="w-1.5 h-1.5 rounded-full bg-[#8B5CF6]" />
             <span>
-              Primary spike: <span className="text-ink/80">Album release</span>
+              Primary spike:{" "}
+              <span className="text-ink/80">Album release</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -177,15 +140,15 @@ export default function DemoSection({ campaign }: Props) {
         </div>
       )}
 
-      {/* CTA — appears once all 3 layers are on */}
+      {/* CTA — hard route to the real tool */}
       {allOn && (
         <div className="flex justify-start pt-1">
-          <button
-            onClick={() => setViewFull(true)}
+          <Link
+            href="/app/timeline"
             className="inline-flex items-center gap-2 rounded-full bg-ink text-paper px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] hover:bg-ink/85 transition-colors"
           >
-            View full campaign →
-          </button>
+            Open full timeline →
+          </Link>
         </div>
       )}
     </section>

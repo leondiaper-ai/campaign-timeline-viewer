@@ -2,7 +2,6 @@
 
 import type { AppData } from "@/types";
 import DemoSection from "./DemoSection";
-import ToolSection from "./ToolSection";
 
 interface DashboardProps {
   initialData: AppData;
@@ -10,12 +9,13 @@ interface DashboardProps {
 }
 
 /**
- * Dashboard — page-level composition.
+ * Dashboard — page-level composition for the marketing + demo page.
  *
- * Structure:
- *   1. Intro (rendered by the parent via ToolIntro in app/page.tsx)
- *   2. Demo section       — interactive example with a pre-loaded campaign
- *   3. Tool section       — upload or pick sample, graph updates on input
+ * The marketing page shows:
+ *   1. Intro (rendered by parent via ToolIntro in app/page.tsx)
+ *   2. Demo section — progressive build experience
+ *
+ * The full working tool lives on its own route: /app/timeline
  */
 export default function Dashboard({ initialData }: DashboardProps) {
   const campaigns = initialData.campaigns;
@@ -29,17 +29,12 @@ export default function Dashboard({ initialData }: DashboardProps) {
   }
 
   // Demo always uses the first campaign (the album campaign).
-  const demoIdx = 0;
-  const demoCampaign = campaigns[demoIdx];
+  const demoCampaign = campaigns[0];
 
   return (
     <div className="min-h-screen bg-paper text-ink">
       <main className="max-w-[1400px] mx-auto px-6 py-10 space-y-12">
-        {/* 1 — Demo: pre-loaded, interactive, no CSV input */}
         <DemoSection campaign={demoCampaign} />
-
-        {/* 2 — Tool: upload CSV or pick a sample, graph updates on input */}
-        <ToolSection campaigns={campaigns} demoIdx={demoIdx} />
       </main>
     </div>
   );
