@@ -10,6 +10,7 @@ import CampaignInsights from "./CampaignInsights";
 import TimelineChart, { ChartMode } from "./TimelineChart";
 import StateOfPlay from "./StateOfPlay";
 import CampaignBreakdown from "./CampaignBreakdown";
+import ProcessingStrip from "./ProcessingStrip";
 
 function fmtDate(d: string): string {
   if (!d) return "";
@@ -121,20 +122,11 @@ export default function Dashboard({ initialData, isDemo }: DashboardProps) {
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
 
-        {/* Debug strip — confirms data reaching UI. Remove when stable. */}
-        {isDemo && (
-          <div className="text-[9px] text-ink/20 font-mono flex flex-wrap gap-x-4 gap-y-0.5">
-            <span>artist: {sheet.setup.artist_name}</span>
-            <span>weeks: {chartData.length}</span>
-            <span>peak: {Math.max(...chartData.map(d => d.total_streams)).toLocaleString()}</span>
-            <span>tracks: {sheet.tracks.length} total, {sheet.tracks.filter(t => ["lead_single","second_single","focus_track"].includes(t.track_role)).length} key</span>
-            <span>moments: {moments.length} ({moments.filter(m => m.is_key).length} key)</span>
-            <span>mode: {chartMode}</span>
-          </div>
-        )}
+        {/* Processing strip — makes the engine feel like it's actually reading the CSVs */}
+        <ProcessingStrip />
 
-        {/* 1. State of Play */}
-        <StateOfPlay sheet={sheet} territory={territory} />
+        {/* 1. Campaign Read */}
+        <StateOfPlay sheet={sheet} territory={territory} classified={classified} />
 
         {/* 2. Campaign / Tracks Graph */}
         <div ref={chartRef} className="rounded-3xl bg-paper border border-ink/8 p-6 md:p-8 scroll-mt-4 shadow-[8px_8px_0_0_rgba(14,14,14,0.06)]">

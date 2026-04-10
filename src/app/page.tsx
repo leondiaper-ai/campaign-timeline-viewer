@@ -14,11 +14,34 @@ export default async function Home() {
         number="02"
         accent="sun"
         name="Campaign Timeline Viewer"
-        purpose="Every release moment, push, and performance peak on one line — so teams can read momentum and tighten cadence."
-        inputs={["Release moments", "Activity log", "Performance markers"]}
-        outputs={["Unified timeline", "Momentum read", "Cadence gaps"]}
+        purpose="See what actually drove the campaign — and what to do next."
+        inputs={[
+          "Weekly streams (global + UK)",
+          "Release moments & key dates",
+          "Paid, editorial & D2C activity",
+        ]}
+        outputs={[
+          "What actually drove the spike",
+          "Where momentum is cooling",
+          "What to do next",
+        ]}
         ctaLabel="View timeline"
         ctaHref="#tool"
+        footer={
+          <div className="rounded-2xl border border-black/10 bg-[#F6F1E7] px-5 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+            <div className="text-[10px] tracking-[0.18em] uppercase font-bold text-black/50">
+              Example exports
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-mono text-black/70">
+              <span>campaign_timeline_export_global.csv</span>
+              <span className="text-black/25">·</span>
+              <span>campaign_timeline_export_uk.csv</span>
+            </div>
+            <div className="md:ml-auto text-[11px] text-black/50">
+              Includes: streams, release moments, paid activity, editorial, D2C
+            </div>
+          </div>
+        }
       />
 
       {/* Dashboard — uses demo data when no API keys present */}
