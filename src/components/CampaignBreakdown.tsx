@@ -126,7 +126,7 @@ export default function CampaignBreakdown({
     <div className="rounded-2xl bg-cream border border-ink/8">
       <div className="px-6 py-4 flex items-center justify-between">
         <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40">
-          Campaign Breakdown
+          What drove this
         </h3>
         <span className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/25">
           Click to expand

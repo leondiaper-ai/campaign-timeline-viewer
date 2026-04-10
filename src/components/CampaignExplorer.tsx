@@ -20,6 +20,7 @@ import CampaignBreakdown from "./CampaignBreakdown";
 import CampaignInsights from "./CampaignInsights";
 import CampaignDecisionStrip from "./CampaignDecisionStrip";
 import CampaignLearnings from "./CampaignLearnings";
+import CopySummaryButton from "./CopySummaryButton";
 
 function fmtShort(d: string): string {
   if (!d) return "";
@@ -196,12 +197,12 @@ export default function CampaignExplorer({
         />
       </div>
 
-      {/* ═════ DECISION STRIP — signal + Copy summary ═════ */}
+      {/* ═════ 3. DECISION — primary insight (PUSH / TEST / HOLD) ═════ */}
       {variant !== "compact" && (
         <CampaignDecisionStrip sheet={sheet} territory={territory} />
       )}
 
-      {/* Campaign breakdown — click-to-highlight */}
+      {/* ═════ 4. WHAT DROVE THIS — moments breakdown ═════ */}
       <CampaignBreakdown
         sheet={sheet}
         classified={classified}
@@ -209,8 +210,13 @@ export default function CampaignExplorer({
         onMomentClick={handleMomentClick}
       />
 
-      {/* Learnings — collapsed by default */}
+      {/* ═════ 5. WHAT WE LEARNED — insights + next step ═════ */}
       {variant !== "compact" && <CampaignLearnings sheet={sheet} />}
+
+      {/* ═════ 6. COPY SUMMARY — Slack-ready export ═════ */}
+      {variant !== "compact" && (
+        <CopySummaryButton sheet={sheet} territory={territory} />
+      )}
     </div>
   );
 }
