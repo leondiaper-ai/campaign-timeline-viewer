@@ -30,3 +30,16 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local debug scripts
+audit_tracks.ts
+debug*.ts
+debug*.js
+full_audit.ts
+moments_audit.ts
+test-pipeline*.ts
+test_interp.ts
+test_layout.ts
+verify.ts
+restart.sh
+read-registry.js

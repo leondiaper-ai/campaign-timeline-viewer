@@ -10,7 +10,7 @@ import CampaignInsights from "./CampaignInsights";
 import TimelineChart, { ChartMode } from "./TimelineChart";
 import StateOfPlay from "./StateOfPlay";
 import CampaignBreakdown from "./CampaignBreakdown";
-import ProcessingStrip from "./ProcessingStrip";
+import DemoIntake from "./DemoIntake";
 
 function fmtDate(d: string): string {
   if (!d) return "";
@@ -122,11 +122,24 @@ export default function Dashboard({ initialData, isDemo }: DashboardProps) {
 
       <main className="max-w-[1400px] mx-auto px-6 py-8 space-y-6">
 
-        {/* Processing strip — makes the engine feel like it's actually reading the CSVs */}
-        <ProcessingStrip />
+        {/* 1. Campaign Read — demo intake flow (pick sample → run → reveal). */}
+        {/*    When connected to real data, fall back to the derived StateOfPlay. */}
+        {isDemo ? (
+          <DemoIntake />
+        ) : (
+          <StateOfPlay sheet={sheet} territory={territory} classified={classified} />
+        )}
 
-        {/* 1. Campaign Read */}
-        <StateOfPlay sheet={sheet} territory={territory} classified={classified} />
+        {/* Supporting-evidence label for the chart below */}
+        <div className="flex items-center gap-3 pt-2">
+          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/35">
+            Supporting evidence
+          </span>
+          <span className="h-px flex-1 bg-ink/8" />
+          <span className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/25">
+            Timeline · breakdown · stats
+          </span>
+        </div>
 
         {/* 2. Campaign / Tracks Graph */}
         <div ref={chartRef} className="rounded-3xl bg-paper border border-ink/8 p-6 md:p-8 scroll-mt-4 shadow-[8px_8px_0_0_rgba(14,14,14,0.06)]">
