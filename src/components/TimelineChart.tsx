@@ -332,8 +332,9 @@ export default function TimelineChart({
                   label={{ value: "POST-RELEASE", position: "insideTopRight", fill: INK_50, fontSize: 9, fontWeight: 700 }} />
               )}
 
-              {/* Pinned / highlighted moment */}
-              {pinnedDate && <ReferenceLine x={pinnedDate} yAxisId="s" stroke="#FF4A1C" strokeWidth={2.5} strokeOpacity={0.8} />}
+              {/* Pinned / highlighted moment — bold solid red line */}
+              {pinnedDate && <ReferenceLine x={pinnedDate} yAxisId="s" stroke="#FF4A1C" strokeWidth={3} strokeOpacity={1}
+                label={{ value: "◆", position: "top", fill: "#FF4A1C", fontSize: 14, fontWeight: 900, offset: 6 }} />}
               {highlightedDate && !pinnedDate && <ReferenceLine x={highlightedDate} yAxisId="s" stroke="#0E0E0E" strokeWidth={1.5} strokeDasharray="4 4" strokeOpacity={0.3} />}
 
               {/* Key moment markers — colour-coded dashed lines with top labels */}
@@ -409,7 +410,8 @@ export default function TimelineChart({
               )}
 
               {albumDate && <ReferenceLine x={albumDate} stroke="#FF4A1C" strokeWidth={2} strokeDasharray="6 4" strokeOpacity={0.5} />}
-              {pinnedDate && <ReferenceLine x={pinnedDate} stroke="#FF4A1C" strokeWidth={2.5} strokeOpacity={0.8} />}
+              {pinnedDate && <ReferenceLine x={pinnedDate} stroke="#FF4A1C" strokeWidth={3} strokeOpacity={1}
+                label={{ value: "◆", position: "top", fill: "#FF4A1C", fontSize: 14, fontWeight: 900, offset: 6 }} />}
 
               {keyTracks.map(t => (
                 <Line key={t.name} type="monotone" dataKey={t.name}

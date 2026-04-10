@@ -10,7 +10,9 @@ function fmtShort(d: string): string {
   return new Date(d + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 }
 
-// ── Moment row: click → highlight on chart, show short contextual tooltip ──
+// ── Collapsible moment row ─────────────────────────────────────
+// Default collapsed (title + date only). Click → expands details,
+// highlights on chart, and auto-collapses any other open row.
 function MomentRow({
   classified,
   isActive,
@@ -28,6 +30,7 @@ function MomentRow({
     <button
       type="button"
       onClick={onClick}
+      aria-expanded={isActive}
       className={`w-full text-left rounded-xl border transition-all ${
         isActive
           ? "bg-paper border-ink/15 shadow-[3px_3px_0_0_rgba(14,14,14,0.05)]"
@@ -42,20 +45,43 @@ function MomentRow({
           style={{ backgroundColor: cat.color }}
         />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-[12px] leading-snug ${
-                isDriver ? "font-semibold text-ink" : "font-medium text-ink/70"
+          <div className="flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-[12px] leading-snug ${
+                    isDriver
+                      ? "font-semibold text-ink"
+                      : "font-medium text-ink/70"
+                  }`}
+                >
+                  {moment.moment_title}
+                </span>
+              </div>
+              <span className="text-[10px] text-ink/30">
+                {fmtShort(moment.date)} · {cat.label}
+              </span>
+            </div>
+            {/* Chevron — rotates when expanded */}
+            <svg
+              viewBox="0 0 16 16"
+              fill="none"
+              className={`w-3 h-3 flex-shrink-0 text-ink/30 mt-1 transition-transform ${
+                isActive ? "rotate-180" : ""
               }`}
+              aria-hidden="true"
             >
-              {moment.moment_title}
-            </span>
+              <path
+                d="M4 6l4 4 4-4"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
           </div>
-          <span className="text-[10px] text-ink/30">
-            {fmtShort(moment.date)} · {cat.label}
-          </span>
 
-          {/* Short contextual tooltip — only shown when this row is active */}
+          {/* Expanded details — only rendered when active */}
           {isActive && context && (
             <p className="mt-1.5 text-[11px] leading-snug text-ink/60">
               <span className="text-ink/25 mr-1">↳</span>
@@ -103,7 +129,7 @@ export default function CampaignBreakdown({
           Campaign Breakdown
         </h3>
         <span className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/25">
-          Click to highlight
+          Click to expand
         </span>
       </div>
 

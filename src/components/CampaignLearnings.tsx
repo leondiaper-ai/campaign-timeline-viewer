@@ -14,7 +14,7 @@ const TYPE_CONFIG = {
 } as const;
 
 export default function CampaignLearnings({ sheet }: CampaignLearningsProps) {
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const learnings = sheet.learnings || [];
 
   if (learnings.length === 0) return null;
@@ -31,7 +31,7 @@ export default function CampaignLearnings({ sheet }: CampaignLearningsProps) {
         className="w-full flex items-center justify-between px-6 py-4 text-left group">
         <div className="flex items-center gap-3">
           <h3 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40">
-            Campaign Learnings
+            What we learned
           </h3>
           {!expanded && <span className="text-[10px] text-ink/30 group-hover:text-ink/50 transition-colors">What worked, what didn&apos;t, what&apos;s next</span>}
         </div>

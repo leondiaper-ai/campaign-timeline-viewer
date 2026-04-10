@@ -18,6 +18,8 @@ import {
 import TimelineChart, { ChartMode } from "./TimelineChart";
 import CampaignBreakdown from "./CampaignBreakdown";
 import CampaignInsights from "./CampaignInsights";
+import CampaignDecisionStrip from "./CampaignDecisionStrip";
+import CampaignLearnings from "./CampaignLearnings";
 
 function fmtShort(d: string): string {
   if (!d) return "";
@@ -114,6 +116,11 @@ export default function CampaignExplorer({
 
   return (
     <div className="space-y-5">
+      {/* ═════ METRICS BAR — top-of-analysis entry point ═════ */}
+      {variant !== "compact" && (
+        <CampaignInsights sheet={sheet} territory={territory} />
+      )}
+
       {/* Helper text + territory toggle */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         {helperText ? (
@@ -189,6 +196,11 @@ export default function CampaignExplorer({
         />
       </div>
 
+      {/* ═════ DECISION STRIP — signal + Copy summary ═════ */}
+      {variant !== "compact" && (
+        <CampaignDecisionStrip sheet={sheet} territory={territory} />
+      )}
+
       {/* Campaign breakdown — click-to-highlight */}
       <CampaignBreakdown
         sheet={sheet}
@@ -197,10 +209,8 @@ export default function CampaignExplorer({
         onMomentClick={handleMomentClick}
       />
 
-      {/* Stats (hidden in compact demo variant) */}
-      {variant !== "compact" && (
-        <CampaignInsights sheet={sheet} territory={territory} />
-      )}
+      {/* Learnings — collapsed by default */}
+      {variant !== "compact" && <CampaignLearnings sheet={sheet} />}
     </div>
   );
 }
