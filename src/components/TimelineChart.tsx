@@ -256,7 +256,7 @@ function getFocusWindow(
   if (!pinnedDate || chartDates.length === 0) return null;
   const sorted = [...chartDates].sort();
   const pinMs = new Date(pinnedDate).getTime();
-  const WINDOW_MS = 3 * 86400000;
+  const WINDOW_MS = 2 * 86400000;
   const inRange = sorted.filter((d) => {
     const t = new Date(d).getTime();
     return Math.abs(t - pinMs) <= WINDOW_MS;
@@ -319,11 +319,11 @@ export default function TimelineChart({
     const row = data.find((d) => d.date === snappedPinned);
     return row?.total_streams ?? null;
   }, [snappedPinned, data]);
-  // Label for the vertical line (e.g. "Album Release")
+  // Short label for the vertical line (e.g. "Album Release")
   const pinnedLabel = useMemo(() => {
     if (!pinnedDate || !allMoments) return null;
     const exact = allMoments.find((m) => m.date === pinnedDate);
-    if (exact) return trunc(exact.moment_title, 22);
+    if (exact) return trunc(exact.moment_title, 16);
     return null;
   }, [pinnedDate, allMoments]);
   // Series opacities — dim the rest of the chart when focused
@@ -413,13 +413,13 @@ export default function TimelineChart({
                   ifOverflow="extendDomain"
                 />
               )}
-              {/* Pinned / highlighted moment — bold solid red line with moment title label */}
+              {/* Pinned moment — slightly thicker solid red line with short label above */}
               {snappedPinned && (
                 <ReferenceLine
                   x={snappedPinned}
                   yAxisId="s"
                   stroke="#FF4A1C"
-                  strokeWidth={3.5}
+                  strokeWidth={4}
                   strokeOpacity={1}
                   label={
                     pinnedLabel
@@ -429,7 +429,7 @@ export default function TimelineChart({
                           fill: "#FF4A1C",
                           fontSize: 10,
                           fontWeight: 800,
-                          offset: 10,
+                          offset: 14,
                         }
                       : {
                           value: "◆",
@@ -437,7 +437,7 @@ export default function TimelineChart({
                           fill: "#FF4A1C",
                           fontSize: 14,
                           fontWeight: 900,
-                          offset: 6,
+                          offset: 8,
                         }
                   }
                 />
@@ -545,12 +545,12 @@ export default function TimelineChart({
                   ifOverflow="extendDomain"
                 />
               )}
-              {/* Pinned moment — bold line with moment title label */}
+              {/* Pinned moment — slightly thicker solid red line with short label above */}
               {snappedPinned && (
                 <ReferenceLine
                   x={snappedPinned}
                   stroke="#FF4A1C"
-                  strokeWidth={3.5}
+                  strokeWidth={4}
                   strokeOpacity={1}
                   label={
                     pinnedLabel
@@ -560,7 +560,7 @@ export default function TimelineChart({
                           fill: "#FF4A1C",
                           fontSize: 10,
                           fontWeight: 800,
-                          offset: 10,
+                          offset: 14,
                         }
                       : {
                           value: "◆",
@@ -568,7 +568,7 @@ export default function TimelineChart({
                           fill: "#FF4A1C",
                           fontSize: 14,
                           fontWeight: 900,
-                          offset: 6,
+                          offset: 8,
                         }
                   }
                 />
