@@ -45,9 +45,6 @@ export default async function Home() {
               <p className="mt-5 text-lg md:text-xl text-black/75 leading-snug max-w-xl">
                 See what actually drove the campaign
               </p>
-              <p className="mt-2 text-[13px] md:text-sm text-black/45 leading-relaxed max-w-xl">
-                Streams, release moments and campaign activity — mapped over time
-              </p>
             </div>
 
             <div className="flex flex-wrap gap-3 md:justify-end">
@@ -60,18 +57,6 @@ export default async function Home() {
                   ↓
                 </span>
               </a>
-            </div>
-          </div>
-
-          {/* System input bar — signals real ingress, not demo asset */}
-          <div className="mt-12 rounded-2xl border border-black/10 bg-[#F6F1E7] px-5 py-4 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
-            <div className="text-[10px] tracking-[0.18em] uppercase font-bold text-black/50 shrink-0">
-              Runs on campaign exports (streams, moments, activity)
-            </div>
-            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-mono text-black/70">
-              <span>campaign_timeline_export_global.csv</span>
-              <span className="text-black/25">·</span>
-              <span>campaign_timeline_export_uk.csv</span>
             </div>
           </div>
         </div>
