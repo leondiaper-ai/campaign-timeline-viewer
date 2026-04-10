@@ -125,35 +125,38 @@ export default function TimelineTool({ campaigns }: Props) {
       {/* ─── Main workspace ─── */}
       <main className="max-w-[1400px] mx-auto px-6 pt-12 pb-16">
         {/* Eyebrow + title row */}
-        <div className="flex items-start justify-between gap-8 flex-wrap mb-10">
-          <div className="max-w-2xl">
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
-              Campaign Timeline · Campaign Performance
-            </div>
-            <h1 className="text-[54px] md:text-[64px] font-black tracking-[-0.02em] leading-[0.95] text-ink">
-              Campaign Timeline
-            </h1>
-            <p className="text-[16px] text-ink/55 mt-4">
-              This is what a real campaign breakdown looks like.
-            </p>
+        <div className="mb-10 max-w-3xl">
+          <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
+            Campaign Timeline · Campaign Performance
           </div>
-          <div className="text-right">
-            <div className="inline-flex items-center gap-0.5 bg-cream rounded-full p-1 border border-ink/10">
-              <span className="px-4 py-1.5 text-xs font-bold rounded-full bg-ink text-paper shadow-sm">
-                Campaign view
-              </span>
-            </div>
-            <p className="text-[11px] text-ink/45 mt-2">
-              Evaluating campaign-level drivers and momentum
-            </p>
-          </div>
+          <h1 className="text-[54px] md:text-[64px] font-black tracking-[-0.02em] leading-[0.95] text-ink">
+            Campaign Timeline
+          </h1>
+          <p className="text-[16px] text-ink/55 mt-4">
+            This is what a real campaign breakdown looks like.
+          </p>
         </div>
 
         {/* Step progression */}
         <div className="flex items-center gap-8 mb-8 flex-wrap">
-          <StepPill n={1} label="Add data" active={currentStep === 1} done={currentStep > 1} />
-          <StepPill n={2} label="View timeline" active={currentStep === 2} done={currentStep > 2} />
-          <StepPill n={3} label="Explore moments" active={false} done={false} />
+          <StepPill
+            n={1}
+            label="Add data"
+            active={currentStep === 1}
+            done={currentStep > 1}
+          />
+          <StepPill
+            n={2}
+            label="See timeline"
+            active={currentStep === 2}
+            done={currentStep > 2}
+          />
+          <StepPill
+            n={3}
+            label="Explore what drove it"
+            active={false}
+            done={false}
+          />
         </div>
 
         {/* Two-column workspace */}
@@ -303,7 +306,7 @@ export default function TimelineTool({ campaigns }: Props) {
         {/* Step breadcrumb footer */}
         <div className="mt-16 pt-8 border-t border-ink/10">
           <div className="text-[11px] text-ink/40 tracking-wide">
-            Add data → View timeline → Explore moments
+            Add data → See timeline → Explore what drove it
           </div>
         </div>
       </main>

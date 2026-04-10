@@ -78,18 +78,21 @@ export default function DemoSection({ campaign }: Props) {
             label="Streams"
             sub="Weekly global + UK"
             active={layers.streams}
+            weight="primary"
             onClick={() => toggle("streams")}
           />
           <LayerPill
             label="Moments"
             sub="Releases, key dates"
             active={layers.moments}
+            weight="secondary"
             onClick={() => toggle("moments")}
           />
           <LayerPill
             label="Activity"
             sub="Paid, editorial, D2C"
             active={layers.activity}
+            weight="tertiary"
             onClick={() => toggle("activity")}
           />
         </div>
@@ -147,7 +150,7 @@ export default function DemoSection({ campaign }: Props) {
             href="/app/timeline"
             className="inline-flex items-center gap-2 rounded-full bg-ink text-paper px-5 py-2.5 text-[11px] font-bold uppercase tracking-[0.14em] hover:bg-ink/85 transition-colors"
           >
-            Open full timeline →
+            Open full tool →
           </Link>
         </div>
       )}
@@ -155,30 +158,50 @@ export default function DemoSection({ campaign }: Props) {
   );
 }
 
+type PillWeight = "primary" | "secondary" | "tertiary";
+
 function LayerPill({
   label,
   sub,
   active,
+  weight,
   onClick,
 }: {
   label: string;
   sub: string;
   active: boolean;
+  weight: PillWeight;
   onClick: () => void;
 }) {
+  // Inactive visual hierarchy: Streams reads strongest, Activity subtlest.
+  const inactiveCls: Record<PillWeight, string> = {
+    primary:
+      "bg-cream text-ink border-ink/25 hover:border-ink/55 shadow-[2px_2px_0_0_rgba(14,14,14,0.08)]",
+    secondary:
+      "bg-cream text-ink/70 border-ink/15 hover:text-ink hover:border-ink/35",
+    tertiary:
+      "bg-cream/70 text-ink/50 border-ink/10 hover:text-ink/80 hover:border-ink/30",
+  };
+
   return (
     <button
       onClick={onClick}
       className={`group inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] font-bold transition-all ${
         active
           ? "bg-ink text-paper border-ink shadow-[3px_3px_0_0_rgba(14,14,14,0.12)]"
-          : "bg-cream text-ink/60 border-ink/12 hover:text-ink hover:border-ink/35"
+          : inactiveCls[weight]
       }`}
       aria-pressed={active}
     >
       <span
         className={`text-[13px] leading-none ${
-          active ? "text-paper/70" : "text-ink/30"
+          active
+            ? "text-paper/70"
+            : weight === "primary"
+              ? "text-ink/50"
+              : weight === "secondary"
+                ? "text-ink/35"
+                : "text-ink/25"
         }`}
       >
         {active ? "✓" : "+"}
@@ -187,7 +210,13 @@ function LayerPill({
         <span>{label}</span>
         <span
           className={`text-[9px] font-medium ${
-            active ? "text-paper/55" : "text-ink/35"
+            active
+              ? "text-paper/55"
+              : weight === "primary"
+                ? "text-ink/45"
+                : weight === "secondary"
+                  ? "text-ink/35"
+                  : "text-ink/30"
           }`}
         >
           {sub}

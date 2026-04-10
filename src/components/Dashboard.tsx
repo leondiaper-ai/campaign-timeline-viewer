@@ -12,7 +12,7 @@ interface DashboardProps {
  * Dashboard — page-level composition for the marketing + demo page.
  *
  * The marketing page shows:
- *   1. Intro (rendered by parent via ToolIntro in app/page.tsx)
+ *   1. Intro (rendered inline by parent in app/page.tsx)
  *   2. Demo section — progressive build experience
  *
  * The full working tool lives on its own route: /app/timeline
