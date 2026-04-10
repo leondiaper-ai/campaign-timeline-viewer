@@ -257,7 +257,7 @@ export default function ProgressiveDemoChart({
       {isEmpty && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <p className="text-[13px] text-ink/35 max-w-[320px] text-center leading-relaxed">
-            Build a campaign timeline to see what actually drove performance
+            Add campaign inputs to begin
           </p>
         </div>
       )}

@@ -68,42 +68,53 @@ export default function DemoSection({ campaign }: Props) {
         </p>
       </div>
 
-      {/* Layer builder pills */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/35 mr-1">
-            Build
-          </span>
-          <LayerPill
-            label="Streams"
-            sub="Weekly global + UK"
-            active={layers.streams}
-            weight="primary"
-            onClick={() => toggle("streams")}
-          />
-          <LayerPill
-            label="Moments"
-            sub="Releases, key dates"
-            active={layers.moments}
-            weight="secondary"
-            onClick={() => toggle("moments")}
-          />
-          <LayerPill
-            label="Activity"
-            sub="Paid, editorial, D2C"
-            active={layers.activity}
-            weight="tertiary"
-            onClick={() => toggle("activity")}
-          />
+      {/* Sample campaign inputs heading */}
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
+          Sample campaign inputs
         </div>
-        {anyOn && (
-          <button
-            onClick={reset}
-            className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/35 hover:text-ink transition-colors"
-          >
-            Reset
-          </button>
-        )}
+
+        {/* Step indicator strip — matches Track Lens step style */}
+        <div className="flex items-center gap-6 flex-wrap mb-4">
+          <DemoStepPill n={1} label="Streams" done={layers.streams} />
+          <DemoStepPill n={2} label="Moments" done={layers.moments} />
+          <DemoStepPill n={3} label="Activity" done={layers.activity} />
+        </div>
+
+        {/* Interactive layer builder pills */}
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap">
+            <LayerPill
+              label="Streams"
+              sub="Weekly global + UK"
+              active={layers.streams}
+              weight="primary"
+              onClick={() => toggle("streams")}
+            />
+            <LayerPill
+              label="Moments"
+              sub="Releases, key dates"
+              active={layers.moments}
+              weight="secondary"
+              onClick={() => toggle("moments")}
+            />
+            <LayerPill
+              label="Activity"
+              sub="Paid, editorial, D2C"
+              active={layers.activity}
+              weight="tertiary"
+              onClick={() => toggle("activity")}
+            />
+          </div>
+          {anyOn && (
+            <button
+              onClick={reset}
+              className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/35 hover:text-ink transition-colors"
+            >
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Chart frame */}
@@ -155,6 +166,38 @@ export default function DemoSection({ campaign }: Props) {
         </div>
       )}
     </section>
+  );
+}
+
+// ── Step indicator pill (non-interactive progress) ───────────
+function DemoStepPill({
+  n,
+  label,
+  done,
+}: {
+  n: number;
+  label: string;
+  done: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold transition-colors ${
+          done
+            ? "bg-ink text-paper"
+            : "bg-transparent text-ink/35 border border-ink/20"
+        }`}
+      >
+        {n}
+      </span>
+      <span
+        className={`text-[13px] font-semibold ${
+          done ? "text-ink" : "text-ink/35"
+        }`}
+      >
+        {label}
+      </span>
+    </div>
   );
 }
 
