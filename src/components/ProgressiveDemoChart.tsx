@@ -108,6 +108,23 @@ export default function ProgressiveDemoChart({
     [data, showActivity],
   );
 
+  // Compute explicit domains so the y-axes scale correctly regardless of
+  // which series are currently visible. Without this, Recharts falls back
+  // to a degenerate [0, 0] domain on the yAxisId="s" axis when no series
+  // reference it — and the stream line fails to render once toggled on.
+  const { maxStreams, maxPhysical } = useMemo(() => {
+    let s = 0;
+    let p = 0;
+    for (const d of data) {
+      if ((d.total_streams || 0) > s) s = d.total_streams;
+      if ((d.physical_units || 0) > p) p = d.physical_units;
+    }
+    return {
+      maxStreams: s > 0 ? Math.ceil(s * 1.1) : 100,
+      maxPhysical: p > 0 ? Math.ceil(p * 1.2) : 1,
+    };
+  }, [data]);
+
   const isEmpty = !showStreams && !showMoments && !showActivity;
 
   return (
@@ -133,22 +150,25 @@ export default function ProgressiveDemoChart({
           />
           <YAxis
             yAxisId="s"
+            domain={[0, maxStreams]}
             tickFormatter={fmt}
             tick={{ fontSize: 10, fill: INK_50 }}
             axisLine={false}
             tickLine={false}
             width={50}
+            allowDecimals={false}
           />
-          {hasActivity && (
-            <YAxis
-              yAxisId="p"
-              orientation="right"
-              tickFormatter={() => ""}
-              axisLine={false}
-              tickLine={false}
-              width={20}
-            />
-          )}
+          <YAxis
+            yAxisId="p"
+            orientation="right"
+            domain={[0, maxPhysical]}
+            tickFormatter={() => ""}
+            axisLine={false}
+            tickLine={false}
+            width={20}
+            hide={!hasActivity}
+          />
+
 
           {showStreams && (
             <Tooltip
@@ -189,50 +209,47 @@ export default function ProgressiveDemoChart({
               />
             ))}
 
-          {/* Step 3 — supporting activity bars */}
-          {hasActivity && (
-            <Bar
-              yAxisId="p"
-              dataKey="physical_units"
-              barSize={14}
-              fill={ACTIVITY_COLOR}
-              fillOpacity={0.45}
-              stroke={ACTIVITY_COLOR}
-              strokeOpacity={0.75}
-              radius={[3, 3, 0, 0]}
-              isAnimationActive
-            />
-          )}
+          {/* Step 3 — supporting activity bars (always mounted, hidden until toggled) */}
+          <Bar
+            yAxisId="p"
+            dataKey="physical_units"
+            barSize={14}
+            fill={ACTIVITY_COLOR}
+            fillOpacity={0.45}
+            stroke={ACTIVITY_COLOR}
+            strokeOpacity={0.75}
+            radius={[3, 3, 0, 0]}
+            isAnimationActive={false}
+            hide={!hasActivity}
+          />
 
-          {/* Step 1 — streams line */}
-          {showStreams && (
-            <>
-              <Area
-                yAxisId="s"
-                type="monotone"
-                dataKey="total_streams"
-                fill={STREAM_FILL}
-                stroke="none"
-                isAnimationActive
-              />
-              <Line
-                yAxisId="s"
-                type="monotone"
-                dataKey="total_streams"
-                stroke={STREAM_COLOR}
-                strokeWidth={3.5}
-                dot={false}
-                activeDot={{
-                  r: 6,
-                  fill: STREAM_COLOR,
-                  stroke: "#FAF7F2",
-                  strokeWidth: 2,
-                }}
-                isAnimationActive
-                name="total_streams"
-              />
-            </>
-          )}
+          {/* Step 1 — streams line (always mounted; hidden until toggled on) */}
+          <Area
+            yAxisId="s"
+            type="monotone"
+            dataKey="total_streams"
+            fill={STREAM_FILL}
+            stroke="none"
+            isAnimationActive={false}
+            hide={!showStreams}
+          />
+          <Line
+            yAxisId="s"
+            type="monotone"
+            dataKey="total_streams"
+            stroke={STREAM_COLOR}
+            strokeWidth={3.5}
+            dot={false}
+            activeDot={{
+              r: 6,
+              fill: STREAM_COLOR,
+              stroke: "#FAF7F2",
+              strokeWidth: 2,
+            }}
+            isAnimationActive={false}
+            name="total_streams"
+            hide={!showStreams}
+          />
         </ComposedChart>
       </ResponsiveContainer>
 

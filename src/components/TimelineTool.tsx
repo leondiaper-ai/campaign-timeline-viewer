@@ -14,14 +14,12 @@ type SourceState =
   | { kind: "sample"; idx: number }
   | { kind: "uploaded"; filename: string };
 
-/**
- * Short editorial descriptions keyed by artist name. Falls back to a generic
- * line if we don't have anything specific to say about a campaign.
- */
+// ── Editorial metadata per campaign ───────────────────────────
 const SAMPLE_DESCRIPTIONS: Record<string, string> = {
-  "K Trap": "Album campaign — physical-first rollout with paid push post-release.",
+  "K Trap":
+    "Physical-first album rollout with paid push post-release.",
   "James Blake":
-    "Album campaign — editorial-driven, slow burn across release window.",
+    "Editorial-driven album campaign, slow burn across the release window.",
 };
 
 function describe(c: LoadedCampaign): string {
@@ -39,6 +37,41 @@ function toCsvName(c: LoadedCampaign): string {
   )}.csv`;
 }
 
+function campaignWindow(c: LoadedCampaign): string {
+  const rel = c.sheet.setup.release_date;
+  if (!rel) return "Campaign export · full window";
+  const d = new Date(rel + "T00:00:00");
+  const month = d.toLocaleDateString("en-GB", { month: "short" });
+  const year = d.getFullYear();
+  return `Campaign export · ${month} ${year} window`;
+}
+
+// ── File-icon SVG ─────────────────────────────────────────────
+function FileIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      className={className}
+      aria-hidden="true"
+    >
+      <path
+        d="M3 1.5h6.5L13 5v9.5a0 0 0 0 1 0 0H3a0 0 0 0 1 0 0V1.5Z"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.5 1.5V5H13"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────
 export default function TimelineTool({ campaigns }: Props) {
   const [source, setSource] = useState<SourceState>({ kind: "empty" });
   const [isDragging, setIsDragging] = useState(false);
@@ -58,44 +91,81 @@ export default function TimelineTool({ campaigns }: Props) {
   const activeCampaign =
     source.kind === "sample" ? campaigns[source.idx] : null;
 
+  // Step progression state
+  const currentStep =
+    source.kind === "empty"
+      ? 1
+      : source.kind === "uploaded"
+        ? 2
+        : 2;
+
   return (
     <div className="min-h-screen bg-paper text-ink">
-      {/* Top bar */}
-      <header className="border-b border-ink/10 px-6 py-5">
-        <div className="max-w-[1500px] mx-auto flex items-center justify-between gap-4">
-          <div className="flex items-baseline gap-4">
-            <span className="text-[10px] font-black tracking-[0.18em] bg-sun text-ink px-2 py-1 rounded-sm">
-              02
-            </span>
-            <div>
-              <h1 className="text-xl font-extrabold tracking-tight text-ink">
-                Campaign Timeline
-              </h1>
-              <p className="text-[12px] text-ink/50 mt-0.5">
-                This is what a real campaign breakdown looks like
-              </p>
-            </div>
-          </div>
+      {/* ─── Top bar ─── */}
+      <header className="border-b border-ink/10 px-6 py-4">
+        <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-4">
           <Link
             href="/"
-            className="text-[10px] tracking-[0.14em] uppercase font-mono text-ink/40 hover:text-ink transition-colors"
+            className="inline-flex items-center gap-2 text-[12px] text-ink/55 hover:text-ink transition-colors"
           >
-            ← Back to overview
+            <span>←</span>
+            <span>Back to overview</span>
           </Link>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center justify-center text-[10px] font-black tracking-[0.12em] bg-sun text-ink rounded-full w-8 h-8">
+              02
+            </span>
+            <span className="text-[13px] font-bold text-ink">
+              Campaign Timeline Viewer
+            </span>
+          </div>
         </div>
       </header>
 
-      {/* Two-column workspace */}
-      <div className="max-w-[1500px] mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-8">
-          {/* LEFT — sample CSVs + upload */}
-          <aside className="space-y-6 lg:sticky lg:top-6 lg:self-start">
-            {/* Sample files */}
+      {/* ─── Main workspace ─── */}
+      <main className="max-w-[1400px] mx-auto px-6 pt-12 pb-16">
+        {/* Eyebrow + title row */}
+        <div className="flex items-start justify-between gap-8 flex-wrap mb-10">
+          <div className="max-w-2xl">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
+              Campaign Timeline · Campaign Performance
+            </div>
+            <h1 className="text-[54px] md:text-[64px] font-black tracking-[-0.02em] leading-[0.95] text-ink">
+              Campaign Timeline
+            </h1>
+            <p className="text-[16px] text-ink/55 mt-4">
+              This is what a real campaign breakdown looks like.
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="inline-flex items-center gap-0.5 bg-cream rounded-full p-1 border border-ink/10">
+              <span className="px-4 py-1.5 text-xs font-bold rounded-full bg-ink text-paper shadow-sm">
+                Campaign view
+              </span>
+            </div>
+            <p className="text-[11px] text-ink/45 mt-2">
+              Evaluating campaign-level drivers and momentum
+            </p>
+          </div>
+        </div>
+
+        {/* Step progression */}
+        <div className="flex items-center gap-8 mb-8 flex-wrap">
+          <StepPill n={1} label="Add data" active={currentStep === 1} done={currentStep > 1} />
+          <StepPill n={2} label="View timeline" active={currentStep === 2} done={currentStep > 2} />
+          <StepPill n={3} label="Explore moments" active={false} done={false} />
+        </div>
+
+        {/* Two-column workspace */}
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-8">
+          {/* LEFT — sample files + upload */}
+          <aside className="space-y-8 lg:sticky lg:top-6 lg:self-start">
+            {/* Sample campaigns */}
             <div>
-              <h2 className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
-                Sample campaigns
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
+                Sample Campaign Data
               </h2>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {campaigns.map((c, i) => {
                   const active =
                     source.kind === "sample" && source.idx === i;
@@ -103,43 +173,60 @@ export default function TimelineTool({ campaigns }: Props) {
                     <button
                       key={c.campaign_id}
                       onClick={() => setSource({ kind: "sample", idx: i })}
-                      className={`w-full text-left rounded-2xl border p-3.5 transition-all ${
+                      className={`w-full text-left rounded-2xl border p-4 flex gap-3 transition-all ${
                         active
                           ? "bg-ink text-paper border-ink shadow-[4px_4px_0_0_rgba(14,14,14,0.12)]"
                           : "bg-cream border-ink/10 hover:border-ink/30 hover:shadow-[3px_3px_0_0_rgba(14,14,14,0.06)]"
                       }`}
                     >
-                      <div
-                        className={`font-mono text-[11px] mb-1 ${
-                          active ? "text-paper/70" : "text-ink/50"
+                      <FileIcon
+                        className={`w-4 h-4 flex-shrink-0 mt-0.5 ${
+                          active ? "text-paper/70" : "text-ink/40"
                         }`}
-                      >
-                        {toCsvName(c)}
-                      </div>
-                      <div className="font-semibold text-[13px] leading-snug">
-                        {c.sheet.setup.artist_name} —{" "}
-                        {c.sheet.setup.campaign_name}
-                      </div>
-                      <div
-                        className={`text-[11px] mt-1 leading-snug ${
-                          active ? "text-paper/60" : "text-ink/50"
-                        }`}
-                      >
-                        {describe(c)}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className={`font-mono text-[12px] font-semibold mb-1 break-all leading-tight ${
+                            active ? "text-paper" : "text-ink"
+                          }`}
+                        >
+                          {toCsvName(c)}
+                        </div>
+                        <div
+                          className={`text-[11px] leading-snug ${
+                            active ? "text-paper/65" : "text-ink/50"
+                          }`}
+                        >
+                          {campaignWindow(c)}
+                        </div>
+                        <div
+                          className={`text-[11px] leading-snug mt-0.5 ${
+                            active ? "text-paper/60" : "text-ink/45"
+                          }`}
+                        >
+                          Includes: streams, release moments, paid, editorial, D2C
+                        </div>
+                        <div
+                          className={`text-[11px] italic mt-1.5 leading-snug ${
+                            active ? "text-paper/75" : "text-ink/55"
+                          }`}
+                        >
+                          {describe(c)}
+                        </div>
                       </div>
                     </button>
                   );
                 })}
               </div>
+              <p className="text-[11px] text-ink/40 mt-3 leading-snug">
+                Each file represents a different campaign scenario.
+              </p>
             </div>
-
-            {/* Divider */}
-            <div className="border-t border-ink/10" />
 
             {/* Upload */}
             <div>
-              <h2 className="text-[9px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
-                Or upload
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40 mb-3">
+                Or upload your own
               </h2>
               <div
                 onDragOver={(e) => {
@@ -181,7 +268,7 @@ export default function TimelineTool({ campaigns }: Props) {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    <div className="text-[11px] font-semibold text-ink">
+                    <div className="text-[12px] font-semibold text-ink">
                       Upload your campaign export
                     </div>
                     <p className="text-[10px] text-ink/45 leading-snug">
@@ -212,40 +299,94 @@ export default function TimelineTool({ campaigns }: Props) {
             )}
           </div>
         </div>
-      </div>
+
+        {/* Step breadcrumb footer */}
+        <div className="mt-16 pt-8 border-t border-ink/10">
+          <div className="text-[11px] text-ink/40 tracking-wide">
+            Add data → View timeline → Explore moments
+          </div>
+        </div>
+      </main>
     </div>
   );
 }
 
-// ── Empty state ────────────────────────────────────────────────
+// ── Step progression pill ────────────────────────────────────
+function StepPill({
+  n,
+  label,
+  active,
+  done,
+}: {
+  n: number;
+  label: string;
+  active: boolean;
+  done: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span
+        className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold transition-colors ${
+          active
+            ? "bg-electric text-paper"
+            : done
+              ? "bg-ink text-paper"
+              : "bg-transparent text-ink/35 border border-ink/20"
+        }`}
+      >
+        {n}
+      </span>
+      <span
+        className={`text-[13px] font-semibold ${
+          active ? "text-ink" : done ? "text-ink/55" : "text-ink/35"
+        }`}
+      >
+        {label}
+      </span>
+    </div>
+  );
+}
+
+// ── Empty state ─────────────────────────────────────────────
 function EmptyState() {
   return (
-    <div className="rounded-3xl border border-dashed border-ink/15 bg-cream/40 min-h-[520px] flex items-center justify-center p-10">
-      <div className="text-center max-w-sm">
-        <div className="w-10 h-10 mx-auto mb-4 rounded-full border border-ink/15 flex items-center justify-center">
-          <span className="text-ink/30 text-lg">←</span>
+    <div className="rounded-3xl border-2 border-dashed border-ink/12 bg-cream/30 min-h-[540px] flex items-center justify-center p-10">
+      <div className="text-center">
+        <div className="w-14 h-14 mx-auto mb-5 rounded-full border border-ink/15 flex items-center justify-center">
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            className="w-5 h-5 text-ink/30"
+            aria-hidden="true"
+          >
+            <path
+              d="M7 17L17 7M17 7H8M17 7V16"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
-        <h2 className="text-[15px] font-bold text-ink/80 mb-1.5">
+        <p className="text-[14px] text-ink/55">
           Select a campaign to begin
-        </h2>
-        <p className="text-[12px] text-ink/45 leading-relaxed">
-          Pick one of the sample campaigns on the left, or drop in your own
-          export to see the full timeline.
         </p>
       </div>
     </div>
   );
 }
 
-// ── Uploaded-but-not-parseable state ───────────────────────────
+// ── Uploaded (placeholder) state ────────────────────────────
 function UploadedState({ filename }: { filename: string }) {
   return (
-    <div className="rounded-3xl border border-ink/10 bg-cream/40 min-h-[520px] flex items-center justify-center p-10">
+    <div className="rounded-3xl border-2 border-dashed border-ink/12 bg-cream/30 min-h-[540px] flex items-center justify-center p-10">
       <div className="text-center max-w-md">
-        <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-mint mb-2">
+        <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-mint mb-3">
           File received
         </div>
-        <div className="font-mono text-[13px] text-ink mb-4">{filename}</div>
+        <div className="font-mono text-[13px] text-ink mb-5 break-all">
+          {filename}
+        </div>
         <p className="text-[12px] text-ink/50 leading-relaxed">
           Custom CSV parsing is in progress. For now, pick one of the sample
           campaigns on the left to preview the full timeline experience.
@@ -255,13 +396,13 @@ function UploadedState({ filename }: { filename: string }) {
   );
 }
 
-// ── Sample-selected state (full tool) ──────────────────────────
+// ── Active campaign (full explorer) ─────────────────────────
 function SampleActiveState({ campaign }: { campaign: LoadedCampaign }) {
   const sheet = campaign.sheet;
   return (
     <div className="space-y-5">
       <div>
-        <h2 className="text-lg font-extrabold tracking-tight text-ink">
+        <h2 className="text-[22px] font-extrabold tracking-tight text-ink">
           {sheet.setup.artist_name}{" "}
           <span className="text-ink/40 font-medium">
             — {sheet.setup.campaign_name}
