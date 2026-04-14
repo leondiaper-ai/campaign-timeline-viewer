@@ -6,6 +6,7 @@ import {
   getCampaignVerdict,
   getMomentumStatus,
 } from "@/lib/transforms";
+import AIInterpretation from "./AIInterpretation";
 
 export type DecisionScope = "campaign" | "track";
 
@@ -369,6 +370,13 @@ export default function CampaignDecisionStrip({
           </li>
         ))}
       </ul>
+
+      {/* AI interpretation — same pattern used across the decision system */}
+      <div className="mt-5 pt-5 border-t border-paper/10 -mx-6 px-6 pb-1 bg-paper/[0.04] rounded-b-2xl text-ink">
+        <div className="pt-4">
+          <AIInterpretation decision={decision} />
+        </div>
+      </div>
     </div>
   );
 }
