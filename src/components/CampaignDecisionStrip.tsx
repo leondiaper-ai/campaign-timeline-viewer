@@ -322,9 +322,9 @@ function buildTrackDecision(
 
 // ── Component ─────────────────────────────────────────────────
 const SIGNAL_STYLES: Record<DecisionSignal, { bg: string; fg: string; label: string }> = {
-  PUSH: { bg: "bg-mint", fg: "text-ink", label: "PUSH" },
-  TEST: { bg: "bg-sun", fg: "text-ink", label: "TEST" },
-  HOLD: { bg: "bg-cream", fg: "text-ink", label: "HOLD" },
+  PUSH: { bg: "bg-push", fg: "text-ink", label: "PUSH" },
+  HOLD: { bg: "bg-hold", fg: "text-ink", label: "HOLD" },
+  TEST: { bg: "bg-test", fg: "text-paper", label: "TEST" },
 };
 
 export default function CampaignDecisionStrip({

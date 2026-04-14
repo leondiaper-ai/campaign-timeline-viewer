@@ -49,13 +49,16 @@ interface DecisionCardProps {
   children?: ReactNode;
 }
 
+// Decision colors — one hex per state, shared across all products.
+//   PUSH  → #1FBE7A   HOLD → #F5B73D   TEST → #2C6BFF
+// Extended states inherit the closest decision hue so color always reinforces the call.
 const statusStyle: Record<DecisionStatus, string> = {
   PUSH:       "bg-[#1FBE7A] text-[#0E0E0E]",
   ACCELERATE: "bg-[#1FBE7A] text-[#0E0E0E]",
-  TEST:       "bg-[#FFD24C] text-[#0E0E0E]",
-  BUILDING:   "bg-[#2C25FF] text-[#FAF7F2]",
-  UNEVEN:     "bg-[#FFD3C9] text-[#0E0E0E]",
-  HOLD:       "bg-[#0E0E0E] text-[#FAF7F2]",
+  HOLD:       "bg-[#F5B73D] text-[#0E0E0E]",
+  TEST:       "bg-[#2C6BFF] text-[#FAF7F2]",
+  BUILDING:   "bg-[#2C6BFF] text-[#FAF7F2]",
+  UNEVEN:     "bg-[#F5B73D] text-[#0E0E0E]",
   FIX:        "bg-[#FF4A1C] text-[#FAF7F2]",
   ALERT:      "bg-[#FF4A1C] text-[#FAF7F2]",
 };

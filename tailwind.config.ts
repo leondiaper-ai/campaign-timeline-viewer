@@ -32,6 +32,10 @@ const config: Config = {
         mint: "#1FBE7A",
         sun: "#FFD24C",
         blush: "#FFD3C9",
+        // Decision system — one color per decision, no variants
+        push: "#1FBE7A",
+        hold: "#F5B73D",
+        test: "#2C6BFF",
       },
       fontFamily: {
         sans: ["Inter", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto", "sans-serif"],

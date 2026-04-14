@@ -151,7 +151,7 @@ export default function NewCampaignDashboard({ sheet }: Props) {
           <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-[#FBBF24]/80 mb-2">Team Push</p>
           <div className="space-y-1">
             <p className="text-[12px] text-white">
-              <span className="font-bold text-[#FBBF24]">TEST</span>
+              <span className="font-bold text-[#1FBE7A]">PUSH</span>
               <span className="text-[#4B5563] mx-1.5">&rarr;</span>
               <span className="font-semibold">{teamPush.push}</span>
             </p>
