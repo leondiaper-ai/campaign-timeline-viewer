@@ -6,8 +6,6 @@ import {
   getCampaignVerdict,
   getMomentumStatus,
 } from "@/lib/transforms";
-import AIInterpretation from "./AIInterpretation";
-
 // Inline Marketing Action block. Stays in this file so the component
 // remains a drop-in — no new file or layout primitive.
 function MarketingAction({ signal }: { signal: DecisionSignal }) {
@@ -416,15 +414,61 @@ export default function CampaignDecisionStrip({
         ))}
       </ul>
 
+      {/* Integrated thinking — three tight lines, part of the decision itself */}
+      <IntegratedThinking decision={decision} />
+
       {/* Marketing Action — spend behaviour derived from the decision */}
       <MarketingAction signal={decision.signal} />
+    </div>
+  );
+}
 
-      {/* AI interpretation — same pattern used across the decision system */}
-      <div className="mt-5 pt-5 border-t border-paper/10 -mx-6 px-6 pb-1 bg-paper/[0.04] rounded-b-2xl text-ink">
-        <div className="pt-4">
-          <AIInterpretation decision={decision} />
+function IntegratedThinking({ decision }: { decision: DecisionData }) {
+  const text = `${decision.headline} ${decision.reasons.join(" ")}`.toLowerCase();
+
+  let why = "";
+  if (decision.signal === "PUSH" && /second wind|lifted back/.test(text)) {
+    why = "Lift is being driven by campaign moments, not organic compounding.";
+  } else if (decision.signal === "PUSH") {
+    why = "Signals are moving together rather than spiking on one metric — the shape reads as sustained.";
+  } else if (decision.signal === "TEST" && /plateau|flat/.test(text)) {
+    why = "Volume is strong but the release didn\u2019t compound the base — audience is held, not widening.";
+  } else if (decision.signal === "TEST") {
+    why = "The lift is real but narrow — not yet a broad enough signal to commit against.";
+  } else if (/decline|cool|fad/.test(text)) {
+    why = "Post-release behaviour is softening — spending into a weakening curve teaches the wrong lesson.";
+  } else {
+    why = "Core engagement is stable but reach is not widening yet.";
+  }
+
+  const watch =
+    decision.signal === "PUSH"
+      ? "Whether streams hold above the new baseline for 7\u201310 days."
+      : decision.signal === "TEST"
+        ? "Reach broadening outside the responsive segment within the next 14 days."
+        : "One signal — listener growth, save rate or reach — moving above baseline for two reporting weeks.";
+
+  const todo =
+    decision.signal === "PUSH"
+      ? "Increase paid and editorial support while behaviour remains elevated."
+      : decision.signal === "TEST"
+        ? "Run a contained test against the working segment before committing spend."
+        : "Hold spend — wait for one signal to separate from the noise.";
+
+  return (
+    <div className="mt-4 pt-4 border-t border-paper/10 space-y-2 text-[13px] leading-snug">
+      {([
+        ["Why this matters", why],
+        ["What to watch", watch],
+        ["What to do", todo],
+      ] as const).map(([label, body]) => (
+        <div key={label} className="flex items-baseline gap-2.5">
+          <span className="text-[10px] font-mono tracking-[0.12em] uppercase text-paper/45 shrink-0">
+            {label}:
+          </span>
+          <span className="text-paper/90">{body}</span>
         </div>
-      </div>
+      ))}
     </div>
   );
 }
