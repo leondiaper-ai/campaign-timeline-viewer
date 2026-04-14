@@ -6,51 +6,6 @@ import {
   getCampaignVerdict,
   getMomentumStatus,
 } from "@/lib/transforms";
-// Inline Marketing Action block. Stays in this file so the component
-// remains a drop-in — no new file or layout primitive.
-function MarketingAction({ signal }: { signal: DecisionSignal }) {
-  const a =
-    signal === "PUSH"
-      ? {
-          spend: "Scale",
-          channel: "Marquee + off-platform",
-          timing: "Immediate — while streams hold above the new baseline (7–10 days)",
-        }
-      : signal === "TEST"
-        ? {
-            spend: "Controlled",
-            channel: "Marquee test or light off-platform",
-            timing: "Conditional — trigger if reach broadens outside the responsive segment",
-          }
-        : {
-            spend: "No spend",
-            channel: "None or minimal discovery",
-            timing: "Wait — hold unless listener growth lifts above baseline for two weeks",
-          };
-
-  return (
-    <div className="mt-4 rounded-xl border border-paper/10 bg-paper/[0.04] p-4">
-      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-paper/45 mb-3">
-        Marketing Action
-      </div>
-      <div className="grid gap-2 text-[13px] leading-snug">
-        {([
-          ["Spend", a.spend],
-          ["Channel", a.channel],
-          ["Timing", a.timing],
-        ] as const).map(([label, value]) => (
-          <div key={label} className="flex items-baseline gap-3">
-            <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-paper/45 w-16 shrink-0">
-              {label}
-            </span>
-            <span className="text-paper/90">{value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
 export type DecisionScope = "campaign" | "track";
 
 interface Props {
@@ -383,8 +338,40 @@ export default function CampaignDecisionStrip({
   );
   const style = SIGNAL_STYLES[decision.signal];
 
+  const text = `${decision.headline} ${decision.reasons.join(" ")}`.toLowerCase();
+
+  let why = "";
+  if (decision.signal === "PUSH" && /second wind|lifted back/.test(text)) {
+    why = "Campaign moments are driving the lift — momentum is real, not organic drift.";
+  } else if (decision.signal === "PUSH") {
+    why = "Signals are moving together — the shape reads as sustained, not a single-metric spike.";
+  } else if (decision.signal === "TEST" && /plateau|flat/.test(text)) {
+    why = "Volume is strong but the release didn\u2019t compound the base — audience is held, not widening.";
+  } else if (decision.signal === "TEST") {
+    why = "The lift is real but narrow — not yet a broad enough signal to commit against.";
+  } else if (/decline|cool|fad/.test(text)) {
+    why = "Post-release is softening — spending into a weakening curve teaches the wrong lesson.";
+  } else {
+    why = "Core engagement is stable, but reach isn\u2019t widening yet.";
+  }
+
+  const todo =
+    decision.signal === "PUSH"
+      ? "Scale paid and editorial support against the working moment — extend reach while behaviour holds."
+      : decision.signal === "TEST"
+        ? "Run a contained test against the responsive segment — validate before scaling."
+        : "Hold — protect the base, don\u2019t spend into noise.";
+
+  const changeIt =
+    decision.signal === "PUSH"
+      ? "Streams falling back to the prior baseline inside 7\u201310 days."
+      : decision.signal === "TEST"
+        ? "Reach broadening outside the responsive segment within 14 days."
+        : "One signal — listener growth, save rate or reach — clearing baseline for two reporting weeks.";
+
   return (
     <div className="rounded-2xl bg-ink text-paper px-6 py-5 shadow-[4px_4px_0_0_rgba(14,14,14,0.1)]">
+      {/* Scope + signal tag */}
       <div className="flex items-center gap-3 mb-3 flex-wrap">
         <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-paper/55">
           Decision
@@ -399,76 +386,43 @@ export default function CampaignDecisionStrip({
           {style.label}
         </span>
       </div>
-      <p className="text-[17px] md:text-[18px] font-bold leading-snug text-paper mb-3">
+
+      {/* 1 · Headline */}
+      <p className="text-[17px] md:text-[18px] font-bold leading-snug text-paper mb-5">
         {decision.headline}
       </p>
-      <ul className="space-y-1.5">
-        {decision.reasons.map((r, i) => (
-          <li
-            key={i}
-            className="flex items-start gap-2 text-[13px] leading-snug text-paper/85"
-          >
-            <span className="text-paper/45 mt-0.5">·</span>
-            <span>{r}</span>
-          </li>
-        ))}
-      </ul>
 
-      {/* Integrated thinking — three tight lines, part of the decision itself */}
-      <IntegratedThinking decision={decision} />
+      {/* 2 · Why this decision */}
+      <Row label="Why this decision" body={why} emphasis />
 
-      {/* Marketing Action — spend behaviour derived from the decision */}
-      <MarketingAction signal={decision.signal} />
+      {/* 3 · What to do now */}
+      <Row label="What to do now" body={todo} emphasis />
+
+      {/* 4 · What would change this */}
+      <Row label="What would change this" body={changeIt} />
+
+      {/* Optional signals — one line, max 3 */}
+      {decision.reasons.length > 0 && (
+        <p className="mt-4 pt-3 border-t border-paper/10 text-[12px] text-paper/55 leading-snug">
+          <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-paper/40 mr-2">
+            Signals
+          </span>
+          {decision.reasons.slice(0, 3).join(" · ")}
+        </p>
+      )}
     </div>
   );
 }
 
-function IntegratedThinking({ decision }: { decision: DecisionData }) {
-  const text = `${decision.headline} ${decision.reasons.join(" ")}`.toLowerCase();
-
-  let why = "";
-  if (decision.signal === "PUSH" && /second wind|lifted back/.test(text)) {
-    why = "Lift is being driven by campaign moments, not organic compounding.";
-  } else if (decision.signal === "PUSH") {
-    why = "Signals are moving together rather than spiking on one metric — the shape reads as sustained.";
-  } else if (decision.signal === "TEST" && /plateau|flat/.test(text)) {
-    why = "Volume is strong but the release didn\u2019t compound the base — audience is held, not widening.";
-  } else if (decision.signal === "TEST") {
-    why = "The lift is real but narrow — not yet a broad enough signal to commit against.";
-  } else if (/decline|cool|fad/.test(text)) {
-    why = "Post-release behaviour is softening — spending into a weakening curve teaches the wrong lesson.";
-  } else {
-    why = "Core engagement is stable but reach is not widening yet.";
-  }
-
-  const watch =
-    decision.signal === "PUSH"
-      ? "Whether streams hold above the new baseline for 7\u201310 days."
-      : decision.signal === "TEST"
-        ? "Reach broadening outside the responsive segment within the next 14 days."
-        : "One signal — listener growth, save rate or reach — moving above baseline for two reporting weeks.";
-
-  const todo =
-    decision.signal === "PUSH"
-      ? "Increase paid and editorial support while behaviour remains elevated."
-      : decision.signal === "TEST"
-        ? "Run a contained test against the working segment before committing spend."
-        : "Hold spend — wait for one signal to separate from the noise.";
-
+function Row({ label, body, emphasis = false }: { label: string; body: string; emphasis?: boolean }) {
   return (
-    <div className="mt-4 pt-4 border-t border-paper/10 space-y-2 text-[13px] leading-snug">
-      {([
-        ["Why this matters", why],
-        ["What to watch", watch],
-        ["What to do", todo],
-      ] as const).map(([label, body]) => (
-        <div key={label} className="flex items-baseline gap-2.5">
-          <span className="text-[10px] font-mono tracking-[0.12em] uppercase text-paper/45 shrink-0">
-            {label}:
-          </span>
-          <span className="text-paper/90">{body}</span>
-        </div>
-      ))}
+    <div className="mb-3 last:mb-0">
+      <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-paper/45 mb-1">
+        {label}
+      </div>
+      <p className={`text-[13.5px] leading-snug ${emphasis ? "text-paper/95" : "text-paper/75"}`}>
+        {body}
+      </p>
     </div>
   );
 }
