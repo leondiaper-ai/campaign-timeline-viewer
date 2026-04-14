@@ -122,14 +122,45 @@ function buildCampaignDecision(
   const pcs = sheet.paidCampaigns || [];
   const totalSpend = pcs.reduce((s, p) => s + p.spend, 0);
 
-  // ── Signal logic ──
+  // ── Post-release behaviour — second wind vs plateau vs decay ──
+  // Skip the release-week spike itself so we read the true post-release trend.
+  const postReleaseTail = postAlbum.slice(1).map((r) => r[streamKey]);
+  const lastN = postReleaseTail.slice(-4);
+
+  let secondWind = false;
+  let flatPlateau = false;
+  if (postReleaseTail.length >= 3) {
+    const tailMin = Math.min(...postReleaseTail);
+    const tailMax = Math.max(...postReleaseTail);
+    const recentVal = postReleaseTail[postReleaseTail.length - 1];
+    const priorPeak = Math.max(...postReleaseTail.slice(0, -2));
+    // Second wind: recent weeks lifted ≥20% above the post-release trough,
+    // AND the recent peak beats the earlier post-release peak.
+    if (tailMin > 0 && recentVal / tailMin >= 1.2 && tailMax >= priorPeak) {
+      secondWind = true;
+    }
+    // Flat plateau: last 4 weeks range within ~10% of mean — no direction either way.
+    if (lastN.length >= 4) {
+      const mean = lastN.reduce((s, v) => s + v, 0) / lastN.length;
+      const range = Math.max(...lastN) - Math.min(...lastN);
+      if (mean > 0 && range / mean < 0.1) flatPlateau = true;
+    }
+  }
+
+  // ── Signal logic — layered on verdict + momentum + conversion + post-release shape ──
   let signal: DecisionSignal;
-  if (verdict.level === "strong" && momentum.direction === "rising") {
+  if (verdict.level === "strong" && strongConversion && (momentum.direction === "rising" || secondWind)) {
+    // Release compounded the singles AND it's still climbing (or has a second wind) → PUSH.
     signal = "PUSH";
+  } else if (verdict.level === "strong" && momentum.direction === "rising") {
+    signal = "PUSH";
+  } else if (verdict.level === "strong" && flatPlateau && !strongConversion) {
+    // Strong total volume but release didn't compound and post-release is flat → needs activation.
+    signal = "TEST";
   } else if (verdict.level === "strong" && momentum.direction === "declining") {
     signal = "TEST";
   } else if (verdict.level === "strong") {
-    signal = "HOLD";
+    signal = strongConversion ? "PUSH" : "HOLD";
   } else if (verdict.level === "building" && momentum.direction === "rising") {
     signal = "PUSH";
   } else if (verdict.level === "building" && momentum.direction === "declining") {
@@ -145,19 +176,33 @@ function buildCampaignDecision(
   // ── Headline ──
   const headline =
     signal === "PUSH"
-      ? "Momentum is live — back it."
+      ? secondWind
+        ? "Second wind is live — back it before it cools."
+        : "Momentum is live — back it."
       : signal === "TEST"
-        ? "Signal is mixed — learn before you invest."
+        ? flatPlateau
+          ? "Post-release has plateaued — activate before you scale."
+          : "Signal is mixed — learn before you invest."
         : "Hold the line — no new investment yet.";
 
   // ── Reasons ──
   const reasons: string[] = [];
-  reasons.push(`${momentum.label} — ${momentum.detail.replace(/\.$/, "")}`);
+
+  if (secondWind && signal === "PUSH") {
+    reasons.push(`Post-release second wind — lifted back to ${fmtNum(postReleaseTail[postReleaseTail.length - 1])}`);
+  } else if (flatPlateau) {
+    const mean = lastN.reduce((s, v) => s + v, 0) / lastN.length;
+    reasons.push(`Flat plateau — last 4 weeks holding around ${fmtNum(Math.round(mean))}`);
+  } else {
+    reasons.push(`${momentum.label} — ${momentum.detail.replace(/\.$/, "")}`);
+  }
 
   if (strongConversion) {
     reasons.push(`Release lifted streams ${conversionLift.toFixed(1)}× over pre-release peak`);
   } else if (weakConversion) {
     reasons.push(`Weak pre-release conversion (${conversionLift.toFixed(1)}× lift)`);
+  } else if (conversionLift > 0) {
+    reasons.push(`Release converted at ${conversionLift.toFixed(1)}× pre-release peak — singles didn't fully compound`);
   } else if (postPeak > 0) {
     reasons.push(`Release peak: ${fmtNum(postPeak)}`);
   }

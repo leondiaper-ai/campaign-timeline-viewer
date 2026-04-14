@@ -73,27 +73,6 @@ export default function CampaignExplorer({
     [sheet, territory, allTrackNames],
   );
 
-  // Focus track for the Tracks-view decision — pick the highest-streaming
-  // non-TOTAL track for the active territory so the decision feels like it's
-  // reading what the user is actually looking at.
-  const focusTrack = useMemo<string | undefined>(() => {
-    const streamKey = territory === "UK" ? "streams_uk" : "streams_global";
-    const totals = new Map<string, number>();
-    for (const r of sheet.weeklyData || []) {
-      if (r.track_name === "TOTAL") continue;
-      totals.set(r.track_name, (totals.get(r.track_name) || 0) + (r[streamKey] as number));
-    }
-    let best: string | undefined;
-    let bestVal = -1;
-    totals.forEach((v, k) => {
-      if (v > bestVal) {
-        bestVal = v;
-        best = k;
-      }
-    });
-    return best;
-  }, [sheet, territory]);
-
   const moments = useMemo(() => {
     const base = getAllMoments(sheet);
     if (sheet.paidCampaigns) {
@@ -218,14 +197,9 @@ export default function CampaignExplorer({
         />
       </div>
 
-      {/* ═════ 3. DECISION — scoped to what the user is viewing ═════ */}
+      {/* ═════ 3. DECISION — primary insight (PUSH / TEST / HOLD) ═════ */}
       {variant !== "compact" && (
-        <CampaignDecisionStrip
-          sheet={sheet}
-          territory={territory}
-          scope={chartMode === "tracks" && focusTrack ? "track" : "campaign"}
-          focusTrack={chartMode === "tracks" ? focusTrack : undefined}
-        />
+        <CampaignDecisionStrip sheet={sheet} territory={territory} />
       )}
 
       {/* ═════ 4. WHAT DROVE THIS — moments breakdown ═════ */}
