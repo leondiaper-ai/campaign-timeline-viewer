@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import type { CampaignSheetData, Territory } from "@/types";
 import {
   getCampaignVerdict,
@@ -357,17 +357,31 @@ export default function CampaignDecisionStrip({
 
   const todo =
     decision.signal === "PUSH"
-      ? "Scale paid and editorial support against the working moment — extend reach while behaviour holds."
+      ? "Back the momentum — extend reach against the working moment while behaviour holds."
       : decision.signal === "TEST"
         ? "Run a contained test against the responsive segment — validate before scaling."
         : "Hold — protect the base, don\u2019t spend into noise.";
 
-  const changeIt =
+  const spendLogic =
     decision.signal === "PUSH"
-      ? "Streams falling back to the prior baseline inside 7\u201310 days."
+      ? "Concentrated paid + editorial against the working moment — scale intensity, not surface area."
+      : decision.signal === "TEST"
+        ? "Controlled test spend on the responsive segment — no broad allocation until reach widens."
+        : "No new spend — let earned reach breathe.";
+
+  const watch =
+    decision.signal === "PUSH"
+      ? "Whether streams hold above the new baseline for 7\u201310 days."
       : decision.signal === "TEST"
         ? "Reach broadening outside the responsive segment within 14 days."
         : "One signal — listener growth, save rate or reach — clearing baseline for two reporting weeks.";
+
+  const ifConfirmed =
+    decision.signal === "PUSH"
+      ? "Extend into adjacent cohorts — move from backing momentum to scaling it."
+      : decision.signal === "TEST"
+        ? "Shift from test to push — commit support to the format the signal validated."
+        : "Move to a contained test on the format starting to separate.";
 
   return (
     <div className="rounded-2xl bg-ink text-paper px-6 py-5 shadow-[4px_4px_0_0_rgba(14,14,14,0.1)]">
@@ -387,42 +401,101 @@ export default function CampaignDecisionStrip({
         </span>
       </div>
 
-      {/* 1 · Headline */}
-      <p className="text-[17px] md:text-[18px] font-bold leading-snug text-paper mb-5">
+      {/* System 1 — headline + one-line why + one-line do now */}
+      <p className="text-[17px] md:text-[18px] font-bold leading-snug text-paper mb-3">
         {decision.headline}
       </p>
+      <p className="text-[13.5px] leading-snug text-paper/80 mb-2">
+        {why}
+      </p>
+      <p className="text-[13.5px] leading-snug text-paper/95 font-medium">
+        <span className="mr-2 text-[10px] font-mono uppercase tracking-[0.14em] text-paper/45">
+          Do now
+        </span>
+        {todo}
+      </p>
 
-      {/* 2 · Why this decision */}
-      <Row label="Why this decision" body={why} emphasis />
-
-      {/* 3 · What to do now */}
-      <Row label="What to do now" body={todo} emphasis />
-
-      {/* 4 · What would change this */}
-      <Row label="What would change this" body={changeIt} />
-
-      {/* Optional signals — one line, max 3 */}
+      {/* Optional signals — single line */}
       {decision.reasons.length > 0 && (
-        <p className="mt-4 pt-3 border-t border-paper/10 text-[12px] text-paper/55 leading-snug">
+        <p className="mt-3 text-[12px] text-paper/55 leading-snug">
           <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-paper/40 mr-2">
             Signals
           </span>
           {decision.reasons.slice(0, 3).join(" · ")}
         </p>
       )}
+
+      {/* System 2 — collapsible intelligence */}
+      <IntelligencePanel
+        aiReadDeep={
+          decision.signal === "PUSH"
+            ? "Post-release behaviour is lifting in parallel with organic discovery — the curve has the shape of sustained pull, not a promo spike."
+            : decision.signal === "TEST"
+              ? "The responsive segment is acting first; the broader audience hasn\u2019t joined yet — the read is narrow, not weak."
+              : "Behaviour is settling into a stable base — no cohort is pulling ahead, so there is nothing to intensify."
+        }
+        spendLogic={spendLogic}
+        watch={watch}
+        ifConfirmed={ifConfirmed}
+      />
     </div>
   );
 }
 
-function Row({ label, body, emphasis = false }: { label: string; body: string; emphasis?: boolean }) {
+function IntelligencePanel({
+  aiReadDeep,
+  spendLogic,
+  watch,
+  ifConfirmed,
+}: {
+  aiReadDeep: string;
+  spendLogic: string;
+  watch: string;
+  ifConfirmed: string;
+}) {
+  const [open, setOpen] = useState(false);
   return (
-    <div className="mb-3 last:mb-0">
+    <div className="mt-4 pt-4 border-t border-paper/10">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="w-full flex items-center justify-between gap-3 rounded-xl border border-paper/10 bg-paper/[0.05] hover:bg-paper/[0.10] px-3.5 py-2.5 transition-colors"
+      >
+        <span className="flex items-center gap-2.5">
+          <span className="relative inline-flex items-center justify-center">
+            <span className="absolute inset-0 rounded-full bg-paper/30 animate-pulse" />
+            <span className="relative inline-flex items-center justify-center w-[18px] h-[18px] rounded-full text-[9px] font-mono tracking-[0.1em] bg-paper text-ink">
+              AI
+            </span>
+          </span>
+          <span className="text-[11.5px] font-mono uppercase tracking-[0.14em] text-paper/65">
+            {open ? "Hide intelligence" : "Open intelligence"}
+          </span>
+        </span>
+        <span className={`text-[11px] font-mono text-paper/45 transition-transform ${open ? "rotate-180" : ""}`}>
+          ▾
+        </span>
+      </button>
+      {open && (
+        <div className="mt-3 rounded-xl border border-paper/10 bg-paper/[0.04] p-4 space-y-3.5">
+          <Row label="AI Read" body={aiReadDeep} />
+          <Row label="Spend logic" body={spendLogic} />
+          <Row label="Watch" body={watch} />
+          <Row label="If confirmed" body={ifConfirmed} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, body }: { label: string; body: string }) {
+  return (
+    <div>
       <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-paper/45 mb-1">
         {label}
       </div>
-      <p className={`text-[13.5px] leading-snug ${emphasis ? "text-paper/95" : "text-paper/75"}`}>
-        {body}
-      </p>
+      <p className="text-[13.5px] leading-snug text-paper/90">{body}</p>
     </div>
   );
 }
