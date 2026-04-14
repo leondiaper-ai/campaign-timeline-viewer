@@ -8,6 +8,51 @@ import {
 } from "@/lib/transforms";
 import AIInterpretation from "./AIInterpretation";
 
+// Inline Marketing Action block. Stays in this file so the component
+// remains a drop-in — no new file or layout primitive.
+function MarketingAction({ signal }: { signal: DecisionSignal }) {
+  const a =
+    signal === "PUSH"
+      ? {
+          spend: "Scale",
+          channel: "Marquee + off-platform",
+          timing: "Immediate — while streams hold above the new baseline (7–10 days)",
+        }
+      : signal === "TEST"
+        ? {
+            spend: "Controlled",
+            channel: "Marquee test or light off-platform",
+            timing: "Conditional — trigger if reach broadens outside the responsive segment",
+          }
+        : {
+            spend: "No spend",
+            channel: "None or minimal discovery",
+            timing: "Wait — hold unless listener growth lifts above baseline for two weeks",
+          };
+
+  return (
+    <div className="mt-4 rounded-xl border border-paper/10 bg-paper/[0.04] p-4">
+      <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-paper/45 mb-3">
+        Marketing Action
+      </div>
+      <div className="grid gap-2 text-[13px] leading-snug">
+        {([
+          ["Spend", a.spend],
+          ["Channel", a.channel],
+          ["Timing", a.timing],
+        ] as const).map(([label, value]) => (
+          <div key={label} className="flex items-baseline gap-3">
+            <span className="text-[10px] font-mono tracking-[0.14em] uppercase text-paper/45 w-16 shrink-0">
+              {label}
+            </span>
+            <span className="text-paper/90">{value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export type DecisionScope = "campaign" | "track";
 
 interface Props {
@@ -370,6 +415,9 @@ export default function CampaignDecisionStrip({
           </li>
         ))}
       </ul>
+
+      {/* Marketing Action — spend behaviour derived from the decision */}
+      <MarketingAction signal={decision.signal} />
 
       {/* AI interpretation — same pattern used across the decision system */}
       <div className="mt-5 pt-5 border-t border-paper/10 -mx-6 px-6 pb-1 bg-paper/[0.04] rounded-b-2xl text-ink">
